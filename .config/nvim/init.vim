@@ -11,6 +11,8 @@ Plug 'neoclide/coc.nvim'
 Plug 'preservim/tagbar'
 Plug 'junegunn/fzf', { 'do': { -> fzf#install() } }
 Plug 'junegunn/fzf.vim'
+Plug 'tpope/vim-rails'
+Plug 'rust-lang/rust.vim'
 Plug 'tpope/vim-surround'
 Plug 'tpope/vim-commentary'
 Plug 'tpope/vim-rhubarb'
@@ -35,17 +37,32 @@ nnoremap <silent> <C-p> :Files<CR>
 nnoremap <silent> <C-g> :GFiles<CR>
 nnoremap <silent> <C-b> :Buffers<CR>
 nnoremap <C-f> :Rg!
+" Sort results by proximity https://github.com/jonhoo/proximity-sort
+function! s:list_cmd()
+  let base = fnamemodify(expand('%'), ':h:.:S')
+  return base == '.' ? 'fd -t f' : printf('fd -t f | proximity-sort %s', expand('%'))
+endfunction
 
-" Ruby & Rails
+command! -bang -nargs=? -complete=dir Files
+  \ call fzf#vim#files(<q-args>, {'source': s:list_cmd(),
+  \                               'options': '--tiebreak=index'}, <bang>0)
+
+" ruby & rails
 map <leader>t :AV<CR>
 autocmd FileType ruby,eruby let g:rubycomplete_buffer_loading = 1                                                                                                     
 autocmd FileType ruby,eruby let g:rubycomplete_classes_in_global = 1                                                                                                  
 autocmd FileType ruby,eruby let g:rubycomplete_rails = 1
 autocmd FileType ruby,eruby set omnifunc=syntaxcomplete#Complete
-let g:ale_linters = {'ruby': ['standardrb']}
+let g:ale_linters = {'ruby': ['standardrb'], 'rust': ['analyzer']}
 let g:ale_fixers = {'ruby': ['standardrb']}
 let g:ale_fix_on_save = 1
 let g:ruby_indent_assignment_style = 'variable'
+
+" rust
+let g:rustfmt_autosave = 1
+let g:rustfmt_emit_files = 1
+let g:rustfmt_fail_silently = 0
+let g:rust_clip_command = 'xclip -selection clipboard'
 
 syntax on
 set relativenumber
