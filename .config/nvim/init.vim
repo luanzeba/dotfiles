@@ -11,12 +11,16 @@ Plug 'neoclide/coc.nvim'
 Plug 'preservim/tagbar'
 Plug 'junegunn/fzf', { 'do': { -> fzf#install() } }
 Plug 'junegunn/fzf.vim'
-Plug 'vim-ruby/vim-ruby'
-Plug 'tpope/vim-rails'
 Plug 'tpope/vim-surround'
 Plug 'tpope/vim-commentary'
 Plug 'tpope/vim-rhubarb'
 Plug 'dense-analysis/ale'
+
+" Languages support
+Plug 'vim-ruby/vim-ruby'
+Plug 'tpope/vim-rails'
+Plug 'mxw/vim-jsx'
+Plug 'pangloss/vim-javascript'
 
 call plug#end()
 
@@ -48,16 +52,14 @@ set relativenumber
 set number
 set background=dark
 set smartcase
-set hlsearch
 set noerrorbells
+set hlsearch
+nnoremap <CR> :noh<CR><CR> 
 
 " indentation
 set smartindent
 filetype plugin indent on
-" On pressing tab, insert 2 spaces
-" set expandtab
-" show existing tab with 2 spaces width
-" set tabstop=2
-" set softtabstop=2
-" when indenting with '>', use 2 spaces width
-" set shiftwidth=2
+set shiftwidth=2
+set breakindent                                      "Maintain indent on wrapping lines
+set autoindent                                       "autoindent
+set tabstop=2 shiftwidth=2 expandtab softtabstop=2   "tabs = 2 spaces
