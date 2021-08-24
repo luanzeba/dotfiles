@@ -52,6 +52,7 @@ set relativenumber
 set number
 set background=dark
 set smartcase
+set undofile
 set noerrorbells
 set hlsearch
 nnoremap <CR> :noh<CR><CR> 
