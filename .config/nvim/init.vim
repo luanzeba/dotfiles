@@ -11,8 +11,6 @@ Plug 'neoclide/coc.nvim'
 Plug 'preservim/tagbar'
 Plug 'junegunn/fzf', { 'do': { -> fzf#install() } }
 Plug 'junegunn/fzf.vim'
-Plug 'tpope/vim-rails'
-Plug 'rust-lang/rust.vim'
 Plug 'tpope/vim-surround'
 Plug 'tpope/vim-commentary'
 Plug 'tpope/vim-rhubarb'
@@ -23,6 +21,7 @@ Plug 'vim-ruby/vim-ruby'
 Plug 'tpope/vim-rails'
 Plug 'mxw/vim-jsx'
 Plug 'pangloss/vim-javascript'
+Plug 'rust-lang/rust.vim'
 
 call plug#end()
 
