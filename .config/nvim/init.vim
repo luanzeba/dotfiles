@@ -1,4 +1,4 @@
-let mapleader = ','
+let mapleader = ";"
 set nocompatible
 
 call plug#begin('~/.config/nvim/plugged')
@@ -46,6 +46,11 @@ command! -bang -nargs=? -complete=dir Files
   \ call fzf#vim#files(<q-args>, {'source': s:list_cmd(),
   \                               'options': '--tiebreak=index'}, <bang>0)
 
+" fugitive
+nnoremap <Leader>b :execute line(".") . "GBrowse"<CR>
+nnoremap <Leader>c :execute line(".") . "GBrowse!"<CR>
+nnoremap <Leader>g :G<CR>
+
 " ruby & rails
 map <leader>t :AV<CR>
 autocmd FileType ruby,eruby let g:rubycomplete_buffer_loading = 1                                                                                                     
@@ -72,6 +77,10 @@ set undofile
 set noerrorbells
 set hlsearch
 nnoremap <CR> :noh<CR><CR> 
+
+" copy & paste to system clipboard
+noremap <Leader>y "*y
+noremap <Leader>p "*p
 
 " indentation
 set smartindent
