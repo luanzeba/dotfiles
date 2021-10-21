@@ -14,6 +14,7 @@ Plug 'junegunn/fzf.vim'
 Plug 'tpope/vim-surround'
 Plug 'tpope/vim-commentary'
 Plug 'tpope/vim-rhubarb'
+Plug 'tpope/vim-unimpaired'
 Plug 'dense-analysis/ale'
 
 " Languages support
@@ -26,6 +27,9 @@ Plug 'rust-lang/rust.vim'
 call plug#end()
 
 colorscheme gruvbox
+
+" reload this configuration
+nnoremap <leader>sv :source $MYVIMRC<CR>
 
 " NERDTree
 map <silent> <C-n> :NERDTreeFind<CR>
@@ -50,6 +54,9 @@ command! -bang -nargs=? -complete=dir Files
 nnoremap <Leader>b :execute line(".") . "GBrowse"<CR>
 nnoremap <Leader>c :execute line(".") . "GBrowse!"<CR>
 nnoremap <Leader>g :G<CR>
+
+" code navigation
+nnoremap <leader>] g<C-]>
 
 " ruby & rails
 map <leader>t :AV<CR>
