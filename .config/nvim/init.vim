@@ -7,7 +7,7 @@ Plug 'morhetz/gruvbox'
 Plug 'jeffkreeftmeijer/vim-dim'
 Plug 'tpope/vim-fugitive'
 Plug 'preservim/nerdtree'
-Plug 'neoclide/coc.nvim'
+" Plug 'neoclide/coc.nvim'
 Plug 'preservim/tagbar'
 Plug 'junegunn/fzf', { 'do': { -> fzf#install() } }
 Plug 'junegunn/fzf.vim'
@@ -28,6 +28,15 @@ call plug#end()
 
 colorscheme gruvbox
 
+if has('nvim')
+    set guicursor=n-v-c:block-Cursor/lCursor-blinkon0,i-ci:ver25-Cursor/lCursor,r-cr:hor20-Cursor/lCursor
+    set inccommand=nosplit
+    noremap <C-q> :confirm qall<CR>
+end
+
+" quick-save
+nmap <leader>w :w<CR>
+
 " reload this configuration
 nnoremap <leader>sv :source $MYVIMRC<CR>
 
@@ -39,7 +48,7 @@ map <leader>r :NERDTreeToggle %<CR>
 nnoremap <silent> <C-p> :Files<CR>
 nnoremap <silent> <C-b> :Buffers<CR>
 nnoremap <C-f> :Rg!
-nnoremap <expr> <C-g> ':Rg! '.expand('<cword>').'<CR><CR>'
+nnoremap <expr> <C-g> ':Rg! '.expand('<cword>').'<CR>'
 " Sort results by proximity https://github.com/jonhoo/proximity-sort
 function! s:list_cmd()
   let base = fnamemodify(expand('%'), ':h:.:S')
@@ -80,20 +89,72 @@ syntax on
 set relativenumber
 set number
 set background=dark
-set smartcase
 set undofile
 set noerrorbells
-set hlsearch
 nnoremap <CR> :noh<CR><CR> 
 
 " copy & paste to system clipboard
 noremap <Leader>y "*y
 noremap <Leader>p "*p
 
+" =============================================================================
+" # Editor settings
+" =============================================================================
+set timeoutlen=300 " http://stackoverflow.com/questions/2158516/delay-before-o-opens-a-new-line
+set encoding=utf-8
+set scrolloff=2
+set noshowmode
+set hidden
+set nowrap
+set nojoinspaces
+let g:sneak#s_next = 1
+let g:vim_markdown_new_list_item_indent = 0
+let g:vim_markdown_auto_insert_bullets = 0
+let g:vim_markdown_frontmatter = 1
+set printfont=:h10
+set printencoding=utf-8
+set printoptions=paper:letter
+" Always draw sign column. Prevent buffer moving when adding/deleting sign.
+set signcolumn=yes
+
 " indentation
 set smartindent
 filetype plugin indent on
-set shiftwidth=2
+set autoindent
 set breakindent                                      "Maintain indent on wrapping lines
-set autoindent                                       "autoindent
 set tabstop=2 shiftwidth=2 expandtab softtabstop=2   "tabs = 2 spaces
+
+" Wrapping options
+set formatoptions=tc " wrap text and comments using textwidth
+set formatoptions+=r " continue comments when pressing ENTER in I mode
+set formatoptions+=q " enable formatting of comments with gq
+set formatoptions+=n " detect lists for formatting
+set formatoptions+=b " auto-wrap in insert mode, and do not wrap old long lines
+
+" Proper search
+set incsearch
+set ignorecase
+set smartcase
+set gdefault
+set hlsearch
+
+" Search results centered please
+nnoremap <silent> n nzz
+nnoremap <silent> N Nzz
+nnoremap <silent> * *zz
+nnoremap <silent> # #zz
+nnoremap <silent> g* g*zz
+
+" Very magic by default
+nnoremap ? ?\v
+nnoremap / /\v
+cnoremap %s/ %sm/
+
+" Use <Tab> and <S-Tab> to navigate through popup menu
+inoremap <expr> <Tab>   pumvisible() ? "\<C-n>" : "\<Tab>"
+inoremap <expr> <S-Tab> pumvisible() ? "\<C-p>" : "\<S-Tab>"
+
+" use <Tab> as trigger keys
+imap <Tab> <Plug>(completion_smart_tab)
+imap <S-Tab> <Plug>(completion_smart_s_tab)
+
