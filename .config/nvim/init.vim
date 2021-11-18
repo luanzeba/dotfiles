@@ -1,5 +1,6 @@
 let mapleader = ";"
 set nocompatible
+set shell=/bin/bash
 
 call plug#begin('~/.config/nvim/plugged')
 
