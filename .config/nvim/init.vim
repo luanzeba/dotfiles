@@ -1,14 +1,13 @@
 let mapleader = ";"
 set nocompatible
-set shell=/bin/bash
 
 call plug#begin('~/.config/nvim/plugged')
 
 Plug 'morhetz/gruvbox'
 Plug 'jeffkreeftmeijer/vim-dim'
 Plug 'tpope/vim-fugitive'
-Plug 'preservim/nerdtree'
-" Plug 'neoclide/coc.nvim'
+Plug 'kyazdani42/nvim-web-devicons'
+Plug 'kyazdani42/nvim-tree.lua'
 Plug 'preservim/tagbar'
 Plug 'junegunn/fzf', { 'do': { -> fzf#install() } }
 Plug 'junegunn/fzf.vim'
@@ -16,7 +15,9 @@ Plug 'tpope/vim-surround'
 Plug 'tpope/vim-commentary'
 Plug 'tpope/vim-rhubarb'
 Plug 'tpope/vim-unimpaired'
+Plug 'tpope/vim-sensible'
 Plug 'dense-analysis/ale'
+Plug 'github/copilot.vim'
 
 " Languages support
 Plug 'vim-ruby/vim-ruby'
@@ -41,9 +42,10 @@ nmap <leader>w :w<CR>
 " reload this configuration
 nnoremap <leader>sv :source $MYVIMRC<CR>
 
-" NERDTree
-map <silent> <C-n> :NERDTreeFind<CR>
-map <leader>r :NERDTreeToggle %<CR>
+" NvimTree
+lua require'nvim-tree'.setup {}
+map <silent> <C-n> :NvimTreeFindFile<CR>
+map <leader>n :NvimTreeToggle<CR>
 
 " Fzf
 nnoremap <silent> <C-p> :Files<CR>
@@ -86,14 +88,6 @@ let g:rustfmt_emit_files = 1
 let g:rustfmt_fail_silently = 0
 let g:rust_clip_command = 'xclip -selection clipboard'
 
-syntax on
-set relativenumber
-set number
-set background=dark
-set undofile
-set noerrorbells
-nnoremap <CR> :noh<CR><CR> 
-
 " copy & paste to system clipboard
 noremap <Leader>y "*y
 noremap <Leader>p "*p
@@ -101,9 +95,12 @@ noremap <Leader>p "*p
 " =============================================================================
 " # Editor settings
 " =============================================================================
-set timeoutlen=300 " http://stackoverflow.com/questions/2158516/delay-before-o-opens-a-new-line
-set encoding=utf-8
-set scrolloff=2
+syntax on
+set relativenumber
+set number
+set background=dark
+set undofile
+set noerrorbells
 set noshowmode
 set hidden
 set nowrap
@@ -112,17 +109,11 @@ let g:sneak#s_next = 1
 let g:vim_markdown_new_list_item_indent = 0
 let g:vim_markdown_auto_insert_bullets = 0
 let g:vim_markdown_frontmatter = 1
-set printfont=:h10
-set printencoding=utf-8
-set printoptions=paper:letter
 " Always draw sign column. Prevent buffer moving when adding/deleting sign.
 set signcolumn=yes
 
 " indentation
 set smartindent
-filetype plugin indent on
-set autoindent
-set breakindent                                      "Maintain indent on wrapping lines
 set tabstop=2 shiftwidth=2 expandtab softtabstop=2   "tabs = 2 spaces
 
 " Wrapping options
@@ -133,7 +124,6 @@ set formatoptions+=n " detect lists for formatting
 set formatoptions+=b " auto-wrap in insert mode, and do not wrap old long lines
 
 " Proper search
-set incsearch
 set ignorecase
 set smartcase
 set gdefault
@@ -150,12 +140,4 @@ nnoremap <silent> g* g*zz
 nnoremap ? ?\v
 nnoremap / /\v
 cnoremap %s/ %sm/
-
-" Use <Tab> and <S-Tab> to navigate through popup menu
-inoremap <expr> <Tab>   pumvisible() ? "\<C-n>" : "\<Tab>"
-inoremap <expr> <S-Tab> pumvisible() ? "\<C-p>" : "\<S-Tab>"
-
-" use <Tab> as trigger keys
-imap <Tab> <Plug>(completion_smart_tab)
-imap <S-Tab> <Plug>(completion_smart_s_tab)
 
