@@ -6,7 +6,6 @@ call plug#begin('~/.config/nvim/plugged')
 Plug 'morhetz/gruvbox'
 Plug 'jeffkreeftmeijer/vim-dim'
 Plug 'tpope/vim-fugitive'
-Plug 'kyazdani42/nvim-web-devicons'
 Plug 'kyazdani42/nvim-tree.lua'
 Plug 'preservim/tagbar'
 Plug 'junegunn/fzf', { 'do': { -> fzf#install() } }
@@ -43,6 +42,7 @@ nmap <leader>w :w<CR>
 nnoremap <leader>sv :source $MYVIMRC<CR>
 
 " NvimTree
+let g:nvim_tree_quit_on_open = 1
 lua require'nvim-tree'.setup {}
 map <silent> <C-n> :NvimTreeFindFile<CR>
 map <leader>n :NvimTreeToggle<CR>
