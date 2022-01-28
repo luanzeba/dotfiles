@@ -6,7 +6,7 @@
 [push]
 	default = upstream
 [core]
-	excludesfile = /Users/lvieira/.gitignore_global
+	excludesfile = ~/.gitignore_global
 [init]
 	defaultBranch = main
 	templatedir = ~/.git_template
