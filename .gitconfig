@@ -12,3 +12,7 @@
 	templatedir = ~/.git_template
 [alias]
 	ctags = !.git/hooks/ctags
+[github]
+	user = luanzeba
+[credential]
+	helper = osxkeychain
