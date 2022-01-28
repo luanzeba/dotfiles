@@ -1,0 +1,14 @@
+[user]
+	name = Luan Vieira
+	email = luanzeba@github.com
+[color]
+	ui = always
+[push]
+	default = upstream
+[core]
+	excludesfile = /Users/lvieira/.gitignore_global
+[init]
+	defaultBranch = main
+	templatedir = ~/.git_template
+[alias]
+	ctags = !.git/hooks/ctags
