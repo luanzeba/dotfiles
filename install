@@ -1,0 +1,31 @@
+#!/bin/sh
+
+cd $HOME
+
+# No thank you
+rm -rf .oh-my-bash
+rm -rf .oh-my-zsh
+rm .zshrc
+
+# A bit of a hack
+mv .gitconfig .gitconfig.private
+
+# git clone https://github.com/dcreager/dotfiles-base .dotfiles.base
+# git clone https://github.com/dcreager/dotfiles-public -b codespaces --recurse-submodules .dotfiles.public
+# $HOME/.dotfiles.base/bin/dotfiles.symlink install
+
+echo "Installing fish"
+# I'd like to use fish, please
+apt-get install -y fish
+chsh -s /usr/bin/fish
+
+# Install fzf
+# curl -L https://github.com/junegunn/fzf/releases/download/0.27.2/fzf-0.27.2-linux_amd64.tar.gz | tar xzC $HOME/bin
+apt-get install fzf
+
+echo "Installing neovim"
+# Install neovim
+apt-get install -y libfuse2
+# curl -L -o $HOME/bin/nvim https://github.com/neovim/neovim/releases/download/v0.4.4/nvim.appimage
+curl -LO https://github.com/neovim/neovim/releases/latest/download/nvim.appimage
+chmod a+x $HOME/bin/nvim
