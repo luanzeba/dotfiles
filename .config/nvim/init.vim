@@ -17,6 +17,7 @@ Plug 'tpope/vim-unimpaired'
 Plug 'tpope/vim-sensible'
 Plug 'dense-analysis/ale'
 Plug 'github/copilot.vim'
+Plug 'jamestthompson3/nvim-remote-containers'
 
 " Languages support
 Plug 'vim-ruby/vim-ruby'

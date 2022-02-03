@@ -18,6 +18,13 @@ alias icloud='cd /Users/lvieira/Library/Mobile\ Documents/com~apple~CloudDocs/'
 
 export EDITOR='nvim'
 
+set CHRUBY_ROOT '/opt/homebrew/opt/chruby'
+source /opt/homebrew/opt/chruby-fish/share/chruby/chruby.fish
+source /opt/homebrew/opt/chruby-fish/share/chruby/auto.fish # Enable auto-switching based on .ruby-version file
+
+export PATH="$HOME/.cargo/bin:$PATH"
+zoxide init fish | source
+
 # convenience function for selecting a branch for checkout
 # gbco() {
 #   current=$(git branch | grep '\*' | cut -d ' ' -f2)
