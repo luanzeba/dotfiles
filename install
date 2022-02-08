@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 # Used to setup codespaces
 set -x
 
@@ -16,10 +16,6 @@ rm .zshrc
 # git clone https://github.com/dcreager/dotfiles-public -b codespaces --recurse-submodules .dotfiles.public
 # $HOME/.dotfiles.base/bin/dotfiles.symlink install
 
-# I'd like to use fish, please
-apt-get update && apt-get install -y fish
-chsh -s /usr/bin/fish
-
 # Install fzf
 # curl -L https://github.com/junegunn/fzf/releases/download/0.27.2/fzf-0.27.2-linux_amd64.tar.gz | tar xzC $HOME/bin
 # apt-get install -y fzf
@@ -32,9 +28,15 @@ chmod u+x nvim.appimage
 mv squashfs-root /
 ln -s /squashfs-root/AppRun /usr/bin/nvim
 
-cd /workspaces/.codespaces/.persistedshare/dotfiles/
-ln -s .config/nvim/init.vim ~/.config/nvim
-ln -s .git_template ~/.git_template
-ln -s .gitignore_global ~/.gitignore_global
-ln -s .gitconfig ~/.gitconfig
-ln -s .config/fish ~/.config
+# Symlink dotfiles
+dotfiles=/workspaces/.codespaces/.persistedshare/dotfiles/
+mkdir ~/.config/nvim
+ln -sv $(dotfiles).config/nvim/init.vim ~/.config/nvim/
+ln -sv $(dotfiles).gitignore_global ~/.gitignore_global
+ln -sv $(dotfiles).gitconfig ~/.gitconfig
+ln -svd $(dotfiles).git_template ~/.git_template
+ln -svd $(dotfiles).config/fish ~/.config/
+
+# Setup fish shell
+apt-get update && apt-get install -y fish
+chsh -s /usr/bin/fish
