@@ -30,7 +30,7 @@ ln -s /squashfs-root/AppRun /usr/bin/nvim
 
 # Symlink dotfiles
 dotfiles=/workspaces/.codespaces/.persistedshare/dotfiles
-mkdir ~/.config/nvim
+mkdir -p ~/.config/nvim
 ln -sv $dotfiles/.config/nvim/init.vim ~/.config/nvim/
 ln -sv $dotfiles/.gitignore_global ~/.gitignore_global
 ln -sv $dotfiles/.gitconfig ~/.gitconfig
@@ -41,3 +41,4 @@ ln -svd $dotfiles/.config/fish ~/.config/
 sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 467B942D3A79BD29
 apt-get update && apt-get install -y fish
 chsh -s /usr/bin/fish
+logout
