@@ -1,44 +1,87 @@
 #!/bin/bash
 # Used to setup codespaces
+# set -x
+
+# cd $HOME
+
+# # No thank you
+# rm -rf .oh-my-bash
+# rm -rf .oh-my-zsh
+# rm .zshrc
+
+# # A bit of a hack
+# # mv .gitconfig .gitconfig.private
+
+# # git clone https://github.com/dcreager/dotfiles-base .dotfiles.base
+# # git clone https://github.com/dcreager/dotfiles-public -b codespaces --recurse-submodules .dotfiles.public
+# # $HOME/.dotfiles.base/bin/dotfiles.symlink install
+
+# # Install fzf
+# # curl -L https://github.com/junegunn/fzf/releases/download/0.27.2/fzf-0.27.2-linux_amd64.tar.gz | tar xzC $HOME/bin
+# # apt-get install -y fzf
+
+# # Install neovim
+# curl -LO https://github.com/neovim/neovim/releases/latest/download/nvim.appimage
+# chmod u+x nvim.appimage
+# ./nvim.appimage --appimage-extract
+# ./squashfs-root/AppRun --version
+# mv squashfs-root /
+# ln -s /squashfs-root/AppRun /usr/bin/nvim
+
+# # Symlink dotfiles
+# dotfiles=/workspaces/.codespaces/.persistedshare/dotfiles
+# mkdir -p ~/.config/nvim
+# ln -sv $dotfiles/.config/nvim/init.vim ~/.config/nvim/
+# ln -sv $dotfiles/.gitignore_global ~/.gitignore_global
+# ln -sv $dotfiles/.gitconfig ~/.gitconfig
+# ln -svd $dotfiles/.git_template ~/.git_template
+# ln -svd $dotfiles/.config/fish ~/.config/
+
+# # Setup fish shell
+# sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 467B942D3A79BD29
+# apt-get update && apt-get install -y fish
+# chsh -s /usr/bin/fish
+# logout
+
+#!/bin/bash
+
+exec > >(tee -i $HOME/dotfiles_install.log)
+exec 2>&1
 set -x
 
-cd $HOME
+# Install Packages
+sudo apt-add-repository ppa:fish-shell/release-3
+sudo apt-get update -y
+sudo apt-get --assume-yes install ripgrep fish neovim
 
-# No thank you
-rm -rf .oh-my-bash
-rm -rf .oh-my-zsh
-rm .zshrc
+rm -rf $HOME/.fzf
+git clone --depth 1 https://github.com/junegunn/fzf.git $HOME/.fzf
+$HOME/.fzf/install --all
 
-# A bit of a hack
-# mv .gitconfig .gitconfig.private
+## Link Dotfiles
+mkdir -p $HOME/.config/nvim
+mkdir -p $HOME/.config/fish
+mkdir $HOME/.git_template
 
-# git clone https://github.com/dcreager/dotfiles-base .dotfiles.base
-# git clone https://github.com/dcreager/dotfiles-public -b codespaces --recurse-submodules .dotfiles.public
-# $HOME/.dotfiles.base/bin/dotfiles.symlink install
+ln -svf $(pwd)/.config/nvim/* $HOME/.config/nvim/
+ln -svf $(pwd)/.gitconfig $HOME/.gitconfig
+ln -svf $(pwd)/.gitignore_global ~/.gitignore_global
+ln -svf $(pwd)/.gitconfig ~/.gitconfig
+ln -svf $(pwd)/.git_template/* ~/.git_template/
 
-# Install fzf
-# curl -L https://github.com/junegunn/fzf/releases/download/0.27.2/fzf-0.27.2-linux_amd64.tar.gz | tar xzC $HOME/bin
-# apt-get install -y fzf
+rm -f $HOME/.zshrc
 
-# Install neovim
-curl -LO https://github.com/neovim/neovim/releases/latest/download/nvim.appimage
-chmod u+x nvim.appimage
-./nvim.appimage --appimage-extract
-./squashfs-root/AppRun --version
-mv squashfs-root /
-ln -s /squashfs-root/AppRun /usr/bin/nvim
+### Install vim-plug
+sh -c 'curl -fLo "${XDG_DATA_HOME:-$HOME/.local/share}"/nvim/site/autoload/plug.vim --create-dirs \
+       https://raw.githubusercontent.com/junegunn/vim-plug/master/plug.vim'
 
-# Symlink dotfiles
-dotfiles=/workspaces/.codespaces/.persistedshare/dotfiles
-mkdir -p ~/.config/nvim
-ln -sv $dotfiles/.config/nvim/init.vim ~/.config/nvim/
-ln -sv $dotfiles/.gitignore_global ~/.gitignore_global
-ln -sv $dotfiles/.gitconfig ~/.gitconfig
-ln -svd $dotfiles/.git_template ~/.git_template
-ln -svd $dotfiles/.config/fish ~/.config/
+### Install NeoVim plugins
+nvim --headless +PlugInstall +qa
 
-# Setup fish shell
-sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 467B942D3A79BD29
-apt-get update && apt-get install -y fish
-chsh -s /usr/bin/fish
-logout
+# Set default shell
+ln -svf $PWD/.config/fish/* $HOME/.config/fish/
+ln -svf $PWD/.config/fish/functions/* $HOME/.config/fish/functions/
+ln -svf $PWD/.config/fish/completions/* $HOME/.config/fish/completions/
+ln -svf $PWD/.config/fish/conf.d/* $HOME/.config/fish/conf.d/
+
+sudo chsh -s "$(which fish)" "$(whoami)"
