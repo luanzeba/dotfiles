@@ -1,5 +1,6 @@
 #!/bin/sh
 # Used to setup codespaces
+set -ex
 
 cd $HOME
 
@@ -16,7 +17,7 @@ rm .zshrc
 # $HOME/.dotfiles.base/bin/dotfiles.symlink install
 
 # I'd like to use fish, please
-apt-get install -y fish
+apt-get update && apt-get install -y fish
 chsh -s /usr/bin/fish
 
 # Install fzf
@@ -24,7 +25,16 @@ chsh -s /usr/bin/fish
 # apt-get install -y fzf
 
 # Install neovim
-# apt-get install -y libfuse2
-# # curl -L -o $HOME/bin/nvim https://github.com/neovim/neovim/releases/download/v0.4.4/nvim.appimage
-# curl -LO https://github.com/neovim/neovim/releases/latest/download/nvim.appimage
-# chmod a+x $HOME/bin/nvim
+curl -LO https://github.com/neovim/neovim/releases/latest/download/nvim.appimage
+chmod u+x nvim.appimage
+./nvim.appimage --appimage-extract
+./squashfs-root/AppRun --version
+mv squashfs-root /
+ln -s /squashfs-root/AppRun /usr/bin/nvim
+
+cd /workspaces/.codespaces/.persistedshare/dotfiles/
+ln -s .config/nvim/init.vim ~/.config/nvim
+ln -s .git_template ~/.git_template
+ln -s .gitignore_global ~/.gitignore_global
+ln -s .gitconfig ~/.gitconfig
+ln -s .config/fish ~/.config
