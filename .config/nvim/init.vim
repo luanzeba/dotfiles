@@ -66,7 +66,7 @@ command! -bang -nargs=? -complete=dir Files
 " fugitive
 nnoremap <Leader>b :execute line(".") . "GBrowse"<CR>
 nnoremap <Leader>c :execute line(".") . "GBrowse!"<CR>
-nnoremap <Leader>g :G<CR>
+nnoremap <Leader>g :G<CR>5j
 
 " code navigation
 nnoremap <leader>] g<C-]>| " go to definition. If more than one definition, open quick-list
