@@ -1,6 +1,6 @@
 #!/bin/sh
 # Used to setup codespaces
-set -ex
+set -x
 
 cd $HOME
 
