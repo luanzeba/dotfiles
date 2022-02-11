@@ -43,6 +43,14 @@ nnoremap <leader>sv :source $MYVIMRC<CR>
 
 " NvimTree
 let g:nvim_tree_quit_on_open = 1
+let g:nvim_tree_highlight_opened_files = 1
+let g:nvim_tree_show_icons = {
+    \ 'git': 0,
+    \ 'folders': 0,
+    \ 'files': 0,
+    \ 'folder_arrows': 0,
+    \ }
+set termguicolors
 lua require'nvim-tree'.setup {}
 map <silent> <C-n> :NvimTreeFindFile<CR>
 map <leader>n :NvimTreeToggle<CR>

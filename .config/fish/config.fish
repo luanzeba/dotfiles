@@ -10,6 +10,7 @@ alias cop='bundle exec rubocop'
 # alias cop-git='git ls-files -m | xargs ls -1 2>/dev/null | grep '\.rb$' | xargs rubocop'
 alias vfish='vim ~/.config/fish/config.fish'
 alias sfish='source ~/.config/fish/config.fish'
+alias vvim='vim ~/.config/nvim/init.vim'
 # alias dkill='killall Docker && cd /Applications;open -a Docker;cd ~'
 alias k='kubectl'
 alias rspec='nocorrect bundle exec rspec' # Do not autocorrect 'rspec' command
