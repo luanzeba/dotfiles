@@ -14,8 +14,8 @@ sudo apt-get --assume-yes install ripgrep fd-find
 debian_version=$(lsb_release -a 2>/dev/null | awk '/Release/ {print $2}')
 echo "deb http://download.opensuse.org/repositories/shells:/fish/Debian_$debian_version/ /" | sudo tee /etc/apt/sources.list.d/shells:fish.list
 curl -fsSL https://download.opensuse.org/repositories/shells:fish/Debian_$debian_version/Release.key | gpg --dearmor | sudo tee /etc/apt/trusted.gpg.d/shells_fish.gpg > /dev/null
-sudo apt update
-sudo apt install fish
+sudo apt update -y
+sudo apt install -y fish
 
 # Install neovim
 previous=$PWD
