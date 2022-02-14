@@ -1,6 +1,10 @@
 let mapleader = ";"
 set nocompatible
 
+if &shell =~# 'fish$'
+    set shell=sh
+endif
+
 call plug#begin('~/.config/nvim/plugged')
 
 Plug 'morhetz/gruvbox'
@@ -17,6 +21,7 @@ Plug 'tpope/vim-unimpaired'
 Plug 'tpope/vim-sensible'
 Plug 'dense-analysis/ale'
 Plug 'github/copilot.vim'
+Plug 'dag/vim-fish'
 
 " Languages support
 Plug 'vim-ruby/vim-ruby'
@@ -61,14 +66,14 @@ nnoremap <silent> <C-b> :Buffers<CR>
 nnoremap <C-f> :Rg!
 nnoremap <expr> <C-g> ':Rg! '.expand('<cword>').'<CR>'
 " Sort results by proximity https://github.com/jonhoo/proximity-sort
-function! s:list_cmd()
-  let base = fnamemodify(expand('%'), ':h:.:S')
-  return base == '.' ? 'fd -t f' : printf('fd -t f | proximity-sort %s', expand('%'))
-endfunction
+" function! s:list_cmd()
+"   let base = fnamemodify(expand('%'), ':h:.:S')
+"   return base == '.' ? 'fd -t f' : printf('fd -t f | proximity-sort %s', expand('%'))
+" endfunction
 
-command! -bang -nargs=? -complete=dir Files
-  \ call fzf#vim#files(<q-args>, {'source': s:list_cmd(),
-  \                               'options': '--tiebreak=index'}, <bang>0)
+" command! -bang -nargs=? -complete=dir Files
+"   \ call fzf#vim#files(<q-args>, {'source': s:list_cmd(),
+"   \                               'options': '--tiebreak=index'}, <bang>0)
 
 " fugitive
 nnoremap <Leader>b :execute line(".") . "GBrowse"<CR>
@@ -104,6 +109,7 @@ noremap <Leader>p "*p
 " # Editor settings
 " =============================================================================
 syntax on
+filetype plugin indent on
 set relativenumber
 set number
 set background=dark
