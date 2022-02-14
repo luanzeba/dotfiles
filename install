@@ -12,7 +12,7 @@ sudo apt-get update -y
 sudo apt-get --assume-yes install ripgrep fish
 
 # Install neovim
-previous=$(PWD)
+previous=$PWD
 cd $HOME
 curl -LO https://github.com/neovim/neovim/releases/latest/download/nvim.appimage
 chmod u+x nvim.appimage
