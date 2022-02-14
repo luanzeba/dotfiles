@@ -7,9 +7,9 @@ exec 2>&1
 set -x
 
 # Install Packages
-sudo apt-add-repository ppa:fish-shell/release-3
+# sudo apt-add-repository ppa:fish-shell/release-3
 sudo apt-get update -y
-sudo apt-get --assume-yes install ripgrep fish
+sudo apt-get --assume-yes install ripgrep fish fd-find
 
 # Install neovim
 previous=$PWD
