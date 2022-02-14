@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+# set -x
+
+# Wrapper around the gh codespace CLI
+# Faciliates codespace management with fzf and strong opinions
+
+function cs_create_with_machine_fallback() {
+  local repo=$1
+  local basic_machine="basicLinux32gb"
+  local xl_machine="xLargePremiumLinux"
+
+  cs_id=$(gh cs create -r "$repo" -m "$basic_machine" --status 2>/dev/null)
+  if [ $? -ne 0 ]; then
+    cs_id=$(gh cs create -r "$repo" -m "$xl_machine" --status)
+  fi
+  echo "$cs_id"
+}
+
+# GitHub CLI Codespaces helpers
+if [[ $# > 0 ]]; then
+  case "$1" in
+    dev)
+      if [[ $2 == *"/"* ]]; then
+        cs_id=$(cs_create_with_machine_fallback $2)
+      else
+        cs_id=$(cs_create_with_machine_fallback "github/$2")
+      fi
+      osascript -e "display notification \"✅ $cs_id\" with title \"Codespace ready\" sound name \"Glass\"" &
+      gh cs ssh -c $cs_id
+      ;;
+    delete)
+      cs_id=$(gh cs list | fzf --query "/$2" | cut -f1)
+      [[ -n "$cs_id" ]] && gh cs delete -c $cs_id
+      ;;
+    ssh)
+      cs_id=$(gh cs list | fzf --query "/$2" | cut -f1)
+      [[ -n "$cs_id" ]] && gh cs ssh -c $cs_id
+      ;;
+    *)
+      gh cs "$@"
+      ;;
+  esac
+else
+  gh cs
+fi
