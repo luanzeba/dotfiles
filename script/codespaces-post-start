@@ -1,0 +1,5 @@
+#!/bin/sh
+# Run by github/github codespaces after starting
+
+echo "running codespaces-post-start"
+
