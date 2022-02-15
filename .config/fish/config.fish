@@ -19,7 +19,7 @@ alias icloud='cd /Users/lvieira/Library/Mobile\ Documents/com~apple~CloudDocs/'
 
 export EDITOR='nvim'
 
-if $CODESPACES
+if test $CODESPACES
   # don't worry about ruby version management
 else
   set CHRUBY_ROOT '/opt/homebrew/opt/chruby'
