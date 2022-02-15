@@ -6,16 +6,15 @@ exec > >(tee -i $HOME/dotfiles_install.log)
 exec 2>&1
 set -x
 
-# Install Packages
-# sudo apt-add-repository ppa:fish-shell/release-3
-sudo apt-get update -y
-sudo apt-get --assume-yes install ripgrep fd-find tmux exuberant-ctags
-
 # Install fish
 debian_version=$(lsb_release -a 2>/dev/null | awk '/Release/ {print $2}')
 echo "deb http://download.opensuse.org/repositories/shells:/fish/Debian_$debian_version/ /" | sudo tee /etc/apt/sources.list.d/shells:fish.list
 curl -fsSL https://download.opensuse.org/repositories/shells:fish/Debian_$debian_version/Release.key | gpg --dearmor | sudo tee /etc/apt/trusted.gpg.d/shells_fish.gpg > /dev/null
-sudo apt-get install -y fish
+sudo apt update -y
+sudo apt install -y fish
+
+# Install Packages
+sudo apt install -y ripgrep fd-find tmux exuberant-ctags
 
 # Install neovim
 previous=$PWD
