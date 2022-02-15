@@ -1,39 +1,39 @@
 set -g theme_display_git_default_branch yes
 set -g theme_nerd_fonts no
 
-alias vim='nvim'
-alias be='bundle exec'
-alias berc='bundle exec rails console'
-alias bers='bundle exec rails server'
-alias bi='bundle install'
-alias cop='bundle exec rubocop'
-# alias cop-git='git ls-files -m | xargs ls -1 2>/dev/null | grep '\.rb$' | xargs rubocop'
-alias vfish='vim ~/.config/fish/config.fish'
-alias sfish='source ~/.config/fish/config.fish'
-alias vvim='vim ~/.config/nvim/init.vim'
-# alias dkill='killall Docker && cd /Applications;open -a Docker;cd ~'
-alias k='kubectl'
-alias rspec='nocorrect bundle exec rspec' # Do not autocorrect 'rspec' command
+alias vim="nvim"
+alias be="bundle exec"
+alias berc="bundle exec rails console"
+alias bers="bundle exec rails server"
+alias bi="bundle install"
+alias cop="bundle exec rubocop"
+# alias cop-git="git ls-files -m | xargs ls -1 2>/dev/null | grep "\.rb$" | xargs rubocop"
+alias vfish="vim $HOME/.config/fish/config.fish"
+alias sfish="source $HOME/.config/fish/config.fish"
+alias vvim="vim $HOME/.config/nvim/init.vim"
+# alias dkill="killall Docker && cd /Applications;open -a Docker;cd $HOME"
+alias k="kubectl"
+alias rspec="nocorrect bundle exec rspec" # Do not autocorrect "rspec" command
 
-alias icloud='cd /Users/lvieira/Library/Mobile\ Documents/com~apple~CloudDocs/'
+alias icloud="cd $HOME/Library/Mobile\ Documents/com~apple~CloudDocs/"
 
-export EDITOR='nvim'
+export EDITOR="nvim"
+export PATH="$HOME/.config/bin:$PATH"
 
 if test $CODESPACES
   # don't worry about ruby version management
 else
-  set CHRUBY_ROOT '/opt/homebrew/opt/chruby'
+  set CHRUBY_ROOT "/opt/homebrew/opt/chruby"
   source /opt/homebrew/opt/chruby-fish/share/chruby/chruby.fish
   source /opt/homebrew/opt/chruby-fish/share/chruby/auto.fish # Enable auto-switching based on .ruby-version file
 
   export PATH="$HOME/.cargo/bin:$PATH"
-  export PATH="$HOME/.config/bin:$PATH"
 end
 
 # convenience function for selecting a branch for checkout
 # gbco() {
-#   current=$(git branch | grep '\*' | cut -d ' ' -f2)
-#   selected=$( (git branch --no-color | grep -v '\*' | xargs -n 1; echo $current ) | fzf -0 -1 --tac -q "${1:-""}" --prompt "$current> ")
+#   current=$(git branch | grep "\*" | cut -d " " -f2)
+#   selected=$( (git branch --no-color | grep -v "\*" | xargs -n 1; echo $current ) | fzf -0 -1 --tac -q "${1:-""}" --prompt "$current> ")
 #   if [ ! -z "$selected" ]; then
 #       git checkout "$selected"
 #   fi

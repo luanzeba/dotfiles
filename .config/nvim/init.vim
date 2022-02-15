@@ -22,6 +22,7 @@ Plug 'tpope/vim-sensible'
 Plug 'dense-analysis/ale'
 Plug 'github/copilot.vim'
 Plug 'dag/vim-fish'
+Plug 'christoomey/vim-tmux-navigator'
 
 " Languages support
 Plug 'vim-ruby/vim-ruby'
@@ -155,3 +156,10 @@ nnoremap ? ?\v
 nnoremap / /\v
 cnoremap %s/ %sm/
 
+" Automatically rebalance windows on vim resize
+" Critical for working with tmux
+autocmd VimResized * :wincmd =
+
+" zoom a vim pane, <C-w>= to re-balance
+nnoremap <leader>- :wincmd _<cr>:wincmd \|<cr>
+nnoremap <leader>= :wincmd =<cr>

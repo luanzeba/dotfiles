@@ -1,5 +1,6 @@
 #!/bin/bash
 # Used to setup codespaces
+# It ain't pretty, but it's honest work
 
 exec > >(tee -i $HOME/dotfiles_install.log)
 exec 2>&1
@@ -8,14 +9,13 @@ set -x
 # Install Packages
 # sudo apt-add-repository ppa:fish-shell/release-3
 sudo apt-get update -y
-sudo apt-get --assume-yes install ripgrep fd-find
+sudo apt-get --assume-yes install ripgrep fd-find tmux exuberant-ctags
 
 # Install fish
 debian_version=$(lsb_release -a 2>/dev/null | awk '/Release/ {print $2}')
 echo "deb http://download.opensuse.org/repositories/shells:/fish/Debian_$debian_version/ /" | sudo tee /etc/apt/sources.list.d/shells:fish.list
 curl -fsSL https://download.opensuse.org/repositories/shells:fish/Debian_$debian_version/Release.key | gpg --dearmor | sudo tee /etc/apt/trusted.gpg.d/shells_fish.gpg > /dev/null
-sudo apt update -y
-sudo apt install -y fish
+sudo apt-get install -y fish
 
 # Install neovim
 previous=$PWD
@@ -35,13 +35,15 @@ $HOME/.fzf/install --all
 ## Link Dotfiles
 mkdir -p $HOME/.config/nvim
 mkdir -p $HOME/.config/fish
+mkdir -p $HOME/.config/bin
 mkdir $HOME/.git_template
 
-ln -svf $(pwd)/.config/nvim/* $HOME/.config/nvim/
-ln -svf $(pwd)/.gitconfig $HOME/.gitconfig
-ln -svf $(pwd)/.gitignore_global ~/.gitignore_global
-ln -svf $(pwd)/.gitconfig ~/.gitconfig
-ln -svf $(pwd)/.git_template/* ~/.git_template/
+ln -svf $PWD/.config/nvim/* $HOME/.config/nvim/
+ln -svf $PWD/.gitconfig $HOME/.gitconfig
+ln -svf $PWD/.gitignore_global ~/.gitignore_global
+ln -svf $PWD/.git_template/* ~/.git_template/
+ln -svf $PWD/.tmux.conf ~/.tmux.conf
+ln -sfv $PWD/bin/* ~/.config/bin/
 
 rm -f $HOME/.zshrc
 

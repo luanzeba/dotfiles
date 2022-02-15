@@ -11,7 +11,7 @@ function cs_create_with_machine_fallback() {
 
   cs_id=$(gh cs create -r "$repo" -m "$basic_machine" --status 2>/dev/null)
   if [ $? -ne 0 ]; then
-    cs_id=$(gh cs create -r "$repo" -m "$xl_machine" --status)
+    cs_id=$(gh cs create -r "$repo" -m "$xl_machine" --status 2>/dev/null)
   fi
   echo "$cs_id"
 }
