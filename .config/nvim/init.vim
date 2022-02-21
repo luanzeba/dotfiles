@@ -57,9 +57,25 @@ let g:nvim_tree_show_icons = {
     \ 'folder_arrows': 0,
     \ }
 set termguicolors
-lua require'nvim-tree'.setup {}
-map <silent> <C-n> :NvimTreeFindFile<CR>
-map <leader>n :NvimTreeToggle<CR>
+lua << EOS
+-- each of these are documented in `:help nvim-tree.OPTION_NAME`
+
+require'nvim-tree'.setup {
+  disable_netrw = true,
+  open_on_setup = true,
+  view = {
+    auto_resize = true
+  },
+  actions = {
+    open_file = {
+      quit_on_open = true
+    }
+  }
+}
+EOS
+nnoremap <C-n> :NvimTreeToggle<CR>
+nnoremap <leader>r :NvimTreeRefresh<CR>
+nnoremap <leader>n :NvimTreeFindFile<CR>
 
 " Fzf
 nnoremap <silent> <C-p> :Files<CR>
@@ -156,10 +172,13 @@ nnoremap ? ?\v
 nnoremap / /\v
 cnoremap %s/ %sm/
 
+" Clear highlight
+map <leader>h :noh<CR>
+
 " Automatically rebalance windows on vim resize
 " Critical for working with tmux
 autocmd VimResized * :wincmd =
 
 " zoom a vim pane, <C-w>= to re-balance
-nnoremap <leader>- :wincmd _<cr>:wincmd \|<cr>
+nnoremap <leader>z :wincmd _<cr>:wincmd \|<cr>
 nnoremap <leader>= :wincmd =<cr>
