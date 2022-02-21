@@ -79,9 +79,10 @@ nnoremap <leader>n :NvimTreeFindFile<CR>
 
 " Fzf
 nnoremap <silent> <C-p> :Files<CR>
+nnoremap <silent> <C-g> :GFiles<CR>
 nnoremap <silent> <C-b> :Buffers<CR>
 nnoremap <C-f> :Rg!
-nnoremap <expr> <C-g> ':Rg! '.expand('<cword>').'<CR>'
+nnoremap <expr> <leader>fw ':Rg! '.expand('<cword>').'<CR>'
 " Sort results by proximity https://github.com/jonhoo/proximity-sort
 " function! s:list_cmd()
 "   let base = fnamemodify(expand('%'), ':h:.:S')
