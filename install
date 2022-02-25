@@ -16,21 +16,15 @@ sudo apt install -y fish
 # Install packages
 sudo apt install -y ripgrep tmux exuberant-ctags
 
+# Install latest neovim
 previous=$PWD
 cd $HOME
-
-# Install latest neovim
 curl -LO https://github.com/neovim/neovim/releases/latest/download/nvim.appimage
 chmod u+x nvim.appimage
 ./nvim.appimage --appimage-extract
 ./squashfs-root/AppRun --version
 mv squashfs-root /
 ln -s /squashfs-root/AppRun /usr/bin/nvim
-
-# Install sshh https://github.com/yudai/sshh
-wget "https://raw.githubusercontent.com/yudai/sshh/master/sshh" && chmod a+x sshh
-ln -s sshh /usr/bin/sshh
-
 cd $previous
 
 # Install fzf
