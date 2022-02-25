@@ -62,3 +62,10 @@ ln -svf $PWD/.config/fish/completions/* $HOME/.config/fish/completions/
 ln -svf $PWD/.config/fish/conf.d/* $HOME/.config/fish/conf.d/
 
 sudo chsh -s "$(which fish)" "$(whoami)"
+
+# Build ctags file
+if [ -s script/build-ctags ]; then
+  ./script/build-ctags &
+else
+  $HOME/.git_template/hooks/ctags &
+fi
