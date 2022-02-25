@@ -1,4 +1,6 @@
 #!/bin/bash
+# Copied from https://github.com/yudai/sshh
+# Minor changes to optimize for use with codespaces and fish shell
 
 session_name=$(tmux display-message -p '#{session_name}')
 window_index=$(tmux display-message -p '#{window_index}')
@@ -35,11 +37,17 @@ fi
 pane_pid=$(echo "${target_pane}" | awk '{ print $2 }')
 
 IFS=$'\n'
-for child_pid in $(pgrep -P ${pane_pid}); do
+for child_pid in $(pgrep --parent ${pane_pid}); do
     child_cmd=$(ps ${child_pid} | tail -n 1 | awk '{for(i=5;i<NF;i++) printf("%s ",$i); print $NF}')
     if [[ "${child_cmd}" == *"ssh"* ]]; then
         echo "${child_cmd}"
         eval "exec ${child_cmd}"
+    # Fish grandchild PID.
+    elif pgrep --parent ${child_pid}; then
+        grandchild_pid=$(pgrep --parent ${child_pid})
+        grandchild_cmd=$(ps ${grandchild_pid} | tail -n 1 | awk '{for(i=5;i<NF;i++) printf("%s ",$i); print $NF}')
+        echo "${grandchild_cmd}"       
+        eval "exec ${grandchild_cmd}"
     else
         echo "Command at Pane #${pane_index} of Window #${window_index} is not SSH."
         echo -n "Do you want to run '${child_cmd}' ? [y/N]: "
