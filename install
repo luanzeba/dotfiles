@@ -13,10 +13,10 @@ curl -fsSL https://download.opensuse.org/repositories/shells:fish/Debian_$debian
 sudo apt update -y
 sudo apt install -y fish
 
-# Install Packages
-sudo apt install -y ripgrep fd-find tmux exuberant-ctags
+# Install packages
+sudo apt install -y ripgrep tmux exuberant-ctags
 
-# Install neovim
+# Install latest neovim
 previous=$PWD
 cd $HOME
 curl -LO https://github.com/neovim/neovim/releases/latest/download/nvim.appimage
@@ -27,33 +27,35 @@ mv squashfs-root /
 ln -s /squashfs-root/AppRun /usr/bin/nvim
 cd $previous
 
+# Install fzf
 rm -rf $HOME/.fzf
 git clone --depth 1 https://github.com/junegunn/fzf.git $HOME/.fzf
 $HOME/.fzf/install --all
 
-## Link Dotfiles
+# Link dotfiles
 mkdir -p $HOME/.config/nvim
 mkdir -p $HOME/.config/fish
 mkdir -p $HOME/.config/bin
+mkdir -p $HOME/.config/github-copilot
 mkdir $HOME/.git_template
 
 ln -svf $PWD/.config/nvim/* $HOME/.config/nvim/
+ln -svf $PWD/.config/github-copilot/terms.json $HOME/.config/github-copilot/terms.json
 ln -svf $PWD/.gitconfig $HOME/.gitconfig
 ln -svf $PWD/.gitignore_global ~/.gitignore_global
 ln -svf $PWD/.git_template/* ~/.git_template/
 ln -svf $PWD/.tmux.conf ~/.tmux.conf
 ln -sfv $PWD/bin/* ~/.config/bin/
 
-rm -f $HOME/.zshrc
-
-### Install vim-plug
+# Install vim-plug
 sh -c 'curl -fLo "${XDG_DATA_HOME:-$HOME/.local/share}"/nvim/site/autoload/plug.vim --create-dirs \
        https://raw.githubusercontent.com/junegunn/vim-plug/master/plug.vim'
 
-### Install NeoVim plugins
-nvim --headless +PlugInstall +qa
+# Install neovim plugins
+# and accept copilot terms (This assumes the terms are already stored in $HOME/.config/github-copilot/terms.json)
+nvim --headless +PlugInstall +"Copilot setup" +qa
 
-# Set default shell
+# Set fish as default shell
 ln -svf $PWD/.config/fish/* $HOME/.config/fish/
 ln -svf $PWD/.config/fish/functions/* $HOME/.config/fish/functions/
 ln -svf $PWD/.config/fish/completions/* $HOME/.config/fish/completions/
