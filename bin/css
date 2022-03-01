@@ -1,0 +1,17 @@
+#!/bin/bash
+# SSH to current codespace
+# Optionally forward ports
+# Requires https://github.com/luanzeba/csw
+
+while getopts ":p" opt; do
+  case $opt in
+    p)
+      csw ports forward 80:80 &
+      ;;
+    \?)
+      echo "Invalid option: -$OPTARG" >&2
+      exit 1
+      ;;
+  esac
+done
+csw ssh
