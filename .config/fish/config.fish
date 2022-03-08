@@ -11,6 +11,7 @@ alias cop="bundle exec rubocop"
 alias vfish="vim $HOME/.config/fish/config.fish"
 alias sfish="source $HOME/.config/fish/config.fish"
 alias vvim="vim $HOME/.config/nvim/init.vim"
+alias svim="source $HOME/.config/nvim/init.vim"
 # alias dkill="killall Docker && cd /Applications;open -a Docker;cd $HOME"
 alias k="kubectl"
 alias rspec="nocorrect bundle exec rspec" # Do not autocorrect "rspec" command
@@ -29,6 +30,9 @@ else
 
   export PATH="$HOME/.cargo/bin:$PATH"
 end
+
+# Map Ctrl-x to clear
+bind \cx 'clear; commandline -f repaint'
 
 # convenience function for selecting a branch for checkout
 # gbco() {
