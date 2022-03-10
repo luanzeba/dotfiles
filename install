@@ -10,11 +10,25 @@ set -x
 debian_version=$(lsb_release -a 2>/dev/null | awk '/Release/ {print $2}')
 echo "deb http://download.opensuse.org/repositories/shells:/fish/Debian_$debian_version/ /" | sudo tee /etc/apt/sources.list.d/shells:fish.list
 curl -fsSL https://download.opensuse.org/repositories/shells:fish/Debian_$debian_version/Release.key | gpg --dearmor | sudo tee /etc/apt/trusted.gpg.d/shells_fish.gpg > /dev/null
-sudo apt update -y
-sudo apt install -y fish
+
+# When setting up a codespace, we might run into an apt race condition
+# We need to make sure a different process doesn't have a lock before proceeding
+# When it does, the error will be one of 2:
+#   Could not get lock /var/lib/apt/lists/lock
+#   Could not get lock /var/lib/dpkg/lock-frontend
+function apt_with_lock_protection() {
+  while apt-get -y $1 2>&1 | grep -q "Could not get lock" ; do
+    echo "Waiting for other apt-get instances to exit"
+    sleep 1
+  done
+}
+
+apt_with_lock_protection "update"
+apt_with_lock_protection "remove fish fish-common"
+apt_with_lock_protection "install fish"
 
 # Install packages
-sudo apt install -y ripgrep tmux exuberant-ctags
+apt_with_lock_protection "install ripgrep tmux exuberant-ctags"
 
 # Install latest neovim
 previous=$PWD
