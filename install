@@ -12,7 +12,7 @@ set -x
 #   Could not get lock /var/lib/apt/lists/lock
 #   Could not get lock /var/lib/dpkg/lock-frontend
 function apt_with_lock_protection() {
-  while sudo apt-get -y $1 2>&1 | tee ~/apt_log | grep -q "Could not get lock" ; do
+  while sudo apt-get -y $1 2>&1 | tee -a ~/apt_log | grep -q "Could not get lock" ; do
     echo "Waiting for other apt-get instances to exit"
     sleep 1
   done
@@ -30,9 +30,14 @@ if [[ -n "$CODESPACES" ]]; then
   rm ~/.gitconfig
 
   apt_with_lock_protection "update"
-  apt_with_lock_protection "remove fish fish-common"
-  apt_with_lock_protection "install fish"
   apt_with_lock_protection "install ripgrep tmux exuberant-ctags"
+  apt_with_lock_protection "remove fish fish-common"
+
+  # fish 3.4.0 introduced some issue when renaming files and this is a workardound for it
+  while apt_with_lock_protection "install fish" | grep -q "Invalid cross-device link"; do
+    echo "Waiting for fish to install"
+    sleep 1
+  done
 
   # Use RDM for copy/paste and open support
   wget https://github.com/BlakeWilliams/remote-development-manager/releases/download/v0.0.3/rdm-linux-amd64
