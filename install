@@ -24,23 +24,24 @@ echo "deb http://download.opensuse.org/repositories/shells:/fish/Debian_$debian_
 curl -fsSL https://download.opensuse.org/repositories/shells:fish/Debian_$debian_version/Release.key | gpg --dearmor | sudo tee /etc/apt/trusted.gpg.d/shells_fish.gpg > /dev/null
 
 # Clean up codespaces environment
-if [[ -n "$CODESPACES" ]]; then
-  rm ~/.zshrc
-  mv ~/.gitconfig ~/.gitconfig.old
-  rm ~/.gitconfig
+previous=$PWD
+cd $HOME
 
-  apt_with_lock_protection "update"
-  apt_with_lock_protection "install ripgrep tmux exuberant-ctags"
-  apt_with_lock_protection "remove fish fish-common"
-  apt_with_lock_protection "install fish"
+rm ~/.zshrc
+mv ~/.gitconfig ~/.gitconfig.old
+rm ~/.gitconfig
 
-  # Use RDM for copy/paste and open support
-  wget https://github.com/BlakeWilliams/remote-development-manager/releases/download/v0.0.3/rdm-linux-amd64
-  sudo mv rdm-linux-amd64 /usr/bin/local/rdm
-  chmod +x /usr/bin/local/rdm
+apt_with_lock_protection "update"
+apt_with_lock_protection "install ripgrep tmux exuberant-ctags"
+apt_with_lock_protection "remove fish fish-common"
+apt_with_lock_protection "install fish"
 
-  gh config set browser "rdm open"
-fi
+# Use RDM for copy/paste and open support
+wget https://github.com/BlakeWilliams/remote-development-manager/releases/download/v0.0.3/rdm-linux-amd64
+sudo mv rdm-linux-amd64 /usr/bin/rdm
+chmod +x /usr/bin/rdm
+
+gh config set browser "rdm open"
 
 # Install latest neovim
 previous=$PWD
