@@ -32,12 +32,7 @@ if [[ -n "$CODESPACES" ]]; then
   apt_with_lock_protection "update"
   apt_with_lock_protection "install ripgrep tmux exuberant-ctags"
   apt_with_lock_protection "remove fish fish-common"
-
-  # fish 3.4.0 introduced some issue when renaming files and this is a workardound for it
-  while apt_with_lock_protection "install fish" | grep -q "Invalid cross-device link"; do
-    echo "Waiting for fish to install"
-    sleep 1
-  done
+  apt_with_lock_protection "install fish"
 
   # Use RDM for copy/paste and open support
   wget https://github.com/BlakeWilliams/remote-development-manager/releases/download/v0.0.3/rdm-linux-amd64
@@ -87,8 +82,7 @@ sh -c 'curl -fLo "${XDG_DATA_HOME:-$HOME/.local/share}"/nvim/site/autoload/plug.
 nvim --headless +PlugInstall +"Copilot setup" +qa
 
 # Set fish as default shell
-# ln -svf $PWD/.config/fish/* $HOME/.config/fish/
-ln -svf $PWD/.config/fish/config.fish $HOME/.config/fish/config.fish
+ln -svf $PWD/.config/fish/* $HOME/.config/fish/
 ln -svf $PWD/.config/fish/functions/* $HOME/.config/fish/functions/
 ln -svf $PWD/.config/fish/completions/* $HOME/.config/fish/completions/
 ln -svf $PWD/.config/fish/conf.d/* $HOME/.config/fish/conf.d/
