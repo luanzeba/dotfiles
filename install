@@ -87,7 +87,8 @@ sh -c 'curl -fLo "${XDG_DATA_HOME:-$HOME/.local/share}"/nvim/site/autoload/plug.
 nvim --headless +PlugInstall +"Copilot setup" +qa
 
 # Set fish as default shell
-ln -svf $PWD/.config/fish/* $HOME/.config/fish/
+# ln -svf $PWD/.config/fish/* $HOME/.config/fish/
+ln -svf $PWD/.config/fish/config.fish $HOME/.config/fish/config.fish
 ln -svf $PWD/.config/fish/functions/* $HOME/.config/fish/functions/
 ln -svf $PWD/.config/fish/completions/* $HOME/.config/fish/completions/
 ln -svf $PWD/.config/fish/conf.d/* $HOME/.config/fish/conf.d/
