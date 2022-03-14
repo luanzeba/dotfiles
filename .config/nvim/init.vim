@@ -123,6 +123,15 @@ let g:rust_clip_command = 'xclip -selection clipboard'
 noremap <Leader>y "*y
 noremap <Leader>p "*p
 
+" Forward clipboard in a codespace
+if !empty($CODESPACES)
+  let g:clipboard = {"name": "rdm", "copy": {}, "paste": {}}
+  let g:clipboard.copy["+"] = ["rdm", "copy"]
+  let g:clipboard.paste["+"] = ["rdm", "paste"]
+  let g:clipboard.copy["*"] = ["rdm", "copy"]
+  let g:clipboard.paste["*"] = ["rdm", "paste"]
+endif
+
 " =============================================================================
 " # Editor settings
 " =============================================================================
