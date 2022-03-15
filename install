@@ -29,7 +29,6 @@ cd $HOME
 
 rm ~/.zshrc
 mv ~/.gitconfig ~/.gitconfig.old
-rm ~/.gitconfig
 
 apt_with_lock_protection "update"
 apt_with_lock_protection "install ripgrep tmux exuberant-ctags"
@@ -56,6 +55,18 @@ cd $previous
 rm -rf $HOME/.fzf
 git clone --depth 1 https://github.com/junegunn/fzf.git $HOME/.fzf
 $HOME/.fzf/install --all
+
+# Use git-mob for pair programming co-author management
+if [ -x "$(which npm 2>/dev/null)" ]; then
+  npm i -g git-mob
+elif [ -x "$(which bin/npm 2>/dev/null)" ]; then
+  bin/npm i -g git-mob
+else
+  echo "Did not install git-mob"
+fi
+
+bin/npm i -g git-mob
+ln -svf $PWD/.git-coauthors $HOME/.git-coauthors
 
 # Link dotfiles
 mkdir -p $HOME/.config/nvim

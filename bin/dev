@@ -24,6 +24,7 @@ fi
 
 rdm server &                                             # Start RDM server https://github.com/BlakeWilliams/remote-development-manager
 csw create -r $repo -m $machine --status                 # Create codespace, wait for it to come up, and store name
+csw cp -e ~/.git-coauthors 'remote:/root/.git-coauthors' # Copy co-authors file for pair programming
 osascript -e "display notification \"✅ $(csw get)\" \
   with title \"Codespace ready\" sound name \"Glass\"" & # Notify user that codespace is ready
 csw ssh -- -R 127.0.0.1:7391:$(rdm socket)               # SSH to the codespace with socket forwarding
