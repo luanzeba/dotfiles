@@ -36,9 +36,8 @@ call plug#end()
 colorscheme gruvbox
 
 if has('nvim')
-    set guicursor=n-v-c:block-Cursor/lCursor-blinkon0,i-ci:ver25-Cursor/lCursor,r-cr:hor20-Cursor/lCursor
-    set inccommand=nosplit
-    noremap <C-q> :confirm qall<CR>
+  set inccommand=nosplit
+  noremap <C-q> :confirm qall<CR>
 end
 
 " quick-save
@@ -56,7 +55,6 @@ let g:nvim_tree_show_icons = {
     \ 'files': 0,
     \ 'folder_arrows': 0,
     \ }
-set termguicolors
 lua << EOS
 -- each of these are documented in `:help nvim-tree.OPTION_NAME`
 
@@ -104,8 +102,8 @@ nnoremap <leader>m :TagbarToggle<CR>| " Open list of tags in TagBar
 
 " ruby & rails
 map <leader>t :AV<CR>
-autocmd FileType ruby,eruby let g:rubycomplete_buffer_loading = 1                                                                                                     
-autocmd FileType ruby,eruby let g:rubycomplete_classes_in_global = 1                                                                                                  
+autocmd FileType ruby,eruby let g:rubycomplete_buffer_loading = 1
+autocmd FileType ruby,eruby let g:rubycomplete_classes_in_global = 1
 autocmd FileType ruby,eruby let g:rubycomplete_rails = 1
 autocmd FileType ruby,eruby set omnifunc=syntaxcomplete#Complete
 let g:ale_linters = {'ruby': ['standardrb'], 'rust': ['analyzer']}
@@ -135,27 +133,83 @@ endif
 " =============================================================================
 " # Editor settings
 " =============================================================================
-syntax on
-filetype plugin indent on
-set relativenumber
-set number
-set background=dark
-set undofile
-set noerrorbells
-set noshowmode
-set hidden
-set nowrap
-set nojoinspaces
-let g:sneak#s_next = 1
-let g:vim_markdown_new_list_item_indent = 0
-let g:vim_markdown_auto_insert_bullets = 0
-let g:vim_markdown_frontmatter = 1
-" Always draw sign column. Prevent buffer moving when adding/deleting sign.
-set signcolumn=yes
+set background=dark             " Default color groups 
+set noerrorbells                " Obvious
+set signcolumn=yes              " Always draw sign column. Prevent buffer moving when adding/deleting sign.
+set autoindent                  " Copy indent from previous line
+set backupcopy=yes              " Keeps original creator code
+set backspace=indent,eol,start  " Adds intuitive backspacing
+set fillchars+=vert:│           " Use tall pipe in split separators
+set cursorline                  " highlight current line
+set guicursor=i:ver25-iCursor   " Use | cursor when in insert mode
+set history=100                 " Keep 100 lines of command line history
+set laststatus=2                " Always show statusline
+set lazyredraw                  " Boosts performance at times
+set list                        " Don't show listchars
+set listchars=tab:»·,trail:·    " Show trailing spaces as dots
+set matchtime=0                 " Fix neovim match lag
+set nobackup                    " No Backup files
+set hidden                      " hide unsaved buffers
+set number                      " Show regular numbers
+set nofoldenable                " Disable folds
+set noshowcmd                   " Don't show command in the last line of the screen
+set noswapfile                  " No swap
+set nowrap                      " Don't wrap lines
+set relativenumber              " Show relative line numbers
+set ruler                       " Show the ruler
+set scrolloff=10                " Always keep current line in center
+set completeopt+=menuone        " Always show menu
+set completeopt+=noselect       " Don't select only option
+set shortmess=fmnrWIcF          " Customize what vim yells at you
+set showmatch                   " Highlight matching paren/brace/bracket
+set smarttab                    " Prevents tab/space issues
+set synmaxcol=180               " Prevents segfaults and slow rendering
+set splitbelow                  " Open hsplits below rather than above
+set splitright                  " Open vsplits to the right rather than left
+set tags^=.git/tags             " where to find tags
+set termguicolors               " 256 colors!
+set undolevels=500              " More undo
+set wildignorecase              " Case insensitive completions
+set wildmenu                    " Enhanced command-line completion
+
+" Proper search
+set hlsearch                    " Highlights search
+set ignorecase                  " Ignore case in searches
+set incsearch                   " Searches for text as entered
+set smartcase                   " Enable case sensetive search only when uppsercase characters present
+set gdefault                    " Substitute flag is on by default
 
 " indentation
-set smartindent
+set smartindent                 " Auto insert extra indent level in certain cases
 set tabstop=2 shiftwidth=2 expandtab softtabstop=2   "tabs = 2 spaces
+
+" Formatting settings
+set expandtab                   " Make spaces not tabs
+set shiftwidth=2                " 2 spaces when indented
+
+syntax on
+filetype indent on              " Filetype specific indent
+filetype plugin on              " Filetype specific plugins
+
+" Enable mouse
+if has('mouse')
+  set mouse=a
+endif
+
+" Use undo file for awesome undo
+if exists("+undofile")
+  if isdirectory($HOME . '/.config/nvim/undo') == 0
+    :silent !mkdir -p ~/.config/nvim/undo > /dev/null 2>&1
+  endif
+
+  set undofile
+  set undodir=~/.config/nvim/undo/
+endif
+
+" Better diffing
+if &diff && has("patch-8.1.0360")
+  set diffopt+=internal,algorithm:patience,vertical
+endif
 
 " Wrapping options
 set formatoptions=tc " wrap text and comments using textwidth
@@ -163,12 +217,6 @@ set formatoptions+=r " continue comments when pressing ENTER in I mode
 set formatoptions+=q " enable formatting of comments with gq
 set formatoptions+=n " detect lists for formatting
 set formatoptions+=b " auto-wrap in insert mode, and do not wrap old long lines
-
-" Proper search
-set ignorecase
-set smartcase
-set gdefault
-set hlsearch
 
 " Search results centered please
 nnoremap <silent> n nzz
@@ -181,6 +229,11 @@ nnoremap <silent> g* g*zz
 nnoremap ? ?\v
 nnoremap / /\v
 cnoremap %s/ %sm/
+
+let g:sneak#s_next = 1
+let g:vim_markdown_new_list_item_indent = 0
+let g:vim_markdown_auto_insert_bullets = 0
+let g:vim_markdown_frontmatter = 1
 
 " Clear highlight
 map <leader>h :noh<CR>
