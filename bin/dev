@@ -1,0 +1,29 @@
+#!/bin/bash
+
+if [[ $# > 0 ]]; then
+  case "$1" in
+    gh)
+      repo="github/github"
+      machine="xLargePremiumLinux"
+      ;;
+    meuse)
+      repo="github/meuse"
+      machine="basicLinux32gb"
+      ;;
+    *)
+      echo "Unknown command $1"
+      echo "Usage: $0 {gh|meuse}"
+      exit 1
+      ;;
+  esac
+else
+  echo "Usage: $0 gh|meuse"
+  exit 1
+fi
+
+
+rdm server &                                             # Start RDM server https://github.com/BlakeWilliams/remote-development-manager
+csw create -r $repo -m $machine --status                 # Create codespace, wait for it to come up, and store name
+osascript -e "display notification \"✅ $(csw get)\" \
+  with title \"Codespace ready\" sound name \"Glass\"" & # Notify user that codespace is ready
+csw ssh -- -R 127.0.0.1:7391:$(rdm socket)               # SSH to the codespace with socket forwarding
