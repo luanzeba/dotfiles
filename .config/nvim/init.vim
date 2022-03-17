@@ -1,4 +1,4 @@
-let mapleader = ";"
+let mapleader = " "
 set nocompatible
 
 if &shell =~# 'fish$'
@@ -99,6 +99,9 @@ nnoremap <Leader>g :G<CR>5j
 " code navigation
 nnoremap <leader>] g<C-]>| " go to definition. If more than one definition, open quick-list
 nnoremap <leader>m :TagbarToggle<CR>| " Open list of tags in TagBar
+
+" Switch between the last two files
+nnoremap <Leader><Leader> <C-^>
 
 " ruby & rails
 map <leader>t :AV<CR>
