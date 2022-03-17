@@ -23,6 +23,7 @@ Plug 'dense-analysis/ale'
 Plug 'github/copilot.vim'
 Plug 'dag/vim-fish'
 Plug 'christoomey/vim-tmux-navigator'
+Plug 'vim-test/vim-test'
 
 " Languages support
 Plug 'vim-ruby/vim-ruby'
@@ -104,7 +105,7 @@ nnoremap <leader>m :TagbarToggle<CR>| " Open list of tags in TagBar
 nnoremap <Leader><Leader> <C-^>
 
 " ruby & rails
-map <leader>t :AV<CR>
+map <leader>tt :AV<CR>
 autocmd FileType ruby,eruby let g:rubycomplete_buffer_loading = 1
 autocmd FileType ruby,eruby let g:rubycomplete_classes_in_global = 1
 autocmd FileType ruby,eruby let g:rubycomplete_rails = 1
@@ -132,6 +133,13 @@ if !empty($CODESPACES)
   let g:clipboard.copy["*"] = ["rdm", "copy"]
   let g:clipboard.paste["*"] = ["rdm", "paste"]
 endif
+
+" vim-test mappings
+nmap <silent> <leader>s :TestNearest<CR>  | " Runs the test nearest to the cursor
+nmap <silent> <leader>t :TestFile<CR>     | " Runs all tests in the current file
+nmap <silent> <leader>a :TestSuite<CR>    | " Runs the whole test suite
+nmap <silent> <leader>l :TestLast<CR>     | " Runs the last test.
+nmap <silent> <leader>gt :TestVisit<CR>   | " Visits the test file from which you last run your tests
 
 " =============================================================================
 " # Editor settings
