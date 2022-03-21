@@ -23,7 +23,9 @@ export EDITOR="nvim"
 export PATH="$HOME/.config/bin:$PATH"
 
 if test $CODESPACES
-  # don't worry about ruby version management
+  # load linuxbrew and rbenv
+  eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+  eval "$(rbenv init -)"
 else
   set CHRUBY_ROOT "/opt/homebrew/opt/chruby"
   source /opt/homebrew/opt/chruby-fish/share/chruby/chruby.fish
