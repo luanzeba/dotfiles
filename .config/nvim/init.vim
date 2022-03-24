@@ -138,7 +138,7 @@ endif
 nmap <silent> <leader>s :TestNearest<CR>  | " Runs the test nearest to the cursor
 nmap <silent> <leader>t :TestFile<CR>     | " Runs all tests in the current file
 nmap <silent> <leader>a :TestSuite<CR>    | " Runs the whole test suite
-nmap <silent> <leader>l :TestLast<CR>     | " Runs the last test.
+nmap <silent> <leader>l :TestLast<CR>     | " Runs the last test
 nmap <silent> <leader>gt :TestVisit<CR>   | " Visits the test file from which you last run your tests
 
 " =============================================================================
