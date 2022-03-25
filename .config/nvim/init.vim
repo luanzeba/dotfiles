@@ -98,8 +98,9 @@ nnoremap <Leader>c :execute line(".") . "GBrowse!"<CR>
 nnoremap <Leader>g :G<CR>5j
 
 " code navigation
-nnoremap <leader>] g<C-]>| " go to definition. If more than one definition, open quick-list
-nnoremap <leader>m :TagbarToggle<CR>| " Open list of tags in TagBar
+nnoremap <leader>] g<C-]>              | " Go to definition. If more than one definition, open quick-list
+nnoremap <leader>m :TagbarToggle<CR>   | " Open list of tags in TagBar
+nnoremap <leader>lb <C-^>              | " Open last buffer
 
 " Switch between the last two files
 nnoremap <Leader><Leader> <C-^>
