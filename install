@@ -6,44 +6,22 @@ exec > >(tee -i $HOME/dotfiles_install.log)
 exec 2>&1
 set -x
 
-un="$(uname)"
-case "${un}" in
-  Linux)
-    ostype=linux
-    homebrew_prefix_default=/home/linuxbrew/.linuxbrew
-    ;;
-  Darwin)
-    ostype=macos
-    if [[ "$(uname -m)" == "arm64" ]]
-    then
-      homebrew_prefix_default=/opt/homebrew
-    else
-      homebrew_prefix_default=/usr/local
-    fi
-esac
-
-# Install homebrew if it doesn't exist
-if [[ ! -d "${homebrew_prefix_default}" ]]
-then
-  CI=1 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-fi
-
 # When setting up a codespace, we might run into an apt race condition
 # We need to make sure a different process doesn't have a lock before proceeding
 # When it does, the error will be one of 2:
 #   Could not get lock /var/lib/apt/lists/lock
 #   Could not get lock /var/lib/dpkg/lock-frontend
-# function apt_with_lock_protection() {
-#   while sudo apt-get -y $1 2>&1 | tee -a ~/apt_log | grep -q "Could not get lock" ; do
-#     echo "Waiting for other apt-get instances to exit"
-#     sleep 1
-#   done
-# }
+function apt_with_lock_protection() {
+  while sudo apt-get -y $1 2>&1 | tee -a ~/apt_log | grep -q "Could not get lock" ; do
+    echo "Waiting for other apt-get instances to exit"
+    sleep 1
+  done
+}
 
 # Download fish shell
-# debian_version=$(lsb_release -a 2>/dev/null | awk '/Release/ {print $2}')
-# echo "deb http://download.opensuse.org/repositories/shells:/fish/Debian_$debian_version/ /" | sudo tee /etc/apt/sources.list.d/shells:fish.list
-# curl -fsSL https://download.opensuse.org/repositories/shells:fish/Debian_$debian_version/Release.key | gpg --dearmor | sudo tee /etc/apt/trusted.gpg.d/shells_fish.gpg > /dev/null
+debian_version=$(lsb_release -a 2>/dev/null | awk '/Release/ {print $2}')
+echo "deb http://download.opensuse.org/repositories/shells:/fish/Debian_$debian_version/ /" | sudo tee /etc/apt/sources.list.d/shells:fish.list
+curl -fsSL https://download.opensuse.org/repositories/shells:fish/Debian_$debian_version/Release.key | gpg --dearmor | sudo tee /etc/apt/trusted.gpg.d/shells_fish.gpg > /dev/null
 
 # Clean up codespaces environment
 previous=$PWD
@@ -52,10 +30,10 @@ cd $HOME
 rm ~/.zshrc
 mv ~/.gitconfig ~/.gitconfig.old
 
-# apt_with_lock_protection "update"
-# apt_with_lock_protection "install ripgrep tmux fzf"
-# apt_with_lock_protection "remove fish fish-common"
-# apt_with_lock_protection "install fish"
+apt_with_lock_protection "update"
+apt_with_lock_protection "install ripgrep tmux exuberant-ctags fzf"
+apt_with_lock_protection "remove fish fish-common"
+apt_with_lock_protection "install fish"
 
 # Use RDM for copy/paste and open support
 wget https://github.com/BlakeWilliams/remote-development-manager/releases/download/v0.0.3/rdm-linux-amd64
@@ -65,13 +43,25 @@ chmod +x /usr/bin/rdm
 gh config set browser "rdm open"
 
 # Install latest neovim
-# curl -LO https://github.com/neovim/neovim/releases/latest/download/nvim.appimage
-# chmod u+x nvim.appimage
-# ./nvim.appimage --appimage-extract
-# ./squashfs-root/AppRun --version
-# mv squashfs-root /
-# ln -s /squashfs-root/AppRun /usr/bin/nvim
+curl -LO https://github.com/neovim/neovim/releases/latest/download/nvim.appimage
+chmod u+x nvim.appimage
+./nvim.appimage --appimage-extract
+./squashfs-root/AppRun --version
+mv squashfs-root /
+ln -s /squashfs-root/AppRun /usr/bin/nvim
 cd $previous
+
+# Use git-mob for pair programming co-author management
+if [ -x "$(which npm 2>/dev/null)" ]; then
+  npm i -g git-mob
+elif [ -x "$(which bin/npm 2>/dev/null)" ]; then
+  bin/npm i -g git-mob
+else
+  echo "Did not install git-mob"
+fi
+
+bin/npm i -g git-mob
+ln -svf $PWD/.git-coauthors $HOME/.git-coauthors
 
 # Link dotfiles
 mkdir -p $HOME/.config/nvim
@@ -79,30 +69,14 @@ mkdir -p $HOME/.config/fish
 mkdir -p $HOME/.config/bin
 mkdir -p $HOME/.config/github-copilot
 mkdir $HOME/.git_template
-mkdir $HOME/.homebrew
 
 ln -svf $PWD/.config/nvim/* $HOME/.config/nvim/
 ln -svf $PWD/.config/github-copilot/terms.json $HOME/.config/github-copilot/terms.json
 ln -svf $PWD/.gitconfig $HOME/.gitconfig
 ln -svf $PWD/.gitignore_global ~/.gitignore_global
 ln -svf $PWD/.git_template/* ~/.git_template/
-ln -svf $PWD/.homebrew/* ~/.homebrew/
 ln -svf $PWD/.tmux.conf ~/.tmux.conf
 ln -sfv $PWD/bin/* ~/.config/bin/
-
-alias brew="$homebrew_prefix_default/bin/brew"
-brew bundle --file $HOME/.homebrew/Brewfile
-
-# if [ "${ostype}" == macos ]
-# then
-#   brew bundle --file $HOME/.homebrew/Brewfile.darwin
-# fi
-
-homebrew_fish_path="${homebrew_prefix_default}/bin/fish"
-alias fish=$homebrew_fish_path
-
-echo $homebrew_fish_path | sudo tee -a /etc/shells
-chsh -s $homebrew_fish_path
 
 # Install vim-plug
 sh -c 'curl -fLo "${XDG_DATA_HOME:-$HOME/.local/share}"/nvim/site/autoload/plug.vim --create-dirs \
@@ -118,9 +92,11 @@ ln -svf $PWD/.config/fish/functions/* $HOME/.config/fish/functions/
 ln -svf $PWD/.config/fish/completions/* $HOME/.config/fish/completions/
 ln -svf $PWD/.config/fish/conf.d/* $HOME/.config/fish/conf.d/
 
-# sudo chsh -s "$(which fish)" "$(whoami)"
+sudo chsh -s "$(which fish)" "$(whoami)"
 
 # Build ctags file
 if [ -s script/build-ctags ]; then
   script/build-ctags &
+else
+  $HOME/.git_template/hooks/ctags &
 fi
