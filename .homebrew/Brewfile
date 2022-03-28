@@ -1,0 +1,13 @@
+# vim: ft=ruby
+
+tap "universal-ctags/universal-ctags"
+
+brew "bat"
+brew "curl"
+brew "fish"
+brew "fzf"
+brew "git"
+brew "neovim"
+brew "ripgrep"
+brew "tmux"
+brew "universal-ctags/universal-ctags/universal-ctags", args: ["HEAD"]
