@@ -47,7 +47,6 @@ nmap <leader>w :w<CR>
 nnoremap <leader>sv :source $MYVIMRC<CR>
 
 " NvimTree
-let g:nvim_tree_quit_on_open = 1
 let g:nvim_tree_highlight_opened_files = 1
 let g:nvim_tree_show_icons = {
     \ 'git': 0,
@@ -59,7 +58,7 @@ lua << EOS
 -- each of these are documented in `:help nvim-tree.OPTION_NAME`
 
 require'nvim-tree'.setup {
-  disable_netrw = true,
+  disable_netrw = false,
   open_on_setup = true,
   view = {
     auto_resize = true
