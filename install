@@ -51,18 +51,6 @@ mv squashfs-root /
 ln -s /squashfs-root/AppRun /usr/bin/nvim
 cd $previous
 
-# Use git-mob for pair programming co-author management
-if [ -x "$(which npm 2>/dev/null)" ]; then
-  npm i -g git-mob
-elif [ -x "$(which bin/npm 2>/dev/null)" ]; then
-  bin/npm i -g git-mob
-else
-  echo "Did not install git-mob"
-fi
-
-bin/npm i -g git-mob
-ln -svf $PWD/.git-coauthors $HOME/.git-coauthors
-
 # Link dotfiles
 mkdir -p $HOME/.config/nvim
 mkdir -p $HOME/.config/fish
