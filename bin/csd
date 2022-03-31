@@ -1,4 +1,4 @@
 #!/bin/sh 
 # Pick which codespaces to delete
 
-gh cs list | fzf -m | cut -f1 | xargs -I {} gh cs delete -c {}
+gh cs list | column -t | fzf -m  --reverse | tr -s ' ' | cut -d ' ' -f1 | xargs -I {}  gh cs delete -c {}
