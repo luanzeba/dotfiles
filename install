@@ -66,6 +66,8 @@ ln -svf $PWD/.git_template/* ~/.git_template/
 ln -svf $PWD/.tmux.conf ~/.tmux.conf
 ln -sfv $PWD/bin/* ~/.config/bin/
 
+ln -s $PWD/script/git-hooks/pre-push .git/hooks/pre-push
+
 # Install vim-plug
 sh -c 'curl -fLo "${XDG_DATA_HOME:-$HOME/.local/share}"/nvim/site/autoload/plug.vim --create-dirs \
        https://raw.githubusercontent.com/junegunn/vim-plug/master/plug.vim'
