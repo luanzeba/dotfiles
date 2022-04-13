@@ -4,7 +4,7 @@
 [color]
 	ui = always
 [push]
-	default = upstream
+	default = current
 [core]
 	excludesfile = ~/.gitignore_global
 [init]
@@ -16,3 +16,5 @@
 	user = luanzeba
 [credential]
 	helper = osxkeychain
+[remote]
+	pushDefault = origin

@@ -98,10 +98,9 @@ nnoremap <Leader>g :G<CR>5j
 " code navigation
 nnoremap <leader>] g<C-]>              | " Go to definition. If more than one definition, open quick-list
 nnoremap <leader>m :TagbarToggle<CR>   | " Open list of tags in TagBar
-nnoremap <leader>lb <C-^>              | " Open last buffer
+nnoremap <Leader><Leader> <C-^>        | " Open last buffer
 
-" Switch between the last two files
-nnoremap <Leader><Leader> <C-^>
+command! JSONPretty :%!jq '.'          | " auto-format JSON
 
 " ruby & rails
 map <leader>tt :AV<CR>
