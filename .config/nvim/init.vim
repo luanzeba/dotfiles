@@ -22,6 +22,7 @@ Plug 'github/copilot.vim'
 Plug 'dag/vim-fish'
 Plug 'christoomey/vim-tmux-navigator'
 Plug 'vim-test/vim-test'
+Plug 'vim-airline/vim-airline'
 
 " Languages support
 Plug 'vim-ruby/vim-ruby'
