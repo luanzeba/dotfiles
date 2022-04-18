@@ -23,14 +23,14 @@ case "${un}" in
 esac
 
 if [[ -d "${homebrew_prefix_default}" ]]; then
-  alias brew="$homebrew_prefix_default/bin/brew"
+  brew="$homebrew_prefix_default/bin/brew"
 
-  brew install fish
-  brew install neovim
-  brew install ripgrep
-  brew install tmux
-  brew install fzf
-  brew install --HEAD universal-ctags
+  $brew install fish
+  $brew install neovim
+  $brew install ripgrep
+  $brew install tmux
+  $brew install fzf
+  $brew install --HEAD universal-ctags
 else
   # The setup below breaks all of the time, remove ASAP
 
@@ -112,12 +112,3 @@ ln -svf $PWD/.config/fish/completions/* $HOME/.config/fish/completions/
 ln -svf $PWD/.config/fish/conf.d/* $HOME/.config/fish/conf.d/
 
 sudo chsh -s "$(which fish)" "$(whoami)"
-
-echo "Where am i?"
-echo $PWD
-# Build ctags file
-if [ -s script/build-ctags ]; then
-  script/build-ctags &
-else
-  $HOME/.git_template/hooks/ctags &
-fi
