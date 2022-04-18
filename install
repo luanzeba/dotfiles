@@ -64,7 +64,7 @@ ln -svf $PWD/.gitconfig $HOME/.gitconfig
 ln -svf $PWD/.gitignore_global ~/.gitignore_global
 ln -svf $PWD/.git_template/* ~/.git_template/
 ln -svf $PWD/.tmux.conf ~/.tmux.conf
-ln -sfv $PWD/bin/* ~/.config/bin/
+ln -svf $PWD/bin/* /usr/local/bin/
 
 ln -s $PWD/script/git-hooks/pre-push .git/hooks/pre-push
 
