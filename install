@@ -31,6 +31,10 @@ if [[ -d "${homebrew_prefix_default}" ]]; then
   $brew install tmux
   $brew install fzf
   $brew install --HEAD universal-ctags
+
+  homebrew_fish_path="${homebrew_prefix_default}/bin/fish"
+  echo $homebrew_fish_path | sudo tee -a /etc/shells
+  chsh -s $homebrew_fish_path "$(whoami)"
 else
   # The setup below breaks all of the time, remove ASAP
 
@@ -71,6 +75,8 @@ else
   mv squashfs-root /
   ln -s /squashfs-root/AppRun /usr/bin/nvim
   cd $previous
+
+  sudo chsh -s "$(which fish)" "$(whoami)"
 fi
 
 # Use RDM for copy/paste and open support
@@ -110,5 +116,3 @@ ln -svf $PWD/.config/fish/* $HOME/.config/fish/
 ln -svf $PWD/.config/fish/functions/* $HOME/.config/fish/functions/
 ln -svf $PWD/.config/fish/completions/* $HOME/.config/fish/completions/
 ln -svf $PWD/.config/fish/conf.d/* $HOME/.config/fish/conf.d/
-
-sudo chsh -s "$(which fish)" "$(whoami)"
