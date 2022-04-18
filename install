@@ -6,34 +6,70 @@ exec > >(tee -i $HOME/dotfiles_install.log)
 exec 2>&1
 set -x
 
-# When setting up a codespace, we might run into an apt race condition
-# We need to make sure a different process doesn't have a lock before proceeding
-# When it does, the error will be one of 2:
-#   Could not get lock /var/lib/apt/lists/lock
-#   Could not get lock /var/lib/dpkg/lock-frontend
-function apt_with_lock_protection() {
-  while sudo apt-get -y $1 2>&1 | tee -a ~/apt_log | grep -q "Could not get lock" ; do
-    echo "Waiting for other apt-get instances to exit"
-    sleep 1
-  done
-}
+un="$(uname)"
+case "${un}" in
+  Linux)
+    ostype=linux
+    homebrew_prefix_default=/home/linuxbrew/.linuxbrew
+    ;;
+  Darwin)
+    ostype=macos
+    if [[ "$(uname -m)" == "arm64" ]]
+    then
+      homebrew_prefix_default=/opt/homebrew
+    else
+      homebrew_prefix_default=/usr/local
+    fi
+esac
 
-# Download fish shell
-debian_version=$(lsb_release -a 2>/dev/null | awk '/Release/ {print $2}')
-echo "deb http://download.opensuse.org/repositories/shells:/fish/Debian_$debian_version/ /" | sudo tee /etc/apt/sources.list.d/shells:fish.list
-curl -fsSL https://download.opensuse.org/repositories/shells:fish/Debian_$debian_version/Release.key | gpg --dearmor | sudo tee /etc/apt/trusted.gpg.d/shells_fish.gpg > /dev/null
+if [[ -d "${homebrew_prefix_default}" ]]; then
+  brew install fish
+  brew install neovim
+  brew install ripgrep
+  brew install tmux
+  brew install fzf
+  brew install --HEAD universal-ctags
+else
+  # The setup below breaks all of the time, remove ASAP
 
-# Clean up codespaces environment
-previous=$PWD
-cd $HOME
+  # When setting up a codespace, we might run into an apt race condition
+  # We need to make sure a different process doesn't have a lock before proceeding
+  # When it does, the error will be one of 2:
+  #   Could not get lock /var/lib/apt/lists/lock
+  #   Could not get lock /var/lib/dpkg/lock-frontend
+  function apt_with_lock_protection() {
+    while sudo apt-get -y $1 2>&1 | tee -a ~/apt_log | grep -q "Could not get lock" ; do
+      echo "Waiting for other apt-get instances to exit"
+      sleep 1
+    done
+  }
 
-rm ~/.zshrc
-mv ~/.gitconfig ~/.gitconfig.old
+  # Download fish shell
+  debian_version=$(lsb_release -a 2>/dev/null | awk '/Release/ {print $2}')
+  echo "deb http://download.opensuse.org/repositories/shells:/fish/Debian_$debian_version/ /" | sudo tee /etc/apt/sources.list.d/shells:fish.list
+  curl -fsSL https://download.opensuse.org/repositories/shells:fish/Debian_$debian_version/Release.key | gpg --dearmor | sudo tee /etc/apt/trusted.gpg.d/shells_fish.gpg > /dev/null
 
-apt_with_lock_protection "update"
-apt_with_lock_protection "install ripgrep tmux exuberant-ctags fzf"
-apt_with_lock_protection "remove fish fish-common"
-apt_with_lock_protection "install fish"
+  # Clean up codespaces environment
+  previous=$PWD
+  cd $HOME
+
+  rm ~/.zshrc
+  mv ~/.gitconfig ~/.gitconfig.old
+
+  apt_with_lock_protection "update"
+  apt_with_lock_protection "install ripgrep tmux exuberant-ctags fzf"
+  apt_with_lock_protection "remove fish fish-common"
+  apt_with_lock_protection "install fish"
+
+  # Install latest neovim
+  curl -LO https://github.com/neovim/neovim/releases/latest/download/nvim.appimage
+  chmod u+x nvim.appimage
+  ./nvim.appimage --appimage-extract
+  ./squashfs-root/AppRun --version
+  mv squashfs-root /
+  ln -s /squashfs-root/AppRun /usr/bin/nvim
+  cd $previous
+fi
 
 # Use RDM for copy/paste and open support
 wget https://github.com/BlakeWilliams/remote-development-manager/releases/download/v0.0.3/rdm-linux-amd64
@@ -41,15 +77,6 @@ sudo mv rdm-linux-amd64 /usr/bin/rdm
 chmod +x /usr/bin/rdm
 
 gh config set browser "rdm open"
-
-# Install latest neovim
-curl -LO https://github.com/neovim/neovim/releases/latest/download/nvim.appimage
-chmod u+x nvim.appimage
-./nvim.appimage --appimage-extract
-./squashfs-root/AppRun --version
-mv squashfs-root /
-ln -s /squashfs-root/AppRun /usr/bin/nvim
-cd $previous
 
 # Link dotfiles
 mkdir -p $HOME/.config/nvim
@@ -70,7 +97,7 @@ ln -s $PWD/script/git-hooks/pre-push .git/hooks/pre-push
 
 # Install vim-plug
 sh -c 'curl -fLo "${XDG_DATA_HOME:-$HOME/.local/share}"/nvim/site/autoload/plug.vim --create-dirs \
-       https://raw.githubusercontent.com/junegunn/vim-plug/master/plug.vim'
+  https://raw.githubusercontent.com/junegunn/vim-plug/master/plug.vim'
 
 # Install neovim plugins
 # and accept copilot terms (This assumes the terms are already stored in $HOME/.config/github-copilot/terms.json)
