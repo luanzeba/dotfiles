@@ -32,7 +32,7 @@ if [[ -d "${homebrew_prefix_default}" ]]; then
   $brew install fzf
   $brew install --HEAD universal-ctags
 
-  homebrew_nvim_path="${homebrew_prefix_default}/bin/nvim"
+  # homebrew_nvim_path="${homebrew_prefix_default}/bin/nvim"
 
   # Install vim-plug
   sh -c 'curl -fLo "${XDG_DATA_HOME:-$HOME/.local/share}"/nvim/site/autoload/plug.vim --create-dirs \
@@ -40,12 +40,18 @@ if [[ -d "${homebrew_prefix_default}" ]]; then
 
   # Install neovim plugins
   # and accept copilot terms (This assumes the terms are already stored in $HOME/.config/github-copilot/terms.json)
-  $homebrew_nvim_path --headless +PlugInstall +"Copilot setup" +qa
+  # $homebrew_nvim_path --headless +PlugInstall +"Copilot setup" +qa
 
   # Set fish as default shell
   homebrew_fish_path="${homebrew_prefix_default}/bin/fish"
   echo $homebrew_fish_path | sudo tee -a /etc/shells
   chsh -s $homebrew_fish_path "$(whoami)"
+
+  echo "curl -sL https://git.io/fisher | source && fisher update" | $homebrew_fish_path
+
+  # Install Neovim packages via packer
+  echo "nvim --headless -c 'PlugInstall quitall' -c 'Copilot setup'" | $homebrew_fish_path
+
 else
   # The setup below breaks all of the time, remove ASAP
 
