@@ -32,6 +32,17 @@ if [[ -d "${homebrew_prefix_default}" ]]; then
   $brew install fzf
   $brew install --HEAD universal-ctags
 
+  homebrew_nvim_path="${homebrew_prefix_default}/bin/nvim"
+
+  # Install vim-plug
+  sh -c 'curl -fLo "${XDG_DATA_HOME:-$HOME/.local/share}"/nvim/site/autoload/plug.vim --create-dirs \
+    https://raw.githubusercontent.com/junegunn/vim-plug/master/plug.vim'
+
+  # Install neovim plugins
+  # and accept copilot terms (This assumes the terms are already stored in $HOME/.config/github-copilot/terms.json)
+  $homebrew_nvim_path --headless +PlugInstall +"Copilot setup" +qa
+
+  # Set fish as default shell
   homebrew_fish_path="${homebrew_prefix_default}/bin/fish"
   echo $homebrew_fish_path | sudo tee -a /etc/shells
   chsh -s $homebrew_fish_path "$(whoami)"
@@ -76,6 +87,14 @@ else
   ln -s /squashfs-root/AppRun /usr/bin/nvim
   cd $previous
 
+  # Install vim-plug
+  sh -c 'curl -fLo "${XDG_DATA_HOME:-$HOME/.local/share}"/nvim/site/autoload/plug.vim --create-dirs \
+    https://raw.githubusercontent.com/junegunn/vim-plug/master/plug.vim'
+
+  # Install neovim plugins
+  # and accept copilot terms (This assumes the terms are already stored in $HOME/.config/github-copilot/terms.json)
+  nvim --headless +PlugInstall +"Copilot setup" +qa
+
   sudo chsh -s "$(which fish)" "$(whoami)"
 fi
 
@@ -103,16 +122,5 @@ ln -svf $PWD/bin/* /usr/local/bin/
 
 ln -s $PWD/script/git-hooks/pre-push .git/hooks/pre-push
 
-# Install vim-plug
-sh -c 'curl -fLo "${XDG_DATA_HOME:-$HOME/.local/share}"/nvim/site/autoload/plug.vim --create-dirs \
-  https://raw.githubusercontent.com/junegunn/vim-plug/master/plug.vim'
-
-# Install neovim plugins
-# and accept copilot terms (This assumes the terms are already stored in $HOME/.config/github-copilot/terms.json)
-nvim --headless +PlugInstall +"Copilot setup" +qa
-
-# Set fish as default shell
 ln -svf $PWD/.config/fish/* $HOME/.config/fish/
 ln -svf $PWD/.config/fish/functions/* $HOME/.config/fish/functions/
-# ln -svf $PWD/.config/fish/completions/* $HOME/.config/fish/completions/
-# ln -svf $PWD/.config/fish/conf.d/* $HOME/.config/fish/conf.d/
