@@ -45,7 +45,7 @@ if [[ -d "${homebrew_prefix_default}" ]]; then
   # Set fish as default shell
   homebrew_fish_path="${homebrew_prefix_default}/bin/fish"
   echo $homebrew_fish_path | sudo tee -a /etc/shells
-  chsh -s $homebrew_fish_path "$(whoami)"
+  sudo chsh -s $homebrew_fish_path "$(whoami)"
 
   echo "curl -sL https://git.io/fisher | source && fisher update" | $homebrew_fish_path
 
