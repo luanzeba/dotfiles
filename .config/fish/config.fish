@@ -20,12 +20,12 @@ alias rspec="nocorrect bundle exec rspec" # Do not autocorrect "rspec" command
 alias icloud="cd $HOME/Library/Mobile\ Documents/com~apple~CloudDocs/"
 
 export EDITOR="nvim"
-export PATH="$HOME/.config/bin:$PATH"
+export PATH="$HOME/.bin:$PATH"
 
 if test $CODESPACES
   # load linuxbrew and rbenv
-  eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
-  eval "$(rbenv init -)"
+  # eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+  # eval "$(rbenv init -)"
 else
   set CHRUBY_ROOT "/opt/homebrew/opt/chruby"
   source /opt/homebrew/opt/chruby-fish/share/chruby/chruby.fish
