@@ -32,7 +32,6 @@ if [[ -d "${homebrew_prefix_default}" ]]; then
   $brew install fzf
   $brew install --HEAD universal-ctags
 
-  # homebrew_nvim_path="${homebrew_prefix_default}/bin/nvim"
 
   # Use RDM for copy/paste and open support
   wget https://github.com/BlakeWilliams/remote-development-manager/releases/download/v0.0.3/rdm-linux-amd64
@@ -67,13 +66,14 @@ if [[ -d "${homebrew_prefix_default}" ]]; then
 
   # Install neovim plugins
   # and accept copilot terms (This assumes the terms are already stored in $HOME/.config/github-copilot/terms.json)
-  nvim --headless +PlugInstall +qa
-  nvim --headless +"Copilot setup" +qa
+  homebrew_nvim_path="${homebrew_prefix_default}/bin/nvim"
+  $homebrew_nvim_path --headless +PlugInstall +qa
+  $homebrew_nvim_path --headless +"Copilot setup" +qa
 
   # Set fish as default shell
   homebrew_fish_path="${homebrew_prefix_default}/bin/fish"
 
-  echo "curl -sL https://git.io/fisher | source && fisher install jorgebucaran/fisher && fisher update" | $homebrew_fish_path
+  echo "curl -sL https://git.io/fisher | source && fisher update" | $homebrew_fish_path
 
   echo $homebrew_fish_path | sudo tee -a /etc/shells
   sudo chsh -s $homebrew_fish_path "$(whoami)"
