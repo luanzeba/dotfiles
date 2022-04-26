@@ -22,6 +22,7 @@ Plug 'github/copilot.vim'
 Plug 'dag/vim-fish'
 Plug 'christoomey/vim-tmux-navigator'
 Plug 'vim-test/vim-test'
+Plug 'preservim/vimux'
 Plug 'vim-airline/vim-airline'
 
 " Languages support
@@ -153,6 +154,18 @@ nmap <silent> <leader>t :TestFile<CR>     | " Runs all tests in the current file
 nmap <silent> <leader>a :TestSuite<CR>    | " Runs the whole test suite
 nmap <silent> <leader>l :TestLast<CR>     | " Runs the last test
 nmap <silent> <leader>gt :TestVisit<CR>   | " Visits the test file from which you last run your tests
+
+" Use vimux for running tests
+let test#strategy = "vimux"
+
+" Send test to Codespace ssh session
+" function! CodespaceTransform(cmd) abort
+"   let codespace = join(readfile(glob('~/.codespace')), "\n")
+"   return 'gh cs ssh -c ' . codespace . ' -- ' . a:cmd
+" endfunction
+
+" let g:test#custom_transformations = {'codespace': function('CodespaceTransform')}
+" let g:test#transformation = 'codespace'
 
 " =============================================================================
 " # Editor settings
