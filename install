@@ -52,7 +52,7 @@ if [[ -d "${homebrew_prefix_default}" ]]; then
   ln -svf $PWD/.gitconfig $HOME/.gitconfig
   ln -svf $PWD/.gitignore_global $HOME/.gitignore_global
   ln -svf $PWD/.git_template/* $HOME/.git_template/
-  ln -svf $PWD/.tmux.conf $HOME~/.tmux.conf
+  ln -svf $PWD/.tmux.conf $HOME/.tmux.conf
   ln -svf $PWD/bin/* $HOME/.bin/
 
   ln -s $PWD/script/git-hooks/pre-push .git/hooks/pre-push
