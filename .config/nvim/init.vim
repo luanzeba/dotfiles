@@ -39,7 +39,7 @@ colorscheme gruvbox
 
 if has('nvim')
   set inccommand=nosplit
-  noremap <C-q> :confirm qall<CR>
+  noremap <leader>q :confirm qall<CR>
 end
 
 " quick-save
@@ -82,6 +82,22 @@ nnoremap <silent> <C-g> :GFiles<CR>
 nnoremap <silent> <C-b> :Buffers<CR>
 nnoremap <C-f> :Rg!
 nnoremap <expr> <leader>fw ':Rg! '.expand('<cword>').'<CR>'
+
+" CTRL-A CTRL-Q to select all and build quickfix list
+function! s:build_quickfix_list(lines)
+  call setqflist(map(copy(a:lines), '{ "filename": v:val }'))
+  copen
+  cc
+endfunction
+
+let g:fzf_action = {
+  \ 'ctrl-q': function('s:build_quickfix_list'),
+  \ 'ctrl-t': 'tab split',
+  \ 'ctrl-x': 'split',
+  \ 'ctrl-v': 'vsplit' }
+
+let $FZF_DEFAULT_OPTS = '--bind ctrl-a:select-all'
+
 " Sort results by proximity https://github.com/jonhoo/proximity-sort
 " function! s:list_cmd()
 "   let base = fnamemodify(expand('%'), ':h:.:S')
