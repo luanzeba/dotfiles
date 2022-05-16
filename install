@@ -2,157 +2,157 @@
 # Used to setup codespaces
 # It ain't pretty, but it's honest work
 
-# exec > >(tee -i $HOME/dotfiles_install.log)
-# exec 2>&1
-# set -x
+exec > >(tee -i $HOME/dotfiles_install.log)
+exec 2>&1
+set -x
 
-# un="$(uname)"
-# case "${un}" in
-#   Linux)
-#     ostype=linux
-#     homebrew_prefix_default=/home/linuxbrew/.linuxbrew
-#     ;;
-#   Darwin)
-#     ostype=macos
-#     if [[ "$(uname -m)" == "arm64" ]]
-#     then
-#       homebrew_prefix_default=/opt/homebrew
-#     else
-#       homebrew_prefix_default=/usr/local
-#     fi
-# esac
+un="$(uname)"
+case "${un}" in
+  Linux)
+    ostype=linux
+    homebrew_prefix_default=/home/linuxbrew/.linuxbrew
+    ;;
+  Darwin)
+    ostype=macos
+    if [[ "$(uname -m)" == "arm64" ]]
+    then
+      homebrew_prefix_default=/opt/homebrew
+    else
+      homebrew_prefix_default=/usr/local
+    fi
+esac
 
-# if [[ -d "${homebrew_prefix_default}" ]]; then
-#   brew="$homebrew_prefix_default/bin/brew"
+if [[ -d "${homebrew_prefix_default}" ]]; then
+  brew="$homebrew_prefix_default/bin/brew"
 
-#   $brew install fish
-#   $brew install neovim
-#   $brew install ripgrep
-#   $brew install tmux
-#   $brew install fzf
-#   $brew install --HEAD universal-ctags
+  $brew install fish
+  $brew install neovim
+  $brew install ripgrep
+  $brew install tmux
+  $brew install fzf
+  $brew install --HEAD universal-ctags
 
 
-#   # Use RDM for copy/paste and open support
-#   wget https://github.com/BlakeWilliams/remote-development-manager/releases/download/v0.0.3/rdm-linux-amd64
-#   sudo mv rdm-linux-amd64 /usr/bin/rdm
-#   chmod +x /usr/bin/rdm
+  # Use RDM for copy/paste and open support
+  wget https://github.com/BlakeWilliams/remote-development-manager/releases/download/v0.0.3/rdm-linux-amd64
+  sudo mv rdm-linux-amd64 /usr/bin/rdm
+  chmod +x /usr/bin/rdm
 
-#   gh config set browser "rdm open"
+  gh config set browser "rdm open"
 
-#   # Link dotfiles
-#   mkdir -p $HOME/.config/nvim
-#   mkdir -p $HOME/.config/fish
-#   mkdir -p $HOME/.bin
-#   mkdir -p $HOME/.config/github-copilot
-#   mkdir $HOME/.git_template
+  # Link dotfiles
+  mkdir -p $HOME/.config/nvim
+  mkdir -p $HOME/.config/fish
+  mkdir -p $HOME/.bin
+  mkdir -p $HOME/.config/github-copilot
+  mkdir $HOME/.git_template
 
-#   ln -svf $PWD/.config/nvim/* $HOME/.config/nvim/
-#   ln -svf $PWD/.config/github-copilot/terms.json $HOME/.config/github-copilot/terms.json
-#   ln -svf $PWD/.gitconfig $HOME/.gitconfig
-#   ln -svf $PWD/.gitignore_global $HOME/.gitignore_global
-#   ln -svf $PWD/.git_template/* $HOME/.git_template/
-#   ln -svf $PWD/.tmux.conf $HOME/.tmux.conf
-#   ln -svf $PWD/bin/* $HOME/.bin/
+  ln -svf $PWD/.config/nvim/* $HOME/.config/nvim/
+  ln -svf $PWD/.config/github-copilot/terms.json $HOME/.config/github-copilot/terms.json
+  ln -svf $PWD/.gitconfig $HOME/.gitconfig
+  ln -svf $PWD/.gitignore_global $HOME/.gitignore_global
+  ln -svf $PWD/.git_template/* $HOME/.git_template/
+  ln -svf $PWD/.tmux.conf $HOME/.tmux.conf
+  ln -svf $PWD/bin/* $HOME/.bin/
 
-#   ln -s $PWD/script/git-hooks/pre-push .git/hooks/pre-push
+  ln -s $PWD/script/git-hooks/pre-push .git/hooks/pre-push
 
-#   ln -svf $PWD/.config/fish/* $HOME/.config/fish/
-#   ln -svf $PWD/.config/fish/functions/* $HOME/.config/fish/functions/
+  ln -svf $PWD/.config/fish/* $HOME/.config/fish/
+  ln -svf $PWD/.config/fish/functions/* $HOME/.config/fish/functions/
 
-#   # Install vim-plug
-#   sh -c 'curl -fLo "${XDG_DATA_HOME:-$HOME/.local/share}"/nvim/site/autoload/plug.vim --create-dirs \
-#     https://raw.githubusercontent.com/junegunn/vim-plug/master/plug.vim'
+  # Install vim-plug
+  sh -c 'curl -fLo "${XDG_DATA_HOME:-$HOME/.local/share}"/nvim/site/autoload/plug.vim --create-dirs \
+    https://raw.githubusercontent.com/junegunn/vim-plug/master/plug.vim'
 
-#   # Install neovim plugins
-#   # and accept copilot terms (This assumes the terms are already stored in $HOME/.config/github-copilot/terms.json)
-#   homebrew_nvim_path="${homebrew_prefix_default}/bin/nvim"
-#   $homebrew_nvim_path --headless +PlugInstall +qa
-#   $homebrew_nvim_path --headless +"Copilot setup" +qa
+  # Install neovim plugins
+  # and accept copilot terms (This assumes the terms are already stored in $HOME/.config/github-copilot/terms.json)
+  homebrew_nvim_path="${homebrew_prefix_default}/bin/nvim"
+  $homebrew_nvim_path --headless +PlugInstall +qa
+  $homebrew_nvim_path --headless +"Copilot setup" +qa
 
-#   # Set fish as default shell
-#   homebrew_fish_path="${homebrew_prefix_default}/bin/fish"
+  # Set fish as default shell
+  homebrew_fish_path="${homebrew_prefix_default}/bin/fish"
 
-#   echo "curl -sL https://git.io/fisher | source && fisher update" | $homebrew_fish_path
+  echo "curl -sL https://git.io/fisher | source && fisher update" | $homebrew_fish_path
 
-#   echo $homebrew_fish_path | sudo tee -a /etc/shells
-#   sudo chsh -s $homebrew_fish_path "$(whoami)"
-# else
-#   # The setup below breaks all of the time, remove ASAP
+  echo $homebrew_fish_path | sudo tee -a /etc/shells
+  sudo chsh -s $homebrew_fish_path "$(whoami)"
+else
+  # The setup below breaks all of the time, remove ASAP
 
-#   # When setting up a codespace, we might run into an apt race condition
-#   # We need to make sure a different process doesn't have a lock before proceeding
-#   # When it does, the error will be one of 2:
-#   #   Could not get lock /var/lib/apt/lists/lock
-#   #   Could not get lock /var/lib/dpkg/lock-frontend
-#   function apt_with_lock_protection() {
-#     while sudo apt-get -y $1 2>&1 | tee -a ~/apt_log | grep -q "Could not get lock" ; do
-#       echo "Waiting for other apt-get instances to exit"
-#       sleep 1
-#     done
-#   }
+  # When setting up a codespace, we might run into an apt race condition
+  # We need to make sure a different process doesn't have a lock before proceeding
+  # When it does, the error will be one of 2:
+  #   Could not get lock /var/lib/apt/lists/lock
+  #   Could not get lock /var/lib/dpkg/lock-frontend
+  function apt_with_lock_protection() {
+    while sudo apt-get -y $1 2>&1 | tee -a ~/apt_log | grep -q "Could not get lock" ; do
+      echo "Waiting for other apt-get instances to exit"
+      sleep 1
+    done
+  }
 
-#   # Download fish shell
-#   debian_version=$(lsb_release -a 2>/dev/null | awk '/Release/ {print $2}')
-#   echo "deb http://download.opensuse.org/repositories/shells:/fish/Debian_$debian_version/ /" | sudo tee /etc/apt/sources.list.d/shells:fish.list
-#   curl -fsSL https://download.opensuse.org/repositories/shells:fish/Debian_$debian_version/Release.key | gpg --dearmor | sudo tee /etc/apt/trusted.gpg.d/shells_fish.gpg > /dev/null
+  # Download fish shell
+  debian_version=$(lsb_release -a 2>/dev/null | awk '/Release/ {print $2}')
+  echo "deb http://download.opensuse.org/repositories/shells:/fish/Debian_$debian_version/ /" | sudo tee /etc/apt/sources.list.d/shells:fish.list
+  curl -fsSL https://download.opensuse.org/repositories/shells:fish/Debian_$debian_version/Release.key | gpg --dearmor | sudo tee /etc/apt/trusted.gpg.d/shells_fish.gpg > /dev/null
 
-#   # Clean up codespaces environment
-#   previous=$PWD
-#   cd $HOME
+  # Clean up codespaces environment
+  previous=$PWD
+  cd $HOME
 
-#   rm ~/.zshrc
-#   mv ~/.gitconfig ~/.gitconfig.old
+  rm ~/.zshrc
+  mv ~/.gitconfig ~/.gitconfig.old
 
-#   apt_with_lock_protection "update"
-#   apt_with_lock_protection "install ripgrep tmux exuberant-ctags fzf"
-#   apt_with_lock_protection "remove fish fish-common"
-#   apt_with_lock_protection "install fish"
+  apt_with_lock_protection "update"
+  apt_with_lock_protection "install ripgrep tmux exuberant-ctags fzf"
+  apt_with_lock_protection "remove fish fish-common"
+  apt_with_lock_protection "install fish"
 
-#   # Use RDM for copy/paste and open support
-#   wget https://github.com/BlakeWilliams/remote-development-manager/releases/download/v0.0.3/rdm-linux-amd64
-#   sudo mv rdm-linux-amd64 /usr/bin/rdm
-#   chmod +x /usr/bin/rdm
+  # Use RDM for copy/paste and open support
+  wget https://github.com/BlakeWilliams/remote-development-manager/releases/download/v0.0.3/rdm-linux-amd64
+  sudo mv rdm-linux-amd64 /usr/bin/rdm
+  chmod +x /usr/bin/rdm
 
-#   gh config set browser "rdm open"
+  gh config set browser "rdm open"
 
-#   # Link dotfiles
-#   mkdir -p $HOME/.config/nvim
-#   mkdir -p $HOME/.config/fish
-#   mkdir -p $HOME/.config/bin
-#   mkdir -p $HOME/.config/github-copilot
-#   mkdir $HOME/.git_template
+  # Link dotfiles
+  mkdir -p $HOME/.config/nvim
+  mkdir -p $HOME/.config/fish
+  mkdir -p $HOME/.config/bin
+  mkdir -p $HOME/.config/github-copilot
+  mkdir $HOME/.git_template
 
-#   ln -svf $PWD/.config/nvim/* $HOME/.config/nvim/
-#   ln -svf $PWD/.config/github-copilot/terms.json $HOME/.config/github-copilot/terms.json
-#   ln -svf $PWD/.gitconfig $HOME/.gitconfig
-#   ln -svf $PWD/.gitignore_global ~/.gitignore_global
-#   ln -svf $PWD/.git_template/* ~/.git_template/
-#   ln -svf $PWD/.tmux.conf ~/.tmux.conf
-#   ln -svf $PWD/bin/* /usr/local/bin/
+  ln -svf $PWD/.config/nvim/* $HOME/.config/nvim/
+  ln -svf $PWD/.config/github-copilot/terms.json $HOME/.config/github-copilot/terms.json
+  ln -svf $PWD/.gitconfig $HOME/.gitconfig
+  ln -svf $PWD/.gitignore_global ~/.gitignore_global
+  ln -svf $PWD/.git_template/* ~/.git_template/
+  ln -svf $PWD/.tmux.conf ~/.tmux.conf
+  ln -svf $PWD/bin/* /usr/local/bin/
 
-#   ln -s $PWD/script/git-hooks/pre-push .git/hooks/pre-push
+  ln -s $PWD/script/git-hooks/pre-push .git/hooks/pre-push
 
-#   ln -svf $PWD/.config/fish/* $HOME/.config/fish/
-#   ln -svf $PWD/.config/fish/functions/* $HOME/.config/fish/functions/
+  ln -svf $PWD/.config/fish/* $HOME/.config/fish/
+  ln -svf $PWD/.config/fish/functions/* $HOME/.config/fish/functions/
 
-#   # Install latest neovim
-#   curl -LO https://github.com/neovim/neovim/releases/latest/download/nvim.appimage
-#   chmod u+x nvim.appimage
-#   ./nvim.appimage --appimage-extract
-#   ./squashfs-root/AppRun --version
-#   mv squashfs-root /
-#   ln -s /squashfs-root/AppRun /usr/bin/nvim
-#   cd $previous
+  # Install latest neovim
+  curl -LO https://github.com/neovim/neovim/releases/latest/download/nvim.appimage
+  chmod u+x nvim.appimage
+  ./nvim.appimage --appimage-extract
+  ./squashfs-root/AppRun --version
+  mv squashfs-root /
+  ln -s /squashfs-root/AppRun /usr/bin/nvim
+  cd $previous
 
-#   # Install vim-plug
-#   sh -c 'curl -fLo "${XDG_DATA_HOME:-$HOME/.local/share}"/nvim/site/autoload/plug.vim --create-dirs \
-#     https://raw.githubusercontent.com/junegunn/vim-plug/master/plug.vim'
+  # Install vim-plug
+  sh -c 'curl -fLo "${XDG_DATA_HOME:-$HOME/.local/share}"/nvim/site/autoload/plug.vim --create-dirs \
+    https://raw.githubusercontent.com/junegunn/vim-plug/master/plug.vim'
 
-#   # Install neovim plugins
-#   # and accept copilot terms (This assumes the terms are already stored in $HOME/.config/github-copilot/terms.json)
-#   nvim --headless +PlugInstall +"Copilot setup" +qa
+  # Install neovim plugins
+  # and accept copilot terms (This assumes the terms are already stored in $HOME/.config/github-copilot/terms.json)
+  nvim --headless +PlugInstall +"Copilot setup" +qa
 
-#   sudo chsh -s "$(which fish)" "$(whoami)"
-# fi
+  sudo chsh -s "$(which fish)" "$(whoami)"
+fi
 

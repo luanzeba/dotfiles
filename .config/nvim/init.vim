@@ -126,8 +126,8 @@ autocmd FileType ruby,eruby let g:rubycomplete_buffer_loading = 1
 autocmd FileType ruby,eruby let g:rubycomplete_classes_in_global = 1
 autocmd FileType ruby,eruby let g:rubycomplete_rails = 1
 autocmd FileType ruby,eruby set omnifunc=syntaxcomplete#Complete
-let g:ale_linters = {'ruby': ['standardrb'], 'rust': ['analyzer']}
-let g:ale_fixers = {'ruby': ['standardrb']}
+let g:ale_linters = {'ruby': ['rubocop'], 'rust': ['analyzer']}
+let g:ale_fixers = {'ruby': ['rubocop']}
 let g:ale_fix_on_save = 1
 let g:ruby_indent_assignment_style = 'variable'
 
@@ -154,6 +154,16 @@ let g:go_highlight_variable_assignments = 1
 " copy & paste to system clipboard
 noremap <Leader>y "*y
 noremap <Leader>p "*p
+
+" copy rails test string to clipboard
+" temporary solution until I fix vim-test
+function! CopyRailsTestCommand() abort
+  let l:command = 'clear; bin/rails test ' . expand("%")
+  :call system('pbcopy', l:command)
+endfunction
+
+command! CopyFilename :call system('pbcopy', expand("%"))
+noremap <Leader>fn :call CopyRailsTestCommand()<CR>
 
 " Forward clipboard in a codespace
 if !empty($CODESPACES)

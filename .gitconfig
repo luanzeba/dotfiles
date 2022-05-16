@@ -12,6 +12,7 @@
 	templatedir = ~/.git_template
 [alias]
 	ctags = !.git/hooks/ctags
+  edit = !$EDITOR $(git ls-files -o -m --exclude-standard)
 [github]
 	user = luanzeba
 [credential]
