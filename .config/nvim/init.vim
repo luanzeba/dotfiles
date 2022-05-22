@@ -24,6 +24,7 @@ Plug 'christoomey/vim-tmux-navigator'
 Plug 'vim-test/vim-test'
 Plug 'preservim/vimux'
 Plug 'vim-airline/vim-airline'
+Plug 'ellisonleao/glow.nvim', {'branch': 'main'}
 
 " Languages support
 Plug 'vim-ruby/vim-ruby'
