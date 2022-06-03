@@ -13,6 +13,7 @@
 [alias]
 	ctags = !.git/hooks/ctags
   edit = !$EDITOR $(git ls-files -o -m --exclude-standard)
+  ci = !git commit --amend --no-edit && git push --force-with-lease
 [github]
 	user = luanzeba
 [credential]
