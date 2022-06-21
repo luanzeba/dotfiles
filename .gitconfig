@@ -23,3 +23,7 @@
 	helper = osxkeychain
 [remote]
 	pushDefault = origin
+[pull]
+	rebase = true
+[rebase]
+	autostash = true

@@ -25,6 +25,9 @@ Plug 'vim-test/vim-test'
 Plug 'preservim/vimux'
 Plug 'vim-airline/vim-airline'
 Plug 'ellisonleao/glow.nvim', {'branch': 'main'}
+Plug 'airblade/vim-gitgutter'
+
+Plug 'chipsenkbeil/distant.nvim'
 
 " Languages support
 Plug 'vim-ruby/vim-ruby'
@@ -76,6 +79,58 @@ EOS
 nnoremap <C-n> :NvimTreeToggle<CR>
 nnoremap <leader>r :NvimTreeRefresh<CR>
 nnoremap <leader>n :NvimTreeFindFile<CR>
+
+" Git Gutter
+nmap ]h <Plug>(GitGutterNextHunk)
+nmap [h <Plug>(GitGutterPrevHunk)
+
+" Distant
+lua << EOS
+local actions = require('distant.nav.actions')
+require('distant').setup {
+  -- Any settings defined here are applied to all hosts
+  ['*'] = {
+    distant = {
+      args = '--shutdown-after 60',
+      },
+    file = {
+      mappings = {
+        ['-']         = actions.up,
+        },
+      },
+    dir = {
+      mappings = {
+        ['<Return>']  = actions.edit,
+        ['-']         = actions.up,
+        ['K']         = actions.mkdir,
+        ['N']         = actions.newfile,
+        ['R']         = actions.rename,
+        ['D']         = actions.remove,
+        }
+      },
+    },
+  -- Any settings defined here are applied only to example.com
+  ['example.com'] = {
+    distant = {
+      bin = '/path/to/distant',
+      },
+    lsp = {
+      ['My Rust Project'] = {
+        cmd = { '/path/to/rust-analyzer' },
+        filetypes = { 'rust' },
+        root_dir = '/path/to/project-rs',
+        on_attach = function()
+        nnoremap('gD', '<CMD>lua vim.lsp.buf.declaration()<CR>')
+        nnoremap('gd', '<CMD>lua vim.lsp.buf.definition()<CR>')
+        nnoremap('gh', '<CMD>lua vim.lsp.buf.hover()<CR>')
+        nnoremap('gi', '<CMD>lua vim.lsp.buf.implementation()<CR>')
+        nnoremap('gr', '<CMD>lua vim.lsp.buf.references()<CR>')
+        end,
+        },
+      },
+    },
+  }
+EOS
 
 " Fzf
 nnoremap <silent> <C-p> :Files<CR>
