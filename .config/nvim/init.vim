@@ -206,6 +206,8 @@ let g:go_highlight_types = 1
 let g:go_highlight_fields = 1
 let g:go_highlight_variable_declarations = 1
 let g:go_highlight_variable_assignments = 1
+let g:go_def_mode='gopls'
+let g:go_info_mode='gopls'
 
 " copy & paste to system clipboard
 noremap <Leader>y "*y
