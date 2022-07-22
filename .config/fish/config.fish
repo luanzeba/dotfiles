@@ -26,6 +26,9 @@ if test $CODESPACES
   # load linuxbrew and rbenv
   # eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
   # eval "$(rbenv init -)"
+  if test -d /workspaces/github
+    export PATH="/workspaces/github/bin:$PATH"
+  end
 else
   set CHRUBY_ROOT "/opt/homebrew/opt/chruby"
   source /opt/homebrew/opt/chruby-fish/share/chruby/chruby.fish
