@@ -5,7 +5,7 @@ set shell=bash
 
 call plug#begin('~/.config/nvim/plugged')
 
-Plug 'morhetz/gruvbox'
+Plug 'projekt0n/github-nvim-theme'
 Plug 'jeffkreeftmeijer/vim-dim'
 Plug 'tpope/vim-fugitive'
 Plug 'kyazdani42/nvim-tree.lua'
@@ -24,6 +24,7 @@ Plug 'christoomey/vim-tmux-navigator'
 Plug 'vim-test/vim-test'
 Plug 'preservim/vimux'
 Plug 'vim-airline/vim-airline'
+Plug 'vim-airline/vim-airline-themes'
 Plug 'ellisonleao/glow.nvim', {'branch': 'main'}
 Plug 'airblade/vim-gitgutter'
 
@@ -39,7 +40,8 @@ Plug 'fatih/vim-go', { 'do': ':GoUpdateBinaries' }
 
 call plug#end()
 
-colorscheme gruvbox
+colorscheme github_light_default
+let g:airline_theme='minimalist'
 
 if has('nvim')
   set inccommand=nosplit
@@ -53,25 +55,26 @@ nmap <leader>w :w<CR>
 nnoremap <leader>sv :source $MYVIMRC<CR>
 
 " NvimTree
-let g:nvim_tree_highlight_opened_files = 1
-let g:nvim_tree_show_icons = {
-    \ 'git': 0,
-    \ 'folders': 0,
-    \ 'files': 0,
-    \ 'folder_arrows': 0,
-    \ }
 lua << EOS
 -- each of these are documented in `:help nvim-tree.OPTION_NAME`
 
 require'nvim-tree'.setup {
   disable_netrw = false,
   open_on_setup = true,
-  view = {
-    auto_resize = true
-  },
   actions = {
     open_file = {
       quit_on_open = true
+    }
+  },
+  renderer = {
+    highlight_opened_files = "name",
+    icons = {
+      show = {
+        file = false,
+        git = false,
+        folder = false,
+        folder_arrow = false
+      }
     }
   }
 }
