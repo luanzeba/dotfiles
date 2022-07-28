@@ -43,7 +43,6 @@ $brew install tmux
 $brew install fzf
 $brew install --HEAD universal-ctags
 
-
 # Use RDM for copy/paste and open support
 wget https://github.com/BlakeWilliams/remote-development-manager/releases/download/v0.0.3/rdm-linux-amd64
 sudo mv rdm-linux-amd64 /usr/bin/rdm
@@ -51,25 +50,28 @@ chmod +x /usr/bin/rdm
 
 gh config set browser "rdm open"
 
-# Link dotfiles
-mkdir -p $HOME/.config/nvim
-mkdir -p $HOME/.config/fish
-mkdir -p $HOME/.bin
-mkdir -p $HOME/.config/github-copilot
-mkdir $HOME/.git_template
+# In some codespaces, there's no need to symlink dotfiles to $HOME
+if [[ ! $PWD -ef $HOME ]]; then
+  # Link dotfiles
+  mkdir -p $HOME/.config/nvim
+  mkdir -p $HOME/.config/fish
+  mkdir -p $HOME/.bin
+  mkdir -p $HOME/.config/github-copilot
+  mkdir $HOME/.git_template
 
-ln -svf $PWD/.config/nvim/* $HOME/.config/nvim/
-ln -svf $PWD/.config/github-copilot/terms.json $HOME/.config/github-copilot/terms.json
-ln -svf $PWD/.gitconfig $HOME/.gitconfig
-ln -svf $PWD/.gitignore_global $HOME/.gitignore_global
-ln -svf $PWD/.git_template/* $HOME/.git_template/
-ln -svf $PWD/.tmux.conf $HOME/.tmux.conf
-ln -svf $PWD/bin/* $HOME/.bin/
+  ln -svf $PWD/.config/nvim/* $HOME/.config/nvim/
+  ln -svf $PWD/.config/github-copilot/terms.json $HOME/.config/github-copilot/terms.json
+  ln -svf $PWD/.gitconfig $HOME/.gitconfig
+  ln -svf $PWD/.gitignore_global $HOME/.gitignore_global
+  ln -svf $PWD/.git_template/* $HOME/.git_template/
+  ln -svf $PWD/.tmux.conf $HOME/.tmux.conf
+  ln -svf $PWD/bin/* $HOME/.bin/
 
-ln -s $PWD/script/git-hooks/pre-push .git/hooks/pre-push
+  ln -s $PWD/script/git-hooks/pre-push .git/hooks/pre-push
 
-ln -svf $PWD/.config/fish/* $HOME/.config/fish/
-ln -svf $PWD/.config/fish/functions/* $HOME/.config/fish/functions/
+  ln -svf $PWD/.config/fish/* $HOME/.config/fish/
+  ln -svf $PWD/.config/fish/functions/* $HOME/.config/fish/functions/
+fi
 
 # Install vim-plug
 sh -c 'curl -fLo "${XDG_DATA_HOME:-$HOME/.local/share}"/nvim/site/autoload/plug.vim --create-dirs \
