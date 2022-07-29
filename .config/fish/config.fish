@@ -29,6 +29,7 @@ if test $CODESPACES
   if test -d /workspaces/github
     export PATH="/workspaces/github/bin:$PATH"
   end
+  export PATH="/home/linuxbrew/.linuxbrew/bin:$PATH"
 else
   set CHRUBY_ROOT "/opt/homebrew/opt/chruby"
   source /opt/homebrew/opt/chruby-fish/share/chruby/chruby.fish
