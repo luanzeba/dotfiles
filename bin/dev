@@ -8,7 +8,7 @@ if [[ $# > 0 ]]; then
       ;;
     meuse)
       repo="github/meuse"
-      machine="basicLinux32gb"
+      machine="xLargePremiumLinux"
       ;;
     *)
       echo "Unknown command $1"

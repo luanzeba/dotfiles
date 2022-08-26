@@ -86,12 +86,12 @@ function setup_software() {
   # Install Neovim plugins
   sh -c 'curl -fLo "${XDG_DATA_HOME:-$HOME/.local/share}"/nvim/site/autoload/plug.vim --create-dirs \
     https://raw.githubusercontent.com/junegunn/vim-plug/master/plug.vim'
-  $brew_path/bin/nvim --headless +PlugInstall +qa
+  nvim --headless +PlugInstall +qa
 
   # Accept Copilot license
   mkdir -p ~/.config/github-copilot
   echo '{"luanzeba":{"version":"2021-10-14"}}' > ~/.config/github-copilot/terms.json
-  $brew_path/bin/nvim --headless +"Copilot setup" +qa
+  nvim --headless +"Copilot setup" +qa
 
   # Initialize git fish plugin
   echo "__git.init" | $brew_path/bin/fish
@@ -108,7 +108,7 @@ echo '💽 Installing software'
 echo `date +"%Y-%m-%d %T"`
 install_software
 
-echo '🧰 configure software'
+echo '🧰 Configuring software'
 echo `date +"%Y-%m-%d %T"`
 setup_software
 echo '✅ Done!'
