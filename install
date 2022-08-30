@@ -83,15 +83,22 @@ function setup_software() {
   chmod +x /usr/bin/rdm
   gh config set browser "rdm open"
 
+  # Depending on the codespace, neovim may not be in the path
+  if command -v nvim &> /dev/null; then
+    nvim_path=$(command -v nvim)
+  else
+    nvim_path="$brew_path/bin/nvim"
+  fi
+
   # Install Neovim plugins
   sh -c 'curl -fLo "${XDG_DATA_HOME:-$HOME/.local/share}"/nvim/site/autoload/plug.vim --create-dirs \
     https://raw.githubusercontent.com/junegunn/vim-plug/master/plug.vim'
-  nvim --headless +PlugInstall +qa
+  $nvim_path --headless +PlugInstall +qa
 
   # Accept Copilot license
   mkdir -p ~/.config/github-copilot
   echo '{"luanzeba":{"version":"2021-10-14"}}' > ~/.config/github-copilot/terms.json
-  nvim --headless +"Copilot setup" +qa
+  $nvim_path --headless +"Copilot setup" +qa
 
   # Initialize git fish plugin
   echo "__git.init" | $brew_path/bin/fish
