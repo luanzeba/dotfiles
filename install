@@ -14,7 +14,7 @@ function link_files() {
     ln -s $(pwd)/.git_template ~/.git_template
     ln -s $(pwd)/.tmux.conf ~/.tmux.conf
     ln -s $(pwd)/bin ~/.bin
-    # ln -s $(pwd)/.config/fish ~/.config/
+    ln -s $(pwd)/.config/fish ~/.config/
     ln -s $(pwd)/script/git-hooks/pre-push .git/hooks/pre-push
 
     rm -f ~/.gitconfig
@@ -72,7 +72,7 @@ function install_software() {
   sudo npm install -g typescript-language-server typescript vscode-langservers-extracted eslint_d
   sudo apt -o DPkg::Lock::Timeout=600 install build-essential python3-venv ruby-dev fzf bat exa jq ripgrep thefuck tmux libfuse2 fuse software-properties-common -y
   install_homebrew
-  # $brew_path/bin/brew install fish
+  $brew_path/bin/brew install fish
   install_neovim
 }
 
@@ -100,10 +100,10 @@ function setup_software() {
   echo '{"luanzeba":{"version":"2021-10-14"}}' > ~/.config/github-copilot/terms.json
   $nvim_path --headless +"Copilot setup" +qa
 
-  # # Initialize git fish plugin
-  # echo "__git.init" | $brew_path/bin/fish
+  # Initialize git fish plugin
+  echo "__git.init" | $brew_path/bin/fish
 
-  # # Change default shell to fish
+  # Change default shell to fish
   # sudo chsh -s $brew_path/bin/fish "$(whoami)"
 }
 
