@@ -31,24 +31,11 @@ if test $CODESPACES
   end
   export PATH="/home/linuxbrew/.linuxbrew/bin:$PATH"
 else
-  set CHRUBY_ROOT "/opt/homebrew/opt/chruby"
-  source /opt/homebrew/opt/chruby-fish/share/chruby/chruby.fish
-  source /opt/homebrew/opt/chruby-fish/share/chruby/auto.fish # Enable auto-switching based on .ruby-version file
-
   export PATH="$HOME/.cargo/bin:$PATH"
 end
 
 # Map Ctrl-x to clear
 bind \cx 'clear; commandline -f repaint'
-
-# convenience function for selecting a branch for checkout
-# gbco() {
-#   current=$(git branch | grep "\*" | cut -d " " -f2)
-#   selected=$( (git branch --no-color | grep -v "\*" | xargs -n 1; echo $current ) | fzf -0 -1 --tac -q "${1:-""}" --prompt "$current> ")
-#   if [ ! -z "$selected" ]; then
-#       git checkout "$selected"
-#   fi
-# }
 
 if status is-interactive
     # Commands to run in interactive sessions can go here
