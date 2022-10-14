@@ -28,6 +28,10 @@ Plug 'vim-airline/vim-airline-themes'
 Plug 'ellisonleao/glow.nvim', {'branch': 'main'}
 Plug 'airblade/vim-gitgutter'
 
+" Navigation
+Plug 'nvim-lua/plenary.nvim'
+Plug 'nvim-telescope/telescope.nvim'
+Plug 'nvim-telescope/telescope-fzf-native.nvim', { 'do': 'make' }
 Plug 'chipsenkbeil/distant.nvim'
 
 " Languages support
@@ -53,6 +57,40 @@ nmap <leader>w :w<CR>
 
 " reload this configuration
 nnoremap <leader>sv :source $MYVIMRC<CR>
+
+" Telescope
+lua << EOS
+local telescope = require('telescope')
+telescope.load_extension('fzf')
+-- telescope.load_extension('githubcoauthors')
+
+local actions = require("telescope.actions")
+telescope.setup{
+  defaults = {
+    borderchars = { "─", "│", "─", "│", "┌", "┐", "┘", "└" },
+    prompt_prefix = "🔍️ ",
+    mappings = {
+      -- Esc to close while in insert mode
+      i = {
+        ["<esc>"] = actions.close,
+        ["<C-j>"] = actions.move_selection_next,
+        ["<C-k>"] = actions.move_selection_previous,
+        ["<C-h>"] = "which_key"
+      },
+    },
+  }
+}
+
+-- Disable copilot in Telescope
+vim.g.copilot_filetypes = vim.g.copilot_filetypes or {}
+vim.g.copilot_filetypes["TelescopeResults"] = false
+
+local map = vim.api.nvim_set_keymap
+map("n", "<C-p>", "<CMD>Telescope find_files<CR>", { noremap = true })
+map("n", "<C-f>", "<CMD>Telescope live_grep<CR>", { noremap = true })
+map("n", "<C-b>", "<CMD>Telescope buffers<CR>", { noremap = true })
+map("n", "<Leader>fw", "<CMD>Telescope grep_string<CR>", { noremap = true })
+EOS
 
 " NvimTree
 lua << EOS
@@ -136,12 +174,6 @@ require('distant').setup {
 EOS
 
 " Fzf
-nnoremap <silent> <C-p> :Files<CR>
-nnoremap <silent> <C-g> :GFiles<CR>
-nnoremap <silent> <C-b> :Buffers<CR>
-nnoremap <C-f> :Rg!
-nnoremap <expr> <leader>fw ':Rg! '.expand('<cword>').'<CR>'
-
 " CTRL-A CTRL-Q to select all and build quickfix list
 function! s:build_quickfix_list(lines)
   call setqflist(map(copy(a:lines), '{ "filename": v:val }'))
@@ -157,15 +189,6 @@ let g:fzf_action = {
 
 let $FZF_DEFAULT_OPTS = '--bind ctrl-a:select-all'
 
-" Sort results by proximity https://github.com/jonhoo/proximity-sort
-" function! s:list_cmd()
-"   let base = fnamemodify(expand('%'), ':h:.:S')
-"   return base == '.' ? 'fd -t f' : printf('fd -t f | proximity-sort %s', expand('%'))
-" endfunction
-
-" command! -bang -nargs=? -complete=dir Files
-"   \ call fzf#vim#files(<q-args>, {'source': s:list_cmd(),
-"   \                               'options': '--tiebreak=index'}, <bang>0)
 
 " fugitive
 nnoremap <Leader>b :execute line(".") . "GBrowse"<CR>
