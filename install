@@ -72,7 +72,7 @@ function install_software() {
   sudo npm install -g typescript-language-server typescript vscode-langservers-extracted eslint_d
   sudo apt -o DPkg::Lock::Timeout=600 install build-essential python3-venv ruby-dev fzf bat exa jq ripgrep thefuck tmux libfuse2 fuse software-properties-common -y
   install_homebrew
-  $brew_path/bin/brew install fish
+  which fish || $brew_path/bin/brew install fish
   install_neovim
 }
 
@@ -101,10 +101,11 @@ function setup_software() {
   $nvim_path --headless +"Copilot setup" +qa
 
   # Initialize git fish plugin
-  echo "__git.init" | $brew_path/bin/fish
+  fish_path=$(which fish || echo $brew_path/bin/fish)
+  echo "__git.init" | $fish_path
 
   # Change default shell to fish
-  # sudo chsh -s $brew_path/bin/fish "$(whoami)"
+  sudo chsh -s $fish_path "$(whoami)"
 }
 
 echo '🔗 Linking files.'

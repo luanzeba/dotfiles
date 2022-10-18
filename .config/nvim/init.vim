@@ -61,8 +61,6 @@ nnoremap <leader>sv :source $MYVIMRC<CR>
 " Telescope
 lua << EOS
 local telescope = require('telescope')
-telescope.load_extension('fzf')
--- telescope.load_extension('githubcoauthors')
 
 local actions = require("telescope.actions")
 telescope.setup{
@@ -90,6 +88,9 @@ map("n", "<C-p>", "<CMD>Telescope find_files<CR>", { noremap = true })
 map("n", "<C-f>", "<CMD>Telescope live_grep<CR>", { noremap = true })
 map("n", "<C-b>", "<CMD>Telescope buffers<CR>", { noremap = true })
 map("n", "<Leader>fw", "<CMD>Telescope grep_string<CR>", { noremap = true })
+
+telescope.load_extension('fzf')
+-- telescope.load_extension('githubcoauthors')
 EOS
 
 " NvimTree
