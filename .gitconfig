@@ -11,19 +11,18 @@
 	defaultBranch = main
 	templatedir = ~/.git_template
 [alias]
-	ctags = !.git/hooks/ctags
-  edit = !$EDITOR $(git ls-files -o -m --exclude-standard)
-  ci = !git commit --amend --no-edit && git push --force-with-lease
-  main = !git symbolic-ref refs/remotes/origin/HEAD | cut -d'/' -f4
-  com = !"git checkout $(git main)"
-  rom = !"git fetch; git rebase origin/$(git main)"
+	edit = !$EDITOR $(git ls-files -o -m --exclude-standard)
+	ci = !git commit --amend --no-edit && git push --force-with-lease
+	main = !git symbolic-ref refs/remotes/origin/HEAD | cut -d'/' -f4
+	com = !"git checkout $(git main)"
+	rom = !"git fetch; git rebase origin/$(git main)"
 [github]
 	user = luanzeba
-[credential]
-	helper = osxkeychain
 [remote]
 	pushDefault = origin
 [pull]
 	rebase = true
 [rebase]
 	autostash = true
+[include]
+	path = ~/.gitconfig-macos

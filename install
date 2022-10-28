@@ -19,6 +19,7 @@ function link_files() {
 
     rm -f ~/.gitconfig
     ln -s $(pwd)/.gitconfig ~/.gitconfig
+    touch ~/.gitconfig-macos # create empty config file
 
     if [ -d "/workspaces/github/bin" ]; then
       sudo ln -s /workspaces/github/bin/rubocop /usr/local/bin/rubocop
