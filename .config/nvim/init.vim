@@ -80,8 +80,8 @@ telescope.setup{
 }
 
 -- Disable copilot in Telescope
-vim.g.copilot_filetypes = vim.g.copilot_filetypes or {}
-vim.g.copilot_filetypes["TelescopeResults"] = false
+-- vim.g.copilot_filetypes = vim.g.copilot_filetypes or {}
+-- vim.g.copilot_filetypes["TelescopeResults"] = false
 
 local map = vim.api.nvim_set_keymap
 map("n", "<C-p>", "<CMD>Telescope find_files<CR>", { noremap = true })
