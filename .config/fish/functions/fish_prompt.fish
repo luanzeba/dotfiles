@@ -730,7 +730,7 @@ function __bobthefish_prompt_user -S -d 'Display current user and hostname'
             set_color normal
             set_color -b $color_hostname[1] $color_hostname[2..-1]
             if test -e ~/.friendly_name
-                echo -ns ' 💻' (cat ~/.friendly_name)
+                echo -ns ' 💻 ' (cat ~/.friendly_name)
             else
                 echo -ns '@' (prompt_hostname)
             end
