@@ -30,6 +30,8 @@ Plug 'airblade/vim-gitgutter'
 
 " Navigation
 Plug 'nvim-lua/plenary.nvim'
+Plug 'neovim/nvim-lspconfig'
+Plug 'gfanto/fzf-lsp.nvim'
 Plug 'nvim-telescope/telescope.nvim'
 Plug 'nvim-telescope/telescope-fzf-native.nvim', { 'do': 'make' }
 Plug 'chipsenkbeil/distant.nvim'
@@ -93,6 +95,14 @@ telescope.load_extension('fzf')
 -- telescope.load_extension('githubcoauthors')
 EOS
 
+" LSP config
+lua << EOS
+require'lspconfig'.sorbet.setup{ cmd = { "bin/srb", "tc", "--lsp", "--disable-watchman" } }
+vim.keymap.set("n", "K", vim.lsp.buf.hover, { silent = true })
+EOS
+nmap <leader>r :References<CR>
+nmap <leader>d :sp<CR>:Definitions<CR>
+
 " NvimTree
 lua << EOS
 -- each of these are documented in `:help nvim-tree.OPTION_NAME`
@@ -119,7 +129,6 @@ require'nvim-tree'.setup {
 }
 EOS
 nnoremap <C-n> :NvimTreeToggle<CR>
-nnoremap <leader>r :NvimTreeRefresh<CR>
 nnoremap <leader>n :NvimTreeFindFile<CR>
 
 " Git Gutter
