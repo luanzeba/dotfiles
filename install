@@ -78,6 +78,12 @@ function install_software() {
 }
 
 function setup_software() {
+  # Setup codespace friendly name for shell prompt
+  codespace_friendly_name=$(gh api "/user/codespaces/$CODESPACE_NAME" -q .display_name)
+  if [[ $? -eq 0 && $codespace_friendly_name != *"Not Found"* ]]; then
+    echo $codespace_friendly_name >> $HOME/.friendly_name
+  fi
+
   # Use remote-development-manager for copy/paste and open support
   wget https://github.com/BlakeWilliams/remote-development-manager/releases/download/v0.0.3/rdm-linux-amd64
   sudo mv rdm-linux-amd64 /usr/bin/rdm
