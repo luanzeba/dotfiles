@@ -102,6 +102,9 @@ function setup_software() {
     https://raw.githubusercontent.com/junegunn/vim-plug/master/plug.vim'
   $nvim_path --headless +PlugInstall +qa
 
+  # Hack for telescope-fzf-native, which doesn't make in codespaces for some reason
+  find /workspaces/ -name 'telescope-fzf-native.nvim' -type d | xargs bash -c 'cd "$0" && make'
+
   # Accept Copilot license
   mkdir -p ~/.config/github-copilot
   echo '{"luanzeba":{"version":"2021-10-14"}}' > ~/.config/github-copilot/terms.json
