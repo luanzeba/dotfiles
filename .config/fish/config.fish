@@ -20,18 +20,15 @@ alias rspec="nocorrect bundle exec rspec" # Do not autocorrect "rspec" command
 alias icloud="cd $HOME/Library/Mobile\ Documents/com~apple~CloudDocs/"
 
 export EDITOR="nvim"
-export PATH="$HOME/.bin:$PATH"
+export PATH="$PATH:$HOME/.bin"
 
 if test $CODESPACES
-  # load linuxbrew and rbenv
-  # eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
-  # eval "$(rbenv init -)"
+  export PATH="$PATH:/home/linuxbrew/.linuxbrew/bin"
   if test -d /workspaces/github
-    export PATH="/workspaces/github/bin:$PATH"
+    export PATH="$PATH:/workspaces/github/bin"
   end
-  export PATH="/home/linuxbrew/.linuxbrew/bin:$PATH"
 else
-  export PATH="$HOME/.cargo/bin:$PATH"
+  export PATH="$PATH:$HOME/.cargo/bin"
 end
 
 # Map Ctrl-x to clear
