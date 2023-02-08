@@ -13,7 +13,7 @@ function link_files() {
     ln -s $(pwd)/.gitignore_global ~/.gitignore_global
     ln -s $(pwd)/.git_template ~/.git_template
     ln -s $(pwd)/.tmux.conf ~/.tmux.conf
-    ln -s $(pwd)/bin ~/.bin
+    ln -s $(pwd)/bin ~/bin
     ln -s $(pwd)/.config/fish ~/.config/
     ln -s $(pwd)/script/git-hooks/pre-push .git/hooks/pre-push
 

@@ -20,7 +20,7 @@ alias rspec="nocorrect bundle exec rspec" # Do not autocorrect "rspec" command
 alias icloud="cd $HOME/Library/Mobile\ Documents/com~apple~CloudDocs/"
 
 export EDITOR="nvim"
-export PATH="$PATH:$HOME/.bin"
+export PATH="$PATH:$HOME/bin"
 
 if test $CODESPACES
   export PATH="$PATH:/home/linuxbrew/.linuxbrew/bin"
