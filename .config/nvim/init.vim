@@ -47,7 +47,7 @@ Plug 'fatih/vim-go', { 'do': ':GoUpdateBinaries' }
 call plug#end()
 
 colorscheme github_light_default
-let g:airline_theme='minimalist'
+let g:airline_theme='deus'
 
 if has('nvim')
   set inccommand=nosplit
