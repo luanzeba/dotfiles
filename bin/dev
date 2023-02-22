@@ -10,14 +10,18 @@ if [[ $# > 0 ]]; then
       repo="github/meuse"
       machine="xLargePremiumLinux"
       ;;
+    bp)
+      repo="github/billing-platform"
+      machine="xLargePremiumLinux"
+      ;;
     *)
       echo "Unknown command $1"
-      echo "Usage: $0 {gh|meuse}"
+      echo "Usage: $0 {gh|meuse|bp}"
       exit 1
       ;;
   esac
 else
-  echo "Usage: $0 gh|meuse"
+  echo "Usage: $0 gh|meuse|bp"
   exit 1
 fi
 
