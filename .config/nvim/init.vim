@@ -109,7 +109,6 @@ lua << EOS
 
 require'nvim-tree'.setup {
   disable_netrw = false,
-  open_on_setup = true,
   actions = {
     open_file = {
       quit_on_open = true
