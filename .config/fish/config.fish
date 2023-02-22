@@ -21,6 +21,7 @@ alias icloud="cd $HOME/Library/Mobile\ Documents/com~apple~CloudDocs/"
 
 export EDITOR="nvim"
 export PATH="$PATH:$HOME/bin"
+export BAT_THEME="GitHub"
 
 if test $CODESPACES
   export PATH="$PATH:/home/linuxbrew/.linuxbrew/bin"
