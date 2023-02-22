@@ -1,2 +1,12 @@
 # Downloaded as part of the install script
 bin/csw
+
+# Manually install pure every time
+.config/fish/functions/_pure*.fish
+.config/fish/functions/fish_greeting.fish
+.config/fish/functions/fish_mode_prompt.fish
+.config/fish/functions/fish_prompt.fish
+.config/fish/functions/fish_title.fish
+.config/fish/conf.d/_pure_init.fish
+.config/fish/conf.d/pure.fish
+

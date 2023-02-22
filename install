@@ -75,6 +75,7 @@ function install_software() {
   install_homebrew
   which fish || $brew_path/bin/brew install fish
   install_neovim
+  fisher install pure-fish/pure
 }
 
 function setup_software() {
