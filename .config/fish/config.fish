@@ -24,7 +24,6 @@ export PATH="$PATH:$HOME/bin"
 export BAT_THEME="GitHub"
 
 if test $CODESPACES
-  export PWD="/workspaces/$RepositoryName"
   export PATH="$PATH:/home/linuxbrew/.linuxbrew/bin"
   if test -d /workspaces/github
     export PATH="$PATH:/workspaces/github/bin"
