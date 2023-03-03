@@ -48,7 +48,7 @@ function install_neovim() {
   if ! command -v nvim &> /dev/null; then
     previous=$(pwd)
     echo "Neovim not found, installing..."
-    cd /usr/bin
+    cd ~/bin
     curl -LO https://github.com/neovim/neovim/releases/latest/download/nvim.appimage
     chmod u+x nvim.appimage
     if ./nvim.appimage --version >& /dev/null; then
@@ -56,7 +56,7 @@ function install_neovim() {
     else
       ./nvim.appimage --appimage-extract
       sudo mv squashfs-root /
-      sudo ln -s /squashfs-root/AppRun /usr/bin/nvim
+      sudo ln -s /squashfs-root/AppRun ~/bin/nvim
       rm nvim.appimage
     fi
     cd $previous
