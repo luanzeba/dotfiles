@@ -28,6 +28,9 @@ if test $CODESPACES
   if test -d /workspaces/github
     export PATH="$PATH:/workspaces/github/bin"
   end
+  if fisher &> /dev/null
+    fisher update
+  end
 else
   export PATH="$PATH:$HOME/.cargo/bin"
 end
