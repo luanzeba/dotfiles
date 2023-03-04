@@ -44,6 +44,33 @@ function install_homebrew() {
   fi
 }
 
+function install_fish() {
+  if ! command -v fish &> /dev/null; then
+    echo "Fish not found, installing..."
+    sudo apt-add-repository ppa:fish-shell/release-3 -y
+    sudo apt-get update && sudo apt-get upgrade -y
+    sudo apt-get install fish -y
+    echo "/usr/bin/fish"
+  else
+    echo "Fish already installed, skipping..."
+    if fish_path=$(command -v fish); then
+      echo $fish_path
+    else
+      echo "$brew_path/bin/fish"
+    fi
+  fi
+}
+
+function setup_fish {
+  fish_path=$1
+
+  # Initialize git fish plugin
+  echo "__git.init" | $fish_path
+
+  # Change default shell to fish
+  sudo chsh -s $fish_path "$(whoami)"
+}
+
 function install_neovim() {
   if ! command -v nvim &> /dev/null; then
     previous=$(pwd)
@@ -63,8 +90,8 @@ function install_neovim() {
     echo "$HOME/bin/nvim"
   else
     echo "Neovim already installed, skipping..."
-    if command -v nvim &> /dev/null; then
-      echo $(command -v nvim)
+    if nvim_path=$(command -v nvim); then
+      echo $nvim_path
     else
       echo "$brew_path/bin/nvim"
     fi
@@ -94,9 +121,8 @@ function install_software() {
   curl https://github.com/dandavison/delta/releases/download/0.13.0/git-delta_0.13.0_amd64.deb > ~/git-delta.deb
   sudo dpkg -i ~/git-delta_0.13.0_amd64.deb
   sudo npm install -g typescript-language-server typescript vscode-langservers-extracted eslint_d
-  sudo apt -o DPkg::Lock::Timeout=600 install build-essential python3-venv ruby-dev fzf bat exa jq ripgrep thefuck tmux libfuse2 fuse software-properties-common -y
-  install_homebrew
-  which fish || $brew_path/bin/brew install fish
+  sudo apt -o DPkg::Lock::Timeout=600 install build-essential python3-venv ruby-dev fzf bat exa jq ripgrep tmux libfuse2 fuse software-properties-common -y
+  # install_homebrew
   nvim_path=$(install_neovim | tail -n 1)
   setup_neovim $nvim_path
 }
@@ -114,12 +140,8 @@ function setup_software() {
   chmod +x /usr/bin/rdm
   gh config set browser "rdm open"
 
-  # Initialize git fish plugin
-  fish_path=$(which fish || echo $brew_path/bin/fish)
-  echo "__git.init" | $fish_path
-
-  # Change default shell to fish
-  sudo chsh -s $fish_path "$(whoami)"
+  fish_path=$(install_fish | tail -n 1)
+  setup_fish $fish_path
 }
 
 echo '🔗 Linking files.'
