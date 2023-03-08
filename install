@@ -47,8 +47,9 @@ function install_homebrew() {
 function install_fish() {
   if ! command -v fish &> /dev/null; then
     echo "Fish not found, installing..."
+    sudo dpkg --configure -a
     sudo apt-add-repository ppa:fish-shell/release-3 -y
-    sudo apt-get update && sudo apt-get upgrade -y
+    sudo apt-get update -y
     sudo apt-get install fish -y
     echo "/usr/bin/fish"
   else
