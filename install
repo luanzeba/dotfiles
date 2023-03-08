@@ -63,12 +63,13 @@ function install_fish() {
 }
 
 function setup_fish {
-  fisher update
-
   fish_path=$1
 
   # Initialize git fish plugin
   echo "__git.init" | $fish_path
+
+  # Install fisher plugins
+  echo "fisher update" | $fish_path
 
   # Change default shell to fish
   sudo chsh -s $fish_path "$(whoami)"
