@@ -62,6 +62,8 @@ function install_fish() {
 }
 
 function setup_fish {
+  fisher update
+
   fish_path=$1
 
   # Initialize git fish plugin
