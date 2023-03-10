@@ -8,13 +8,15 @@ set -x
 function link_files() {
   # In some codespaces, there's no need to symlink dotfiles to $HOME
   if [[ ! $(pwd) -ef $HOME ]]; then
+    mkdir -p ~/.local/bin
     mkdir -p ~/.config/
     ln -s $(pwd)/.config/nvim ~/.config/
+    ln -s $(pwd)/.config/fish ~/.config/
+    ln -s $(pwd)/.config/lawn ~/.config/
     ln -s $(pwd)/.gitignore_global ~/.gitignore_global
     ln -s $(pwd)/.git_template ~/.git_template
     ln -s $(pwd)/.tmux.conf ~/.tmux.conf
     ln -s $(pwd)/bin ~/bin
-    ln -s $(pwd)/.config/fish ~/.config/
     ln -s $(pwd)/script/git-hooks/pre-push .git/hooks/pre-push
 
     rm -f ~/.gitconfig
@@ -30,17 +32,29 @@ function link_files() {
 }
 
 brew_path=/home/linuxbrew/.linuxbrew # avoid brew command not found in codespaces
-function install_homebrew() {
-  if [[ ! -d "${brew_path}" ]]; then
-    echo "🍺 Homebrew not found, installing..."
-    export HOMEBREW_INSTALL_FROM_API=true # Don't fully clone homebrew. Provides a speed boost.
-    /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-    test -d ~/.linuxbrew && eval "$(~/.linuxbrew/bin/brew shellenv)"
-    test -d /home/linuxbrew/.linuxbrew && eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
-    test -r ~/.bash_profile && echo "eval \"\$($(brew --prefix)/bin/brew shellenv)\"" >> ~/.bash_profile
-    echo "eval \"\$($(brew --prefix)/bin/brew shellenv)\"" >> ~/.profile
+# function install_homebrew() {
+#   if [[ ! -d "${brew_path}" ]]; then
+#     echo "🍺 Homebrew not found, installing..."
+#     export HOMEBREW_INSTALL_FROM_API=true # Don't fully clone homebrew. Provides a speed boost.
+#     /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+#     test -d ~/.linuxbrew && eval "$(~/.linuxbrew/bin/brew shellenv)"
+#     test -d /home/linuxbrew/.linuxbrew && eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+#     test -r ~/.bash_profile && echo "eval \"\$($(brew --prefix)/bin/brew shellenv)\"" >> ~/.bash_profile
+#     echo "eval \"\$($(brew --prefix)/bin/brew shellenv)\"" >> ~/.profile
+#   else
+#     echo "🍺 Homebrew already installed, skipping..."
+#   fi
+# }
+
+function install_rust_and_cargo() {
+  if command -v rustc >/dev/null 2>&1 && command -v cargo >/dev/null 2>&1; then
+    echo "Rust and Cargo are already installed."
+    echo "$(which cargo)"
   else
-    echo "🍺 Homebrew already installed, skipping..."
+    echo "Installing Rust and Cargo..."
+    curl https://sh.rustup.rs -sSf | sh -s -- -y
+    echo "Rust and Cargo installation complete."
+    echo "$HOME/.cargo/bin/cargo"
   fi
 }
 
@@ -127,6 +141,8 @@ function install_software() {
   sudo npm install -g typescript-language-server typescript vscode-langservers-extracted eslint_d
   sudo apt -o DPkg::Lock::Timeout=600 install build-essential python3-venv ruby-dev fzf bat exa jq ripgrep tmux libfuse2 fuse software-properties-common -y
   # install_homebrew
+  cargo_path=$(install_rust_and_cargo | tail -n 1)
+  $cargo_path install --root ~ lawn
   nvim_path=$(install_neovim | tail -n 1)
   setup_neovim $nvim_path
 }
@@ -137,6 +153,9 @@ function setup_software() {
   if [[ $? -eq 0 && $codespace_friendly_name != *"Not Found"* ]]; then
     echo $codespace_friendly_name >> $HOME/.friendly_name
   fi
+
+  # Remote development with https://github.com/bk2204/lawn/
+  mkdir -p ~/mnt/lawn
 
   # Use remote-development-manager for copy/paste and open support
   wget https://github.com/BlakeWilliams/remote-development-manager/releases/download/v0.0.3/rdm-linux-amd64

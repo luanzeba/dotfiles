@@ -20,16 +20,15 @@ alias rspec="nocorrect bundle exec rspec" # Do not autocorrect "rspec" command
 alias icloud="cd $HOME/Library/Mobile\ Documents/com~apple~CloudDocs/"
 
 export EDITOR="nvim"
-export PATH="$PATH:$HOME/bin"
 export BAT_THEME="GitHub"
 
-if test $CODESPACES
+fish_add_path "$HOME/bin"
+fish_add_path "$HOME/.cargo/bin"
+fish_add_path "$HOME/.local/bin"
+
+if test -d /workspaces/github # github/github codespace
   export PATH="$PATH:/home/linuxbrew/.linuxbrew/bin"
-  if test -d /workspaces/github
-    export PATH="$PATH:/workspaces/github/bin"
-  end
-else
-  export PATH="$PATH:$HOME/.cargo/bin"
+  export PATH="$PATH:/workspaces/github/bin"
 end
 
 # Map Ctrl-x to clear
