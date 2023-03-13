@@ -22,13 +22,13 @@ alias icloud="cd $HOME/Library/Mobile\ Documents/com~apple~CloudDocs/"
 export EDITOR="nvim"
 export BAT_THEME="GitHub"
 
-fish_add_path "$HOME/bin"
-fish_add_path "$HOME/.cargo/bin"
-fish_add_path "$HOME/.local/bin"
+fish_add_path --path --append "$HOME/bin"
+fish_add_path --path --append "$HOME/.cargo/bin"
+fish_add_path --path --append "$HOME/.local/bin"
 
 if test -d /workspaces/github # github/github codespace
-  export PATH="$PATH:/home/linuxbrew/.linuxbrew/bin"
-  export PATH="$PATH:/workspaces/github/bin"
+  fish_add_path --path --append "$PATH:/home/linuxbrew/.linuxbrew/bin"
+  fish_add_path --path --append "$PATH:/workspaces/github/bin"
 end
 
 # Map Ctrl-x to clear
