@@ -16,13 +16,18 @@
 	main = !git symbolic-ref refs/remotes/origin/HEAD | cut -d'/' -f4
 	sm = !"git switch $(git main)"
 	rom = !"git fetch; git rebase origin/$(git main)"
+[rerere] # automatic conflict resolution
+	enabled = true
+[rebase]
+	autosquash = true
+	updateRefs = true
+[merge]
+	conflictstyle = diff3
 [github]
 	user = luanzeba
 [remote]
 	pushDefault = origin
 [pull]
 	rebase = true
-[rebase]
-	autostash = true
 [include]
 	path = ~/.gitconfig-macos
