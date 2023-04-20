@@ -30,6 +30,11 @@ if test -d /workspaces/github # github/github codespace
   fish_add_path --path --append "$PATH:/workspaces/github/bin"
 end
 
+if not set -q CODESPACES
+  nvm use 17 &> /dev/null # Copilot doesn't want a higher version for some reason
+end
+
+
 # Map Ctrl-x to clear
 bind \cx 'clear; commandline -f repaint'
 
