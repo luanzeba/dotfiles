@@ -1,8 +1,2 @@
 # Downloaded as part of the install script
 bin/csw
-
-# install fisher plugins using `fisher update`
-.config/fish/functions/*
-!.config/fish/functions/machine_name.fish
-!.config/fish/functions/ucsw.fish
-!.config/fish/functions/fisher.fish

@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/zsh
 # GitHub codespaces setup.
 
 exec > >(tee -i $HOME/dotfiles_install.log)
@@ -11,7 +11,6 @@ function link_files() {
     mkdir -p ~/.local/bin
     mkdir -p ~/.config/
     ln -s $(pwd)/.config/nvim ~/.config/
-    ln -s $(pwd)/.config/fish ~/.config/
     ln -s $(pwd)/.config/lawn ~/.config/
     ln -s $(pwd)/.gitignore_global ~/.gitignore_global
     ln -s $(pwd)/.git_template ~/.git_template
@@ -32,19 +31,6 @@ function link_files() {
 }
 
 brew_path=/home/linuxbrew/.linuxbrew # avoid brew command not found in codespaces
-# function install_homebrew() {
-#   if [[ ! -d "${brew_path}" ]]; then
-#     echo "🍺 Homebrew not found, installing..."
-#     export HOMEBREW_INSTALL_FROM_API=true # Don't fully clone homebrew. Provides a speed boost.
-#     /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-#     test -d ~/.linuxbrew && eval "$(~/.linuxbrew/bin/brew shellenv)"
-#     test -d /home/linuxbrew/.linuxbrew && eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
-#     test -r ~/.bash_profile && echo "eval \"\$($(brew --prefix)/bin/brew shellenv)\"" >> ~/.bash_profile
-#     echo "eval \"\$($(brew --prefix)/bin/brew shellenv)\"" >> ~/.profile
-#   else
-#     echo "🍺 Homebrew already installed, skipping..."
-#   fi
-# }
 
 function install_rust_and_cargo() {
   if command -v rustc >/dev/null 2>&1 && command -v cargo >/dev/null 2>&1; then
@@ -56,37 +42,6 @@ function install_rust_and_cargo() {
     echo "Rust and Cargo installation complete."
     echo "$HOME/.cargo/bin/cargo"
   fi
-}
-
-function install_fish() {
-  if ! command -v fish &> /dev/null; then
-    echo "Fish not found, installing..."
-    sudo dpkg --configure -a
-    sudo apt-add-repository ppa:fish-shell/release-3 -y
-    sudo apt-get update -y
-    sudo apt-get install fish -y
-    echo "/usr/bin/fish"
-  else
-    echo "Fish already installed, skipping..."
-    if fish_path=$(command -v fish); then
-      echo $fish_path
-    else
-      echo "$brew_path/bin/fish"
-    fi
-  fi
-}
-
-function setup_fish {
-  fish_path=$1
-
-  # Initialize git fish plugin
-  echo "__git.init" | $fish_path
-
-  # Install fisher plugins
-  echo "fisher update" | $fish_path
-
-  # Change default shell to fish
-  sudo chsh -s $fish_path "$(whoami)"
 }
 
 function install_neovim() {
@@ -163,8 +118,8 @@ function setup_software() {
   chmod +x /usr/bin/rdm
   gh config set browser "rdm open"
 
-  fish_path=$(install_fish | tail -n 1)
-  setup_fish $fish_path
+  sudo chsh -s /bin/zsh $(whoami)
+  zsh zsh/install.zsh
 }
 
 echo '🔗 Linking files.'
