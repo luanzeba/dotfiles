@@ -4,7 +4,7 @@ if [[ $# > 0 ]]; then
   case "$1" in
     gh)
       repo="github/github"
-      machine="xLargePremiumLinux"
+      machine="largePremiumLinux"
       ;;
     meuse)
       repo="github/meuse"
