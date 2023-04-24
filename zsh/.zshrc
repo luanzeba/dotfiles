@@ -21,11 +21,6 @@ alias cssh="csw ssh -- -R 127.0.0.1:7391:$(rdm socket)"
 
 alias k="kubectl"
 
-# Check if CODESPACES environment variable is not set
-if [[ -z $CODESPACES ]]; then
-  nvm use 17 &> /dev/null # Copilot doesn't want a higher version for some reason
-fi
-
 # Map Ctrl-x to clear
 bindkey '^X' clear-screen
 
