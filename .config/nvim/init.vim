@@ -46,7 +46,8 @@ Plug 'fatih/vim-go', { 'do': ':GoUpdateBinaries' }
 
 call plug#end()
 
-colorscheme github_light_default
+colorscheme github_light_tritanopia
+
 let g:airline_theme='deus'
 
 if has('nvim')
@@ -289,7 +290,6 @@ let test#strategy = "vimux"
 " =============================================================================
 " # Editor settings
 " =============================================================================
-set background=dark             " Default color groups 
 set noerrorbells                " Obvious
 set signcolumn=yes              " Always draw sign column. Prevent buffer moving when adding/deleting sign.
 set autoindent                  " Copy indent from previous line
