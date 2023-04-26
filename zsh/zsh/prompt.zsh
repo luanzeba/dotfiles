@@ -9,17 +9,13 @@ zstyle ':vcs_info:*' actionformats "(%b %m%c%u %F{cyan}%a%f)"
 zstyle ':vcs_info:*' stagedstr "%F{green}S%f"
 zstyle ':vcs_info:*' unstagedstr "%F{yellow}U%f"
 
-precmd() {
-	vcs_info
-}
-
 setopt prompt_subst
 
-# # Define a function to shorten directory names, except for the last component
+# Define a function to shorten directory names, except for the last component
+# For example, ~/.config/nvim/foo/bar will be shortened to ~/.c/n/f/bar
 function shorten_path {
   # Replace the home directory path with ~
   local input_path="${1/#$HOME/~}"
-  # Use awk to shorten each directory component
   echo "$input_path" | awk -F/ '{
     out = "";
     for (i=1; i<NF; i++) {
@@ -37,12 +33,15 @@ function shorten_path {
 
 # Define a precmd function to update the prompt with the shortened path
 function precmd {
+  # Update Git information
+  vcs_info
   # Get the current path and shorten it
   local current_path="$PWD"
   local shortened_path="$(shorten_path "$current_path")"
-  # Update the PROMPT variable to include the shortened path
+
   PROMPT='%F{green}%n%f@%F{magenta}%m%f %F{cyan}'"${shortened_path}"'%f ${vcs_info_msg_0_}
 $ '
+
 }
 
 # Register the precmd function as a hook to be executed before each prompt
