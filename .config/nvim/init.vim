@@ -208,7 +208,7 @@ nnoremap <Leader>g :G<CR>5j
 " code navigation
 nnoremap <leader>] g<C-]>              | " Go to definition. If more than one definition, open quick-list
 nnoremap <leader>m :TagbarToggle<CR>   | " Open list of tags in TagBar
-nnoremap <Leader><Leader> <C-^>        | " Open last buffer
+nnoremap ;; <C-^>                      | " Open last buffer
 
 command! JSONPretty :%!jq '.'          | " auto-format JSON
 
