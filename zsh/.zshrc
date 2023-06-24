@@ -17,7 +17,12 @@ fi
 alias v="nvim"
 alias vvim="vim $HOME/.config/nvim/init.vim"
 alias svim="source $HOME/.config/nvim/init.vim"
-alias cssh="csw ssh -- -R 127.0.0.1:7391:$(rdm socket)"
+# Only define `cssh` if the `rdm` binary exists
+# https://github.com/BlakeWilliams/remote-development-manager
+if [[ -x "$(command -v rdm)" ]]; then
+  alias cssh="csw ssh -- -R 127.0.0.1:7391:$(rdm socket)"
+fi
+
 
 alias k="kubectl"
 
