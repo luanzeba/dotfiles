@@ -44,6 +44,14 @@ function install_rust_and_cargo() {
   fi
 }
 
+function install_gopls() {
+  if command -v go >/dev/null 2>&1; then
+    go install golang.org/x/tools/gopls@latest
+  else
+    echo "Go is not installed. Skipping gopls installation."
+  fi
+}
+
 function install_neovim() {
   if ! command -v nvim &> /dev/null; then
     previous=$(pwd)
@@ -100,6 +108,7 @@ function install_software() {
   $cargo_path install --root ~ lawn
   nvim_path=$(install_neovim | tail -n 1)
   setup_neovim $nvim_path
+  install_gopls
 }
 
 function setup_software() {
@@ -117,6 +126,14 @@ function setup_software() {
   sudo mv rdm-linux-amd64 /usr/bin/rdm
   chmod +x /usr/bin/rdm
   gh config set browser "rdm open"
+
+  # Use lspconfig for Go language server
+  previous=$(pwd)
+  dir="${HOME}/.local/share/nvim/site/pack/nvim-lspconfig/opt/nvim-lspconfig/"
+  mkdir -p "$dir"
+  cd "$dir"
+  git clone 'https://github.com/neovim/nvim-lspconfig.git' .
+  cd $previous
 
   sudo chsh -s /bin/zsh $(whoami)
   zsh zsh/install.zsh
