@@ -11,7 +11,6 @@ function link_files() {
     mkdir -p ~/.local/bin
     mkdir -p ~/.config/
     ln -s $(pwd)/.config/nvim ~/.config/
-    ln -s $(pwd)/.config/lawn ~/.config/
     ln -s $(pwd)/.gitignore_global ~/.gitignore_global
     ln -s $(pwd)/.git_template ~/.git_template
     ln -s $(pwd)/.tmux.conf ~/.tmux.conf
@@ -103,12 +102,10 @@ function install_software() {
   sudo dpkg -i ~/git-delta_0.13.0_amd64.deb
   sudo npm install -g typescript-language-server typescript vscode-langservers-extracted eslint_d
   sudo apt -o DPkg::Lock::Timeout=600 install build-essential python3-venv ruby-dev fzf bat exa jq ripgrep tmux libfuse2 fuse software-properties-common -y
-  # install_homebrew
-  cargo_path=$(install_rust_and_cargo | tail -n 1)
-  $cargo_path install --root ~ lawn
+  install_rust_and_cargo
+  install_gopls
   nvim_path=$(install_neovim | tail -n 1)
   setup_neovim $nvim_path
-  install_gopls
 }
 
 function setup_software() {
@@ -117,9 +114,6 @@ function setup_software() {
   if [[ $? -eq 0 && $codespace_friendly_name != *"Not Found"* ]]; then
     echo $codespace_friendly_name >> $HOME/.friendly_name
   fi
-
-  # Remote development with https://github.com/bk2204/lawn/
-  mkdir -p ~/mnt/lawn
 
   # Use remote-development-manager for copy/paste and open support
   wget https://github.com/BlakeWilliams/remote-development-manager/releases/download/v0.0.3/rdm-linux-amd64
