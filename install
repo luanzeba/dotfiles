@@ -8,9 +8,6 @@ set -x
 function link_files() {
   # In some codespaces, there's no need to symlink dotfiles to $HOME
   if [[ ! $(pwd) -ef $HOME ]]; then
-    mkdir -p ~/.local/bin
-    mkdir -p ~/.config/
-    ln -s $(pwd)/.config/nvim ~/.config/
     ln -s $(pwd)/.gitignore_global ~/.gitignore_global
     ln -s $(pwd)/.git_template ~/.git_template
     ln -s $(pwd)/.tmux.conf ~/.tmux.conf
@@ -28,8 +25,6 @@ function link_files() {
     fi
   fi
 }
-
-brew_path=/home/linuxbrew/.linuxbrew # avoid brew command not found in codespaces
 
 function install_rust_and_cargo() {
   if command -v rustc >/dev/null 2>&1 && command -v cargo >/dev/null 2>&1; then
@@ -51,50 +46,6 @@ function install_gopls() {
   fi
 }
 
-function install_neovim() {
-  if ! command -v nvim &> /dev/null; then
-    previous=$(pwd)
-    echo "Neovim not found, installing..."
-    cd ~/bin
-    curl -LO https://github.com/neovim/neovim/releases/latest/download/nvim.appimage
-    chmod u+x nvim.appimage
-    if ./nvim.appimage --version >& /dev/null; then
-      sudo ln -s ./nvim.appimage nvim
-    else
-      ./nvim.appimage --appimage-extract
-      sudo mv squashfs-root /
-      sudo ln -s /squashfs-root/AppRun ~/bin/nvim
-      rm nvim.appimage
-    fi
-    cd $previous
-    echo "$HOME/bin/nvim"
-  else
-    echo "Neovim already installed, skipping..."
-    if nvim_path=$(command -v nvim); then
-      echo $nvim_path
-    else
-      echo "$brew_path/bin/nvim"
-    fi
-  fi
-}
-
-function setup_neovim {
-  nvim_path=$1
-
-  # Install Neovim plugins
-  sh -c 'curl -fLo "${XDG_DATA_HOME:-$HOME/.local/share}"/nvim/site/autoload/plug.vim --create-dirs \
-    https://raw.githubusercontent.com/junegunn/vim-plug/master/plug.vim'
-  $nvim_path --headless +PlugInstall +qa
-
-  # Hack for telescope-fzf-native, which doesn't make in codespaces for some reason
-  find /workspaces/ -name 'telescope-fzf-native.nvim' -type d | xargs bash -c 'cd "$0" && make'
-
-  # Accept Copilot license
-  mkdir -p ~/.config/github-copilot
-  echo '{"luanzeba":{"version":"2021-10-14"}}' > ~/.config/github-copilot/terms.json
-  $nvim_path --headless +"Copilot setup" +qa
-}
-
 function install_software() {
   curl -sL https://deb.nodesource.com/setup_16.x | sudo bash -
   sudo apt-get install -y nodejs
@@ -104,8 +55,7 @@ function install_software() {
   sudo apt -o DPkg::Lock::Timeout=600 install build-essential python3-venv ruby-dev fzf bat exa jq ripgrep tmux libfuse2 fuse software-properties-common -y
   install_rust_and_cargo
   install_gopls
-  nvim_path=$(install_neovim | tail -n 1)
-  setup_neovim $nvim_path
+  zsh nvim/install
 }
 
 function setup_software() {
@@ -120,14 +70,6 @@ function setup_software() {
   sudo mv rdm-linux-amd64 /usr/bin/rdm
   chmod +x /usr/bin/rdm
   gh config set browser "rdm open"
-
-  # Use lspconfig for Go language server
-  previous=$(pwd)
-  dir="${HOME}/.local/share/nvim/site/pack/nvim-lspconfig/opt/nvim-lspconfig/"
-  mkdir -p "$dir"
-  cd "$dir"
-  git clone 'https://github.com/neovim/nvim-lspconfig.git' .
-  cd $previous
 
   sudo chsh -s /bin/zsh $(whoami)
   zsh zsh/install.zsh

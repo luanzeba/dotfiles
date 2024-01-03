@@ -1,0 +1,61 @@
+#!/bin/zsh
+
+function install_neovim() {
+  if ! command -v nvim &> /dev/null; then
+    previous=$(pwd)
+    echo "Neovim not found, installing..."
+    cd ~/bin
+    curl -LO https://github.com/neovim/neovim/releases/latest/download/nvim.appimage
+    chmod u+x nvim.appimage
+    if ./nvim.appimage --version >& /dev/null; then
+      sudo ln -s ./nvim.appimage nvim
+    else
+      ./nvim.appimage --appimage-extract
+      sudo mv squashfs-root /
+      sudo ln -s /squashfs-root/AppRun ~/bin/nvim
+      rm nvim.appimage
+    fi
+    cd $previous
+    echo "$HOME/bin/nvim"
+  else
+    echo "Neovim already installed, skipping..."
+    if nvim_path=$(command -v nvim); then
+      echo $nvim_path
+    else
+      echo "/home/linuxbrew/.linuxbrew/bin/nvim"
+    fi
+  fi
+}
+
+function setup_neovim {
+  nvim_path=$1
+
+  # Install Neovim plugins
+  $nvim_path --headless "+Lazy! sync" +qa
+ 
+  # Accept Copilot license
+  mkdir -p ~/.config/github-copilot
+  echo '{"luanzeba":{"version":"2021-10-14"}}' > ~/.config/github-copilot/terms.json
+  $nvim_path --headless +"Copilot setup" +qa
+
+  # Use lspconfig for Go language server
+  previous=$(pwd)
+  dir="${HOME}/.local/share/nvim/site/pack/nvim-lspconfig/opt/nvim-lspconfig/"
+  mkdir -p "$dir"
+  cd "$dir"
+  git clone 'https://github.com/neovim/nvim-lspconfig.git' .
+  cd $previous
+}
+
+cd "$( dirname "$0" )"
+
+nvim_path=$(install_neovim | tail -n 1)
+
+# fetch the contents of NvChad submodule
+git submodule update --init
+
+mkdir -p $HOME/.config/
+ln -s "$(pwd)/NvChad" "$HOME/.config/nvim"
+
+setup_neovim $nvim_path
+
