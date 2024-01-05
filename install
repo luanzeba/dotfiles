@@ -38,9 +38,11 @@ function install_rust_and_cargo() {
   fi
 }
 
-function install_gopls() {
+function install_go_packages() {
   if command -v go >/dev/null 2>&1; then
     go install golang.org/x/tools/gopls@latest
+    go install github.com/incu6us/goimports-reviser/v3@latest
+    go install mvdan.cc/gofumpt@latest
   else
     echo "Go is not installed. Skipping gopls installation."
   fi
@@ -54,7 +56,7 @@ function install_software() {
   sudo npm install -g typescript-language-server typescript vscode-langservers-extracted eslint_d
   sudo apt -o DPkg::Lock::Timeout=600 install build-essential python3-venv ruby-dev fzf bat exa jq ripgrep tmux libfuse2 fuse software-properties-common -y
   install_rust_and_cargo
-  install_gopls
+  install_go_packages
   zsh nvim/install
 }
 
