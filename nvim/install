@@ -32,11 +32,15 @@ function setup_neovim {
 
   # Install Neovim plugins
   $nvim_path --headless "+Lazy! sync" +qa
+  $nvim_path --headless +"MasonInstallAll" +qa
  
   # Accept Copilot license
   mkdir -p ~/.config/github-copilot
   echo '{"luanzeba":{"version":"2021-10-14"}}' > ~/.config/github-copilot/terms.json
   $nvim_path --headless +"Copilot setup" +qa
+
+  # Install treesitter parsers
+  $nvim_path --headless +"TSInstall go ruby" +qa
 
   # Use lspconfig for Go language server
   previous=$(pwd)
