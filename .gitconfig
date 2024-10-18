@@ -16,6 +16,7 @@
 	main = !git symbolic-ref refs/remotes/origin/HEAD | cut -d'/' -f4
 	sm = !"git switch $(git main)"
 	rom = !"git fetch; git rebase origin/$(git main)"
+	smartpull = "!f() { \\\n  if [[ -n $(git status --porcelain) ]]; then \\\n    echo \"Stashing changes...\"; \\\n    git stash; \\\n    STASHED=true; \\\n  fi; \\\n  git pull --rebase; \\\n  if [ \"$STASHED\" = true ]; then \\\n    echo \"Applying stashed changes...\"; \\\n    git stash pop; \\\n  fi; \\\n}; f"
 [rerere] # automatic conflict resolution
 	enabled = true
 [rebase]
