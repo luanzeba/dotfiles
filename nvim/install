@@ -41,7 +41,7 @@ function setup_neovim {
   $nvim_path --headless +"Copilot setup" +qa
 
   # Install treesitter parsers
-  $nvim_path --headless +"TSInstall go ruby" +qa
+  $nvim_path --headless +"TSInstall! go ruby" +qa
 
   # Use lspconfig for Go language server
   previous=$(pwd)
