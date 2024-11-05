@@ -56,11 +56,9 @@ cd "$( dirname "$0" )"
 
 nvim_path=$(install_neovim | tail -n 1)
 
-# fetch the contents of NvChad submodule
-git submodule update --init
-
+# Copy contents of `nvim` directory to `~/.config/nvim`
 mkdir -p $HOME/.config/
-ln -s "$(pwd)/NvChad" "$HOME/.config/nvim"
+ln -s "$(pwd)" "$HOME/.config/nvim"
 
 setup_neovim $nvim_path
 
