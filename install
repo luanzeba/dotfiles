@@ -1,5 +1,4 @@
 #!/bin/zsh
-# GitHub codespaces setup.
 
 exec > >(tee -i $HOME/dotfiles_install.log)
 exec 2>&1
@@ -8,14 +7,14 @@ set -x
 function link_files() {
   # In some codespaces, there's no need to symlink dotfiles to $HOME
   if [[ ! $(pwd) -ef $HOME ]]; then
-    ln -s $(pwd)/.gitignore_global ~/.gitignore_global
-    ln -s $(pwd)/.git_template ~/.git_template
-    ln -s $(pwd)/.tmux.conf ~/.tmux.conf
+    ln -s $(pwd)/git/.gitignore_global ~/.gitignore_global
+    ln -s $(pwd)/git/.git_template ~/.git_template
+    ln -s $(pwd)/tmux/.tmux.conf ~/.tmux.conf
     ln -s $(pwd)/bin ~/bin
     ln -s $(pwd)/script/git-hooks/pre-push .git/hooks/pre-push
 
     rm -f ~/.gitconfig
-    ln -s $(pwd)/.gitconfig ~/.gitconfig
+    ln -s $(pwd)/git/.gitconfig ~/.gitconfig
     touch ~/.gitconfig-macos # create empty config file
 
     if [ -d "/workspaces/github/bin" ]; then
@@ -49,16 +48,14 @@ function install_go_packages() {
 }
 
 function install_mosh_and_tailscale() {
-  if [[ -n $CODESPACES ]]; then
-    # Install Mosh if not present
-    if ! command -v mosh-server &> /dev/null; then
-      sudo apt-get update && sudo apt-get install -y mosh
-    fi
+  # Install Mosh if not present
+  if ! command -v mosh-server &> /dev/null; then
+    sudo apt-get update && sudo apt-get install -y mosh
+  fi
 
-    # Install Tailscale if not present
-    if ! command -v tailscale &> /dev/null; then
-      curl -fsSL https://tailscale.com/install.sh | sh
-    fi
+  # Install Tailscale if not present
+  if ! command -v tailscale &> /dev/null; then
+    curl -fsSL https://tailscale.com/install.sh | sh
   fi
 }
 
@@ -84,7 +81,7 @@ function setup_software() {
 
   # Connect to Tailscale if auth key is provided
   if [[ -n "$TAILSCALE_AUTH_KEY" ]]; then
-    name=codespace-$(codespace_friendly_name)
+    name=codespace-$codespace_friendly_name
     sudo tailscale up --authkey=$TAILSCALE_AUTH_KEY --hostname=$name --ssh
     echo "Tailscale connected."
   fi
@@ -99,16 +96,25 @@ function setup_software() {
   zsh zsh/install.zsh
 }
 
-echo '🔗 Linking files.'
-echo `date +"%Y-%m-%d %T"`
-link_files
+# Most of this setup is for GitHub Codespaces
+if [[ -n $CODESPACES ]]; then
+  echo '🚀 Starting Codespaces setup.'
+  echo '🔗 Linking files.'
+  echo `date +"%Y-%m-%d %T"`
+  link_files
 
-echo '💽 Installing software'
-echo `date +"%Y-%m-%d %T"`
-install_software
+  echo '💽 Installing software'
+  echo `date +"%Y-%m-%d %T"`
+  install_software
 
-echo '🧰 Configuring software'
-echo `date +"%Y-%m-%d %T"`
-setup_software
-echo '✅ Done!'
-echo `date +"%Y-%m-%d %T"`
+  echo '🧰 Configuring software'
+  echo `date +"%Y-%m-%d %T"`
+  setup_software
+  echo '✅ Done!'
+  echo `date +"%Y-%m-%d %T"`
+else
+  # TODO: Add setup for local machine
+  zsh zsh/install.zsh
+  zsh nvim/install
+fi
+
