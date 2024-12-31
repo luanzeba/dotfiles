@@ -28,6 +28,12 @@ fi
 
 rdm server &                                                                                   # Start RDM server https://github.com/BlakeWilliams/remote-development-manager
 csw create -R $repo -m $machine --devcontainer-path ".devcontainer/devcontainer.json" --status # Create codespace, wait for it to come up, and store name
+
+# Copy ghostty's terminfo to the codespace for better terminal support
+# Hopefully temporary
+# https://ghostty.org/docs/help/terminfo#copy-ghostty's-terminfo-to-a-remote-machine
+infocmp -x | csw ssh -- tic -x -
+
 osascript -e "display notification \"✅ $(csw get)\" \
   with title \"Codespace ready\" sound name \"Glass\"" &                                       # Notify user that codespace is ready
 csw ssh -- -R 127.0.0.1:7391:$(rdm socket)                                                     # SSH to the codespace with socket forwarding
