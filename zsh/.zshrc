@@ -11,12 +11,13 @@ done
 source ~/.zsh/zsh-autosuggestions/zsh-autosuggestions.zsh
 
 if [[ `uname` == "Darwin" ]]; then
-    source $HOME/.zsh/os/macos.zsh
+  source $HOME/.zsh/os/macos.zsh
 fi
 
 alias v="nvim"
 alias vvim="vim $HOME/.config/nvim/init.vim"
 alias svim="source $HOME/.config/nvim/init.vim"
+alias tailscale="/Applications/Tailscale.app/Contents/MacOS/Tailscale"
 # Only define `cssh` if the `rdm` binary exists
 # https://github.com/BlakeWilliams/remote-development-manager
 if [[ -x "$(command -v rdm)" ]]; then

@@ -26,4 +26,4 @@ fi
 x86() { arch -arch x86_64 -e "PATH=$ORIGINAL_PATH" zsh }
 arm() { arch -arch arm64  -e "PATH=$ORIGINAL_PATH" zsh }
 
-alias icloud="cd $HOME/Library/Mobile\ Documents/com~apple~CloudDocs/"
+alias icloud="$HOME/Library/Mobile\ Documents/com~apple~CloudDocs/"
