@@ -1,34 +1,35 @@
 [user]
-	name = Luan Vieira
-	email = luanzeba@github.com
+  name = Luan Vieira
+  email = luanzeba@github.com
 [color]
-	ui = always
+  ui = always
 [push]
-	default = current
+  default = current
 [core]
-	excludesfile = ~/.gitignore_global
+  excludesfile = ~/.gitignore_global
 [init]
-	defaultBranch = main
-	templatedir = ~/.git_template
+  defaultBranch = main
+  templatedir = ~/.git_template
 [alias]
-	edit = !$EDITOR $(git ls-files -o -m --exclude-standard)
-	ci = !git commit --amend --no-edit && git push --force-with-lease
-	main = !git symbolic-ref refs/remotes/origin/HEAD | cut -d'/' -f4
-	sm = !"git switch $(git main)"
-	rom = !"git fetch; git rebase origin/$(git main)"
-	smartpull = "!f() { \\\n  if [[ -n $(git status --porcelain) ]]; then \\\n    echo \"Stashing changes...\"; \\\n    git stash; \\\n    STASHED=true; \\\n  fi; \\\n  git pull --rebase; \\\n  if [ \"$STASHED\" = true ]; then \\\n    echo \"Applying stashed changes...\"; \\\n    git stash pop; \\\n  fi; \\\n}; f"
+  ci = !git commit --amend --no-edit && git push --force-with-lease
+  edit = !$EDITOR $(git ls-files -o -m --exclude-standard)
+  main = !git symbolic-ref refs/remotes/origin/HEAD | cut -d'/' -f4
+  p = !git push -u origin $(git rev-parse --abbrev-ref HEAD)
+  rom = !"git fetch; git rebase origin/$(git main)"
+  sm = !"git switch $(git main)"
+  smartpull = "!f() { \\\n  if [[ -n $(git status --porcelain) ]]; then \\\n    echo \"Stashing changes...\"; \\\n    git stash; \\\n    STASHED=true; \\\n  fi; \\\n  git pull --rebase; \\\n  if [ \"$STASHED\" = true ]; then \\\n    echo \"Applying stashed changes...\"; \\\n    git stash pop; \\\n  fi; \\\n}; f"
 [rerere] # automatic conflict resolution
-	enabled = true
+  enabled = true
 [rebase]
-	autosquash = true
-	updateRefs = true
+  autosquash = true
+  updateRefs = true
 [merge]
-	conflictstyle = diff3
+  conflictstyle = diff3
 [github]
-	user = luanzeba
+  user = luanzeba
 [remote]
-	pushDefault = origin
+  pushDefault = origin
 [pull]
-	rebase = true
+  rebase = true
 [include]
-	path = ~/.gitconfig-macos
+  path = ~/.gitconfig-macos
