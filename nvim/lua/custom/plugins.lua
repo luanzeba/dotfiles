@@ -104,6 +104,11 @@ local plugins = {
     config = function()
       return require "custom.configs.null-ls"
     end
+  },
+
+  {
+    ft = "zig",
+    'ziglang/zig.vim', -- File detection and syntax highlighting for the zig programming language.
   }
 }
 return plugins

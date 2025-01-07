@@ -41,7 +41,10 @@ M.capabilities.textDocument.completion.completionItem = {
   },
 }
 
-require("lspconfig").lua_ls.setup {
+local lspconfig = require("lspconfig")
+
+-- Lua LSP
+lspconfig.lua_ls.setup {
   on_attach = M.on_attach,
   capabilities = M.capabilities,
 
@@ -64,7 +67,8 @@ require("lspconfig").lua_ls.setup {
   },
 }
 
-require("lspconfig").gopls.setup {
+-- Go LSP
+lspconfig.gopls.setup {
   on_attach = M.on_attach,
   capabilities = M.capabilities,
   settings = {
@@ -76,6 +80,19 @@ require("lspconfig").gopls.setup {
       staticcheck = true,
     },
   },
+}
+
+-- Zig LSP
+vim.api.nvim_create_autocmd('BufWritePre',{
+  pattern = {"*.zig", "*.zon"},
+  callback = function(ev)
+    vim.lsp.buf.format()
+  end
+})
+
+lspconfig.zls.setup {
+  on_attach = M.on_attach,
+  capabilities = M.capabilities,
 }
 
 return M
