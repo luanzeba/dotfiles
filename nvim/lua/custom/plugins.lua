@@ -109,6 +109,14 @@ local plugins = {
   {
     ft = "zig",
     'ziglang/zig.vim', -- File detection and syntax highlighting for the zig programming language.
+  },
+
+  {
+    -- match-up is a plugin that lets you highlight, navigate, and operate on
+    -- sets of matching text. It extends vim's % key to language-specific words
+    -- instead of just single characters.
+    'andymass/vim-matchup',
+    lazy = false,
   }
-}
-return plugins
+
+} return plugins
