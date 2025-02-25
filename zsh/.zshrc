@@ -36,3 +36,8 @@ bindkey '^F' autosuggest-accept
 # Expands symlinks on cd
 setopt CHASE_LINKS
 
+# Activate mise if it's installed
+# for local MacOS for now but might figure it out for Codespaces later
+if [[ -x ~/.local/bin/mise ]]; then
+  eval "$(~/.local/bin/mise activate zsh)"
+fi

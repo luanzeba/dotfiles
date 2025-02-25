@@ -43,7 +43,17 @@ function install_go_packages() {
     go install github.com/incu6us/goimports-reviser/v3@latest
     go install mvdan.cc/gofumpt@latest
   else
-    echo "Go is not installed. Skipping gopls installation."
+    echo "Go is not installed. Skipping Go packages installation."
+  fi
+}
+
+function install_typescript_packages() {
+  if command -v npm >/dev/null 2>&1; then
+    echo "Installing TypeScript packages..."
+    npm install -g typescript-language-server typescript prettier
+    echo "TypeScript packages installation complete."
+  else
+    echo "npm is not installed. Skipping TypeScript packages installation."
   fi
 }
 
@@ -60,15 +70,26 @@ function install_mosh_and_tailscale() {
 }
 
 function install_software() {
+  # Install Node.js
   curl -sL https://deb.nodesource.com/setup_16.x | sudo bash -
   sudo apt-get install -y nodejs
+  
+  # Install Git Delta
   curl https://github.com/dandavison/delta/releases/download/0.13.0/git-delta_0.13.0_amd64.deb > ~/git-delta.deb
   sudo dpkg -i ~/git-delta_0.13.0_amd64.deb
-  sudo npm install -g typescript-language-server typescript vscode-langservers-extracted eslint_d
+  
+  # Install system packages
   sudo apt -o DPkg::Lock::Timeout=600 install build-essential python3-venv ruby-dev fzf bat exa jq ripgrep tmux libfuse2 fuse software-properties-common -y
+  
+  # Install language-specific packages
+  install_typescript_packages
   install_rust_and_cargo
   install_go_packages
+  
+  # Install connectivity tools
   install_mosh_and_tailscale
+  
+  # Install Neovim configuration
   zsh nvim/install
 }
 
@@ -94,6 +115,14 @@ function setup_software() {
 
   sudo chsh -s /bin/zsh $(whoami)
   zsh zsh/install.zsh
+
+  # Install ruby-lsp
+  # Only run this inside a dotcom codespace
+  if [ -d "/workspaces/github" ]; then
+    export RAILS_ROOT="/workspaces/github"
+    export PATH=$RAILS_ROOT/vendor/ruby/"$(/workspaces/github/config/ruby-version)"/bin:$PATH
+    gem install ruby-lsp
+  fi
 }
 
 # Most of this setup is for GitHub Codespaces
@@ -113,8 +142,19 @@ if [[ -n $CODESPACES ]]; then
   echo '✅ Done!'
   echo `date +"%Y-%m-%d %T"`
 else
-  # TODO: Add setup for local machine
+  # Setup for local machine
+  echo '🚀 Starting local machine setup.'
+  echo '🔗 Linking files.'
+  echo `date +"%Y-%m-%d %T"`
+  link_files
+  
+  echo '🧰 Installing and configuring software'
+  echo `date +"%Y-%m-%d %T"`
+  install_typescript_packages
+  install_go_packages
   zsh zsh/install.zsh
   zsh nvim/install
+  echo '✅ Done!'
+  echo `date +"%Y-%m-%d %T"`
 fi
 

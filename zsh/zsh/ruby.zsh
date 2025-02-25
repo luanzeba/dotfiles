@@ -6,10 +6,6 @@ if [ -d /opt/homebrew/opt ]; then
   chruby_auto
 fi
 
-# if [ ! -z "$ARCH" ]; then
-# 	RUBIES=(~/.rubies/$ARCH/*)
-# fi
-
 selectgem(){
        if [ -z "$1" ]; then
                bundle show | tr -s ' ' | cut -d ' ' -f 3 | fzy

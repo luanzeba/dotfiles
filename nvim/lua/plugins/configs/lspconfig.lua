@@ -7,9 +7,6 @@ local utils = require "core.utils"
 -- export on_attach & capabilities for custom lspconfigs
 
 M.on_attach = function(client, bufnr)
-  client.server_capabilities.documentFormattingProvider = false
-  client.server_capabilities.documentRangeFormattingProvider = false
-
   utils.load_mappings("lspconfig", { buffer = bufnr })
 
   if client.server_capabilities.signatureHelpProvider then
@@ -93,6 +90,80 @@ vim.api.nvim_create_autocmd('BufWritePre',{
 lspconfig.zls.setup {
   on_attach = M.on_attach,
   capabilities = M.capabilities,
+}
+
+-- Ruby LSP
+lspconfig.ruby_lsp.setup({
+	on_attach = M.on_attach,
+	capabilities = M.capabilities,
+	init_options = {
+		formatter = "rubocop",
+		linters = { "rubocop" },
+		enabledFeatures = {
+			codeActions = true,
+			codeLens = true,
+			completion = true,
+			definition = true,
+			diagnostics = true,
+			documentHighlights = true,
+			documentLink = true,
+			documentSymbols = true,
+			foldingRanges = true,
+			formatting = true,
+			hover = true,
+			inlayHint = true,
+			onTypeFormatting = true,
+			selectionRanges = true,
+			semanticHighlighting = true,
+			signatureHelp = true,
+			typeHierarchy = true,
+			workspaceSymbol = true
+		},
+		featuresConfiguration = {
+			inlayHint = {
+				implicitHashValue = true,
+				implicitRescue = true
+			}
+		},
+	},
+})
+
+-- TypeScript/JavaScript LSP
+vim.api.nvim_create_autocmd('BufWritePre', {
+  pattern = {"*.tsx", "*.ts", "*.jsx", "*.js"},
+  callback = function(ev)
+    vim.lsp.buf.format()
+  end
+})
+
+lspconfig.tsserver.setup {
+  on_attach = M.on_attach,
+  capabilities = M.capabilities,
+  filetypes = { "typescript", "javascript", "typescriptreact", "javascriptreact" },
+  settings = {
+    typescript = {
+      inlayHints = {
+        includeInlayParameterNameHints = "all",
+        includeInlayParameterNameHintsWhenArgumentMatchesName = false,
+        includeInlayFunctionParameterTypeHints = true,
+        includeInlayVariableTypeHints = true,
+        includeInlayPropertyDeclarationTypeHints = true,
+        includeInlayFunctionLikeReturnTypeHints = true,
+        includeInlayEnumMemberValueHints = true,
+      },
+    },
+    javascript = {
+      inlayHints = {
+        includeInlayParameterNameHints = "all",
+        includeInlayParameterNameHintsWhenArgumentMatchesName = false,
+        includeInlayFunctionParameterTypeHints = true,
+        includeInlayVariableTypeHints = true,
+        includeInlayPropertyDeclarationTypeHints = true,
+        includeInlayFunctionLikeReturnTypeHints = true,
+        includeInlayEnumMemberValueHints = true,
+      },
+    },
+  },
 }
 
 return M
