@@ -61,3 +61,4 @@ mkdir -p $HOME/.config/
 ln -s "$(pwd)" "$HOME/.config/nvim"
 
 setup_neovim $nvim_path
+
