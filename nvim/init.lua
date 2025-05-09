@@ -71,8 +71,8 @@ autocmd("FileType", {
 	end,
 })
 
--- Autoformat on save
-vim.cmd([[autocmd BufWritePre * lua vim.lsp.buf.format()]])
+-- Autoformat only changed lines on save
+vim.cmd([[autocmd BufWritePre * lua require('util.format').format_edited_lines()]])
 
 -- Forward clipboard inside a codespace
 if os.getenv("CODESPACES") ~= nil then

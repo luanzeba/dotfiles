@@ -189,7 +189,14 @@ M.lspconfig = {
 			function()
 				vim.lsp.buf.format({ async = true })
 			end,
-			"LSP formatting",
+			"Format entire file",
+		},
+		
+		["<leader>f"] = {
+			function()
+				require('util.format').format_edited_lines()
+			end,
+			"Format only changed lines",
 		},
 	},
 
