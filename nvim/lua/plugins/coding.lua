@@ -78,10 +78,10 @@ return {
 				vim.schedule(function()
 					local wk = require("which-key")
 					-- Register text objects
-					wk.register({
-						["a"] = { name = "Around" },
-						["i"] = { name = "Inside" },
-					}, { mode = { "o", "x" } })
+					wk.add({
+						{ "a", group = "Around", mode = { "o", "x" } },
+						{ "i", group = "Inside", mode = { "o", "x" } },
+					})
 				end)
 			end
 		end,
