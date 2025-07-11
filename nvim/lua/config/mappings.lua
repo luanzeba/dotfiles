@@ -191,10 +191,10 @@ M.lspconfig = {
 			end,
 			"Format entire file",
 		},
-		
+
 		["<leader>f"] = {
 			function()
-				require('util.format').format_edited_lines()
+				require("util.format").format_edited_lines()
 			end,
 			"Format only changed lines",
 		},
@@ -250,13 +250,39 @@ M.blankline = {
 	n = {
 		["<leader>cc"] = {
 			function()
-				local ok, start = require("indent_blankline.utils").get_current_context(
-					vim.g.indent_blankline_context_patterns,
-					vim.g.indent_blankline_use_treesitter_scope
-				)
+				local ts_utils = require("nvim-treesitter.ts_utils")
+				local current_node = ts_utils.get_node_at_cursor()
 
-				if ok then
-					vim.api.nvim_win_set_cursor(vim.api.nvim_get_current_win(), { start, 0 })
+				if not current_node then
+					return
+				end
+
+				-- Find the parent node that represents a scope/context
+				local context_node = current_node
+				while context_node do
+					local node_type = context_node:type()
+					if
+						node_type:match("function")
+						or node_type:match("method")
+						or node_type:match("class")
+						or node_type:match("block")
+						or node_type:match("if")
+						or node_type:match("for")
+						or node_type:match("while")
+						or node_type:match("do")
+					then
+						break
+					end
+					local parent = context_node:parent()
+					if not parent then
+						break
+					end
+					context_node = parent
+				end
+
+				if context_node and context_node ~= current_node then
+					local start_row, start_col = context_node:start()
+					vim.api.nvim_win_set_cursor(0, { start_row + 1, start_col })
 					vim.cmd([[normal! _]])
 				end
 			end,
