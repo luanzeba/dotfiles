@@ -115,18 +115,25 @@ M.lspconfig = {
 			"LSP signature help",
 		},
 
-		["<leader>D"] = {
+		["<leader>lt"] = {
 			function()
 				vim.lsp.buf.type_definition()
 			end,
-			"LSP definition type",
+			"LSP type definition",
 		},
 
-		["<leader>ca"] = {
+		["<leader>lc"] = {
 			function()
 				vim.lsp.buf.code_action()
 			end,
 			"LSP code action",
+		},
+
+		["<leader>lr"] = {
+			function()
+				vim.lsp.buf.rename()
+			end,
+			"LSP rename",
 		},
 
 		["gr"] = {
@@ -164,25 +171,25 @@ M.lspconfig = {
 			"Diagnostic setloclist",
 		},
 
-		["<leader>wa"] = {
+		["<leader>lwa"] = {
 			function()
 				vim.lsp.buf.add_workspace_folder()
 			end,
-			"Add workspace folder",
+			"LSP add workspace folder",
 		},
 
-		["<leader>wr"] = {
+		["<leader>lwr"] = {
 			function()
 				vim.lsp.buf.remove_workspace_folder()
 			end,
-			"Remove workspace folder",
+			"LSP remove workspace folder",
 		},
 
-		["<leader>wl"] = {
+		["<leader>lwl"] = {
 			function()
 				print(vim.inspect(vim.lsp.buf.list_workspace_folders()))
 			end,
-			"List workspace folders",
+			"LSP list workspace folders",
 		},
 
 		["<leader>F"] = {
@@ -201,7 +208,7 @@ M.lspconfig = {
 	},
 
 	v = {
-		["<leader>ca"] = {
+		["<leader>lc"] = {
 			function()
 				vim.lsp.buf.code_action()
 			end,
