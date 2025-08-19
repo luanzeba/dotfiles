@@ -39,10 +39,16 @@ return {
 		opts = {
 			highlight = { enable = true },
 			indent = { enable = true },
+			fold = {
+				enable = true,
+				additional_vim_regex_highlighting = false,
+			},
 			ensure_installed = {
 				"bash",
 				"c",
 				"diff",
+				"embedded_template",
+				"erb",
 				"go",
 				"html",
 				"javascript",
@@ -154,5 +160,21 @@ return {
 		"windwp/nvim-ts-autotag",
 		event = "BufReadPost",
 		opts = {},
+	},
+
+	-- ERB folding configuration
+	{
+		"nvim-treesitter/nvim-treesitter",
+		ft = "eruby",
+		config = function()
+			-- ERB-specific folding configuration
+			vim.opt_local.foldmethod = "expr"
+			vim.opt_local.foldexpr = "nvim_treesitter#foldexpr()"
+			vim.opt_local.foldenable = true
+			vim.opt_local.foldlevel = 99
+			vim.opt_local.foldlevelstart = 99
+			vim.opt_local.foldcolumn = "1"
+			vim.opt_local.foldtext = "v:lua.vim.treesitter.foldtext()"
+		end,
 	},
 }
