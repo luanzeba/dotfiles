@@ -1,4 +1,9 @@
 #!/bin/sh 
 # Pick which codespaces to delete
 
-gh cs list | column -t | fzf -m  --reverse | tr -s ' ' | cut -d ' ' -f1 | xargs -I {}  gh cs delete -c {}
+FORCE_FLAG=""
+if [ "$1" = "--force" ]; then
+    FORCE_FLAG="--force"
+fi
+
+gh cs list | column -t | fzf -m  --reverse | tr -s ' ' | cut -d ' ' -f1 | xargs -I {} gh cs delete -c {} $FORCE_FLAG
