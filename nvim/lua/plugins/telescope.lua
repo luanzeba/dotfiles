@@ -3,13 +3,20 @@ return {
 	dependencies = {
 		"nvim-treesitter/nvim-treesitter",
 		{ "nvim-telescope/telescope-fzf-native.nvim", build = "make" },
+		"nvim-telescope/telescope-live-grep-args.nvim",
 	},
 	cmd = "Telescope",
 	keys = {
 		{ "<leader>ff", "<cmd>Telescope find_files<cr>", desc = "Find Files" },
-		{ "<leader>fg", "<cmd>Telescope live_grep<cr>", desc = "Live Grep" },
+		{ "<leader>fg", "<cmd>Telescope live_grep_args<cr>", desc = "Live Grep with Args" },
 		{ "<leader>fb", "<cmd>Telescope buffers<cr>", desc = "Buffers" },
 		{ "<leader>fh", "<cmd>Telescope help_tags<cr>", desc = "Help Tags" },
+		{ "<leader>fwd", function()
+			local dir = vim.fn.input("Directory: ", vim.fn.expand("%:p:h"), "dir")
+			if dir ~= "" then
+				require('telescope.builtin').live_grep({ search_dirs = { dir } })
+			end
+		end, desc = "Live grep in directory" },
 	},
 	opts = {
 		defaults = {
@@ -76,6 +83,7 @@ return {
 		-- Load extensions
 		pcall(function()
 			telescope.load_extension("fzf")
+			telescope.load_extension("live_grep_args")
 		end)
 	end,
 }
