@@ -55,7 +55,7 @@ function M.setup(_, opts)
   vim.api.nvim_create_autocmd("BufWritePre", {
     group = format_augroup,
     callback = function(args)
-      require("conform").format({ bufnr = args.buf })
+      require("conform").format({ bufnr = args.buf, async = true })
     end,
   })
 
@@ -82,8 +82,8 @@ return {
       ---@type conform.setupOpts
       local opts = {
         default_format_opts = {
-          timeout_ms = 3000,
-          async = false, -- not recommended to change
+          timeout_ms = 10000,
+          async = true,
           quiet = false, -- not recommended to change
           lsp_format = "fallback", -- not recommended to change
         },
@@ -104,6 +104,10 @@ return {
         ---@type table<string, conform.FormatterConfigOverride|fun(bufnr: integer): nil|conform.FormatterConfigOverride>
         formatters = {
           injected = { options = { ignore_errors = true } },
+          -- rubocop can be slow, give it extra time
+          rubocop = {
+            timeout_ms = 15000,
+          },
           -- # Example of using dprint only when a dprint.json file is present
           -- dprint = {
           --   condition = function(ctx)
