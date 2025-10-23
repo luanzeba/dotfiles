@@ -20,4 +20,12 @@ return {
 			{ "<leader>gD", "<cmd>Gdiffsplit<CR>", desc = "Horizontal diff split" },
 		},
 	},
+
+	{
+		"tpope/vim-rhubarb", -- GitHub extension for fugitive
+		dependencies = { "tpope/vim-fugitive" },
+		keys = {
+			{ "<leader>gb", "<cmd>GBrowse<CR>", desc = "Open in GitHub", mode = { "n", "v" } },
+		},
+	},
 }
