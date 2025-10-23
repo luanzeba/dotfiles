@@ -1,48 +1,52 @@
 #!/bin/zsh
 set -x
 
-# if `gh` is installed, use it to download the latest release
-function download_latest_helix_release() {
-  if command -v gh &> /dev/null; then
-    if [[ "$(uname)" == "Darwin" ]]; then
-      # When on MacOS, use the aarch64-macos pattern
-      PATTERN="*aarch64-macos.tar.xz"
-    elif [[ "$(uname)" == "Linux" ]]; then
-      # When on Linux, use the x86_64-linux pattern
-      PATTERN="*x86_64-linux.tar.xz"
-    else
-      echo "Unsupported operating system: $(uname)"
-      exit 1
-    fi
+# Build Helix from source
+function build_helix_from_source() {
+  echo "Building Helix from source..."
+  
+  # Check if Rust is installed
+  if ! command -v cargo &> /dev/null; then
+    echo "Rust is not installed. Installing Rust..."
+    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+    source "$HOME/.cargo/env"
+  fi
+  
+  # Clone the Helix repository
+  if [ ! -d "helix-source" ]; then
+    git clone https://github.com/helix-editor/helix helix-source
+  fi
+  
+  cd helix-source || exit 1
+  git pull  # Get latest changes
+  
+  # Build the project
+  cargo install --path helix-term --locked
+  
+  cd ..
+}
 
-    echo "Downloading Helix for ${PATTERN}..."
-    gh release download --pattern "${PATTERN}" --repo helix-editor/helix
-  else
-    echo "gh is not installed. Please install it to download the latest release of helix."
-    exit 1
+# Download runtime files
+function setup_runtime() {
+  echo "Setting up runtime files..."
+  if [ -d "helix-source/runtime" ]; then
+    ln -sf "$(pwd)/helix-source/runtime" "$HOME/.config/helix/runtime"
   fi
 }
 
-# Extract the downloaded tarball to ~/.config/helix/
-function extract_tarball() {
-  echo "Extracting the tarball..."
-  mkdir -p "~/.config/helix"
-  tar -xf helix-*.tar.xz -C . --strip-components=1
-}
-
-# Add the hx binary to our system's $PATH to allow it to be used from the command line.
+# Add the hx binary to our system's $PATH
 function add_binary_to_path() {
   echo "Adding hx to PATH..."
-  ln -sf "$HOME/.config/helix/hx" "$HOME/bin/hx"
+  # cargo install puts binaries in ~/.cargo/bin by default
+  ln -sf "$HOME/.cargo/bin/hx" "$HOME/bin/hx"
 }
 
 # Main script
 current_dir="$(pwd)"
 mkdir -p ~/.config/helix
 cd ~/.config/helix || exit 1
-download_latest_helix_release
-extract_tarball
+build_helix_from_source
+setup_runtime
 add_binary_to_path
 cd "$current_dir" || exit 1
-
 
