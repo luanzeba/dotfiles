@@ -241,7 +241,14 @@ M.telescope = {
 		["<leader>fh"] = { "<cmd> Telescope help_tags <CR>", "Help page" },
 		["<leader>fo"] = { "<cmd> Telescope oldfiles <CR>", "Find oldfiles" },
 		["<leader>fz"] = { "<cmd> Telescope current_buffer_fuzzy_find <CR>", "Find in current buffer" },
-		["<leader>fiw"] = { "<cmd> Telescope grep_string <CR>", "Find in word under cursor" },
+		["<leader>fiw"] = {
+			function()
+				require('telescope.builtin').live_grep({
+					default_text = vim.fn.expand("<cword>")
+				})
+			end,
+			"Find word under cursor with live grep"
+		},
 
 		-- git
 		["<leader>cm"] = { "<cmd> Telescope git_commits <CR>", "Git commits" },
