@@ -78,6 +78,34 @@ return {
 	},
 	config = function(_, opts)
 		local telescope = require("telescope")
+		local actions = require("telescope.actions")
+
+		-- Add custom action to open all selected files
+		local select_one_or_multi = function(prompt_bufnr)
+			local picker = require('telescope.actions.state').get_current_picker(prompt_bufnr)
+			local multi = picker:get_multi_selection()
+			if not vim.tbl_isempty(multi) then
+				actions.close(prompt_bufnr)
+				for _, j in pairs(multi) do
+					if j.path ~= nil then
+						vim.cmd(string.format("%s %s", "edit", j.path))
+					end
+				end
+			else
+				actions.select_default(prompt_bufnr)
+			end
+		end
+
+		-- Override the default select action
+		opts.defaults.mappings.i["<CR>"] = select_one_or_multi
+		opts.defaults.mappings.n["<CR>"] = select_one_or_multi
+
+		-- Add quickfix mappings
+		opts.defaults.mappings.i["<C-q>"] = actions.smart_send_to_qflist + actions.open_qflist
+		opts.defaults.mappings.n["<C-q>"] = actions.smart_send_to_qflist + actions.open_qflist
+		opts.defaults.mappings.i["<M-q>"] = actions.send_to_qflist + actions.open_qflist
+		opts.defaults.mappings.n["<M-q>"] = actions.send_to_qflist + actions.open_qflist
+
 		telescope.setup(opts)
 
 		-- Load extensions

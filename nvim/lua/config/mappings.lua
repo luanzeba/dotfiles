@@ -27,6 +27,7 @@ M.general = {
 
 		-- new buffer
 		["<leader>bn"] = { "<cmd> enew <CR>", "New buffer" },
+		["<leader><leader>"] = { "<C-^>", "Toggle to last buffer" },
 
 		-- quit
 		["<leader>q"] = { "<cmd> confirm qall <CR>", "Vim quick exit" },
