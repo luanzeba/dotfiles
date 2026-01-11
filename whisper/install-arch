@@ -1,0 +1,23 @@
+#!/bin/zsh
+set -x
+
+echo "Installing Whisper dependencies for Arch Linux..."
+
+# Install ffmpeg and python-pipx (if not present)
+echo "Installing ffmpeg and python-pipx..."
+sudo pacman -S --needed --noconfirm ffmpeg python-pipx
+
+# Ensure pipx path is set
+pipx ensurepath
+
+# Install whisper
+echo "Installing OpenAI Whisper..."
+if pipx list | grep -q openai-whisper; then
+  echo "OpenAI Whisper already installed, upgrading..."
+  pipx upgrade openai-whisper
+else
+  pipx install openai-whisper
+fi
+
+echo "✅ Whisper installation complete!"
+echo "You can now use the 'whisper' command to transcribe audio files."

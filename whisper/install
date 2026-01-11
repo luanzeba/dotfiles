@@ -1,0 +1,20 @@
+#!/bin/zsh
+set -x
+
+echo "🎙️  Whisper installation script"
+echo "================================"
+
+OS=$(uname)
+
+if [[ $OS == "Darwin" ]]; then
+  echo "Detected macOS"
+  source "$(dirname "$0")/install-macos"
+elif [[ -f /etc/arch-release ]]; then
+  echo "Detected Arch Linux"
+  source "$(dirname "$0")/install-arch"
+else
+  echo "⚠️  Whisper installation only supported on macOS and Arch Linux"
+  echo "Current OS: $OS"
+  echo "Skipping installation..."
+  exit 0
+fi

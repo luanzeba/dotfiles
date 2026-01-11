@@ -1,0 +1,33 @@
+#!/bin/zsh
+set -x
+
+echo "Installing Whisper dependencies for macOS..."
+
+# Install ffmpeg (if not present)
+if ! command -v ffmpeg &> /dev/null; then
+  echo "Installing ffmpeg..."
+  brew install ffmpeg
+else
+  echo "ffmpeg already installed, skipping..."
+fi
+
+# Install pipx (if not present)
+if ! command -v pipx &> /dev/null; then
+  echo "Installing pipx..."
+  brew install pipx
+  pipx ensurepath
+else
+  echo "pipx already installed, skipping..."
+fi
+
+# Install whisper
+echo "Installing OpenAI Whisper..."
+if pipx list | grep -q openai-whisper; then
+  echo "OpenAI Whisper already installed, upgrading..."
+  pipx upgrade openai-whisper
+else
+  pipx install openai-whisper
+fi
+
+echo "✅ Whisper installation complete!"
+echo "You can now use the 'whisper' command to transcribe audio files."
