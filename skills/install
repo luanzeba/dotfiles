@@ -1,0 +1,94 @@
+#!/bin/bash
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+EXTERNAL_DIR="$SCRIPT_DIR/external"
+SKILL_CREATOR_DIR="$EXTERNAL_DIR/skill-creator"
+
+# Download external skills (skill-creator from Anthropic)
+install() {
+    local base_url="https://raw.githubusercontent.com/anthropics/skills/main/skills/skill-creator"
+    local files=(
+        "SKILL.md"
+        "LICENSE.txt"
+        "references/output-patterns.md"
+        "references/workflows.md"
+        "scripts/init_skill.py"
+        "scripts/package_skill.py"
+        "scripts/quick_validate.py"
+    )
+
+    echo "Downloading skill-creator from anthropics/skills..."
+    mkdir -p "$SKILL_CREATOR_DIR/references" "$SKILL_CREATOR_DIR/scripts"
+
+    local failed=0
+    for file in "${files[@]}"; do
+        if ! curl -sSL --fail "$base_url/$file" -o "$SKILL_CREATOR_DIR/$file" 2>/dev/null; then
+            failed=1
+            break
+        fi
+    done
+
+    if [[ $failed -eq 1 ]]; then
+        echo "WARNING: Failed to download skill-creator from GitHub."
+        echo "  This may be due to:"
+        echo "    - Network connectivity issues"
+        echo "    - Changes in the anthropics/skills repository structure"
+        echo "  You can manually install from: https://github.com/anthropics/skills"
+        rm -rf "$SKILL_CREATOR_DIR"
+        return 1
+    fi
+
+    chmod +x "$SKILL_CREATOR_DIR/scripts/"*.py 2>/dev/null || true
+    echo "skill-creator downloaded successfully."
+    return 0
+}
+
+# Symlink a skill to global locations
+# Usage: symlink_skill <skill_path> <skill_name>
+symlink_skill() {
+    local skill_path="$1"
+    local skill_name="$2"
+
+    # Only link if the skill exists
+    if [[ ! -d "$skill_path" ]]; then
+        echo "Skill not found: $skill_path (skipping)"
+        return 1
+    fi
+
+    # Remove existing symlinks/directories
+    rm -rf ~/.config/opencode/skill/"$skill_name"
+    rm -rf ~/.claude/skills/"$skill_name"
+
+    # Create new symlinks
+    ln -s "$skill_path" ~/.config/opencode/skill/"$skill_name"
+    ln -s "$skill_path" ~/.claude/skills/"$skill_name"
+
+    echo "Linked: $skill_name"
+    return 0
+}
+
+# Create global skill directories and symlink all skills
+configure() {
+    # Create global skill directories
+    mkdir -p ~/.config/opencode/skill
+    mkdir -p ~/.claude/skills
+
+    # Link custom skills
+    symlink_skill "$SCRIPT_DIR/dotfiles" "dotfiles"
+
+    # Link external skills (only if download succeeded)
+    if [[ -d "$SKILL_CREATOR_DIR" ]]; then
+        symlink_skill "$SKILL_CREATOR_DIR" "skill-creator"
+    fi
+}
+
+# Main
+echo "Installing skills..."
+install || echo "Continuing without external skills..."
+configure
+echo ""
+echo "Skills installation complete!"
+echo ""
+echo "Installed skills:"
+ls -la ~/.config/opencode/skill/
