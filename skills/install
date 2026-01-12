@@ -4,9 +4,11 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 EXTERNAL_DIR="$SCRIPT_DIR/external"
 SKILL_CREATOR_DIR="$EXTERNAL_DIR/skill-creator"
+PRIVATE_DIR="$EXTERNAL_DIR/private"
+PRIVATE_REPO="luanzeba/private-dotfiles"
 
-# Download external skills (skill-creator from Anthropic)
-install() {
+# Download skill-creator from Anthropic's skills repo
+download_skill_creator() {
     local base_url="https://raw.githubusercontent.com/anthropics/skills/main/skills/skill-creator"
     local files=(
         "SKILL.md"
@@ -44,6 +46,46 @@ install() {
     return 0
 }
 
+# Clone or update private-dotfiles repo
+download_private_skills() {
+    echo "Fetching private skills from $PRIVATE_REPO..."
+
+    if [[ -d "$PRIVATE_DIR/.git" ]]; then
+        # Update existing clone
+        if ! git -C "$PRIVATE_DIR" pull --ff-only 2>/dev/null; then
+            echo "WARNING: Failed to update private skills (may have local changes)"
+            return 1
+        fi
+    else
+        # Fresh clone - prefer gh if available (handles auth automatically)
+        if command -v gh &>/dev/null && gh auth status &>/dev/null; then
+            if ! gh repo clone "$PRIVATE_REPO" "$PRIVATE_DIR" -- --depth 1 2>/dev/null; then
+                echo "WARNING: Failed to clone private skills."
+                echo "  Ensure you have access to $PRIVATE_REPO"
+                return 1
+            fi
+        else
+            # Fall back to SSH
+            if ! git clone --depth 1 "git@github.com:$PRIVATE_REPO.git" "$PRIVATE_DIR" 2>/dev/null; then
+                echo "WARNING: Failed to clone private skills."
+                echo "  Ensure you have access to $PRIVATE_REPO"
+                echo "  For SSH: Ensure your SSH key is set up"
+                echo "  Or install gh CLI and run 'gh auth login'"
+                return 1
+            fi
+        fi
+    fi
+
+    echo "Private skills fetched successfully."
+    return 0
+}
+
+# Download external and private skills
+install() {
+    download_skill_creator || echo "Continuing without skill-creator..."
+    download_private_skills || echo "Continuing without private skills..."
+}
+
 # Symlink a skill to global locations
 # Usage: symlink_skill <skill_path> <skill_name>
 symlink_skill() {
@@ -74,18 +116,29 @@ configure() {
     mkdir -p ~/.config/opencode/skill
     mkdir -p ~/.claude/skills
 
-    # Link custom skills
+    # Link custom skills from this repo
     symlink_skill "$SCRIPT_DIR/dotfiles" "dotfiles"
 
-    # Link external skills (only if download succeeded)
+    # Link external skills
     if [[ -d "$SKILL_CREATOR_DIR" ]]; then
         symlink_skill "$SKILL_CREATOR_DIR" "skill-creator"
+    fi
+
+    # Link private skills (each skill in private repo's skills/ directory)
+    if [[ -d "$PRIVATE_DIR/skills" ]]; then
+        for skill_dir in "$PRIVATE_DIR/skills"/*/; do
+            if [[ -d "$skill_dir" ]]; then
+                local skill_name
+                skill_name=$(basename "$skill_dir")
+                symlink_skill "$skill_dir" "$skill_name"
+            fi
+        done
     fi
 }
 
 # Main
 echo "Installing skills..."
-install || echo "Continuing without external skills..."
+install
 configure
 echo ""
 echo "Skills installation complete!"
