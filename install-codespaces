@@ -87,6 +87,7 @@ run_step "zsh/install.zsh" zsh "$SCRIPT_DIR/zsh/install.zsh"
 
 echo "$(date +'%Y-%m-%d %T') - Setting up Neovim"
 run_step "nvim/install" zsh "$SCRIPT_DIR/nvim/install"
+run_step "helix/install" zsh "$SCRIPT_DIR/helix/install"
 
 echo "$(date +'%Y-%m-%d %T') - Codespaces-specific setup"
 run_step "setup friendly name" setup_friendly_name
