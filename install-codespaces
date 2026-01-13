@@ -1,0 +1,86 @@
+#!/bin/bash
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+echo '🚀 Starting Codespaces setup.'
+
+# Ensure zsh is default shell
+ensure_zsh_default() {
+    if [[ "$SHELL" != */zsh ]]; then
+        sudo chsh -s "$(which zsh)" "$(whoami)"
+    fi
+}
+
+# Setup codespace friendly name for shell prompt
+setup_friendly_name() {
+    local friendly_name
+    friendly_name=$(gh api "/user/codespaces/$CODESPACE_NAME" -q .display_name 2>/dev/null || true)
+    if [[ -n "$friendly_name" && "$friendly_name" != *"Not Found"* ]]; then
+        echo "$friendly_name" > "$HOME/.friendly_name"
+    fi
+}
+
+# Install remote-development-manager for copy/paste and open support
+install_rdm() {
+    echo "Installing rdm..."
+    wget -q https://github.com/BlakeWilliams/remote-development-manager/releases/download/v0.0.3/rdm-linux-amd64 -O /tmp/rdm
+    sudo mv /tmp/rdm /usr/bin/rdm
+    sudo chmod +x /usr/bin/rdm
+    gh config set browser "rdm open"
+}
+
+# Install ruby-lsp for GitHub monolith
+setup_ruby_lsp() {
+    if [[ -d "/workspaces/github" ]]; then
+        echo "Setting up ruby-lsp for GitHub monolith..."
+        export RAILS_ROOT="/workspaces/github"
+        export PATH="$RAILS_ROOT/vendor/ruby/$(/workspaces/github/config/ruby-version)/bin:$PATH"
+        gem install ruby-lsp
+
+        # Symlink Ruby tools
+        if [[ -d "/workspaces/github/bin" ]]; then
+            sudo ln -sf /workspaces/github/bin/rubocop /usr/local/bin/rubocop
+            sudo ln -sf /workspaces/github/bin/srb /usr/local/bin/srb
+            sudo ln -sf /workspaces/github/bin/solargraph /usr/local/bin/solargraph
+        fi
+    fi
+}
+
+# Install system packages
+install_apt_packages() {
+    echo "Installing apt packages..."
+    sudo apt-get update
+    sudo apt -o DPkg::Lock::Timeout=600 install -y \
+        build-essential python3-venv ruby-dev fzf bat exa jq ripgrep tmux \
+        libfuse2 fuse software-properties-common
+}
+
+# Main execution
+echo "$(date +'%Y-%m-%d %T') - Installing apt packages"
+install_apt_packages
+
+echo "$(date +'%Y-%m-%d %T') - Configuring tools"
+bash "$SCRIPT_DIR/git/install"
+bash "$SCRIPT_DIR/tmux/install"
+bash "$SCRIPT_DIR/bin/install"
+
+echo "$(date +'%Y-%m-%d %T') - Installing languages and tools"
+bash "$SCRIPT_DIR/rust/install"
+bash "$SCRIPT_DIR/go/install"
+bash "$SCRIPT_DIR/node/install"
+bash "$SCRIPT_DIR/opencode/install"
+
+echo "$(date +'%Y-%m-%d %T') - Setting up shell"
+ensure_zsh_default
+zsh "$SCRIPT_DIR/zsh/install.zsh"
+
+echo "$(date +'%Y-%m-%d %T') - Setting up Neovim"
+zsh "$SCRIPT_DIR/nvim/install"
+
+echo "$(date +'%Y-%m-%d %T') - Codespaces-specific setup"
+setup_friendly_name
+install_rdm
+setup_ruby_lsp
+
+echo "$(date +'%Y-%m-%d %T') - ✅ Codespaces setup complete!"
