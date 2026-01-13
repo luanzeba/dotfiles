@@ -1,3 +1,6 @@
+# Enable true color support for terminals (helps helix, nvim, etc.)
+export COLORTERM=truecolor
+
 # Source configs
 for config_file ($HOME/.zsh/*.zsh); do
   source $config_file
