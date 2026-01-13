@@ -1,0 +1,20 @@
+#!/bin/bash
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+install() {
+    # Git comes pre-installed on all target systems
+    :
+}
+
+configure() {
+    ln -sf "$SCRIPT_DIR/.gitconfig" ~/.gitconfig
+    ln -sf "$SCRIPT_DIR/.gitignore_global" ~/.gitignore_global
+    ln -sf "$SCRIPT_DIR/.git_template" ~/.git_template
+    touch ~/.gitconfig-macos  # create empty file for include directive
+}
+
+# Main
+install
+configure
