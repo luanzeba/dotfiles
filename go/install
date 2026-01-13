@@ -1,0 +1,23 @@
+#!/bin/bash
+set -e
+
+install() {
+    # Go binary installed via system package manager
+    :
+}
+
+configure() {
+    if ! command -v go &>/dev/null; then
+        echo "Go not installed, skipping Go tools"
+        return
+    fi
+
+    echo "Installing Go tools..."
+    go install golang.org/x/tools/gopls@latest
+    go install github.com/incu6us/goimports-reviser/v3@latest
+    go install mvdan.cc/gofumpt@latest
+}
+
+# Main
+install
+configure
