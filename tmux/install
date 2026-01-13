@@ -1,0 +1,17 @@
+#!/bin/bash
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+install() {
+    # Tmux installed via system package manager
+    :
+}
+
+configure() {
+    ln -sf "$SCRIPT_DIR/.tmux.conf" ~/.tmux.conf
+}
+
+# Main
+install
+configure
