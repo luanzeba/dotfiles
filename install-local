@@ -1,7 +1,17 @@
 #!/bin/bash
-set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+FAILED_STEPS=()
+
+# Helper to run a step and track failures
+run_step() {
+    local name="$1"
+    shift
+    if ! "$@"; then
+        FAILED_STEPS+=("$name")
+        echo "⚠️  $name failed, continuing..."
+    fi
+}
 
 echo '🚀 Starting local machine setup.'
 
@@ -18,23 +28,35 @@ is_arch() {
 
 # Main execution
 echo "$(date +'%Y-%m-%d %T') - Configuring tools"
-bash "$SCRIPT_DIR/git/install"
-bash "$SCRIPT_DIR/tmux/install"
-bash "$SCRIPT_DIR/bin/install"
+run_step "git/install" bash "$SCRIPT_DIR/git/install"
+run_step "tmux/install" bash "$SCRIPT_DIR/tmux/install"
+run_step "bin/install" bash "$SCRIPT_DIR/bin/install"
 
 echo "$(date +'%Y-%m-%d %T') - Installing languages and tools"
-bash "$SCRIPT_DIR/go/install"
-bash "$SCRIPT_DIR/node/install"
-bash "$SCRIPT_DIR/opencode/install"
+run_step "go/install" bash "$SCRIPT_DIR/go/install"
+run_step "node/install" bash "$SCRIPT_DIR/node/install"
+run_step "opencode/install" bash "$SCRIPT_DIR/opencode/install"
 
 echo "$(date +'%Y-%m-%d %T') - Setting up shell"
 if is_arch; then
-    ensure_zsh_default
+    run_step "ensure zsh default" ensure_zsh_default
 fi
-zsh "$SCRIPT_DIR/zsh/install.zsh"
+run_step "zsh/install.zsh" zsh "$SCRIPT_DIR/zsh/install.zsh"
 
 echo "$(date +'%Y-%m-%d %T') - Setting up editors"
-zsh "$SCRIPT_DIR/nvim/install"
-zsh "$SCRIPT_DIR/helix/install"
+run_step "nvim/install" zsh "$SCRIPT_DIR/nvim/install"
+run_step "helix/install" zsh "$SCRIPT_DIR/helix/install"
 
-echo "$(date +'%Y-%m-%d %T') - ✅ Local setup complete!"
+# Report any failures
+if [[ ${#FAILED_STEPS[@]} -gt 0 ]]; then
+    echo ""
+    echo "⚠️  The following steps failed:"
+    for step in "${FAILED_STEPS[@]}"; do
+        echo "  - $step"
+    done
+    echo ""
+    echo "Review the log above for details."
+    echo "$(date +'%Y-%m-%d %T') - ⚠️ Local setup completed with errors"
+else
+    echo "$(date +'%Y-%m-%d %T') - ✅ Local setup complete!"
+fi
