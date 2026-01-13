@@ -57,18 +57,6 @@ function install_typescript_packages() {
   fi
 }
 
-function install_mosh_and_tailscale() {
-  # Install Mosh if not present
-  if ! command -v mosh-server &> /dev/null; then
-    sudo apt-get update && sudo apt-get install -y mosh
-  fi
-
-  # Install Tailscale if not present
-  if ! command -v tailscale &> /dev/null; then
-    curl -fsSL https://tailscale.com/install.sh | sh
-  fi
-}
-
 function install_software() {
   # Install Node.js
   curl -sL https://deb.nodesource.com/setup_16.x | sudo bash -
@@ -86,9 +74,6 @@ function install_software() {
   install_rust_and_cargo
   install_go_packages
   
-  # Install connectivity tools
-  install_mosh_and_tailscale
-  
   # Install Neovim configuration
   zsh nvim/install
 }
@@ -98,13 +83,6 @@ function setup_software() {
   codespace_friendly_name=$(gh api "/user/codespaces/$CODESPACE_NAME" -q .display_name)
   if [[ $? -eq 0 && $codespace_friendly_name != *"Not Found"* ]]; then
     echo $codespace_friendly_name >> $HOME/.friendly_name
-  fi
-
-  # Connect to Tailscale if auth key is provided
-  if [[ -n "$TAILSCALE_AUTH_KEY" ]]; then
-    name=codespace-$codespace_friendly_name
-    sudo tailscale up --authkey=$TAILSCALE_AUTH_KEY --hostname=$name --ssh
-    echo "Tailscale connected."
   fi
 
   # Use remote-development-manager for copy/paste and open support
