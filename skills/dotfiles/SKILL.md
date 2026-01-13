@@ -31,14 +31,18 @@ See [references/tool-template.md](references/tool-template.md) for the install s
 | Tool | Directory | Config Location | Has Install Script |
 |------|-----------|-----------------|-------------------|
 | Neovim | `nvim/` | `~/.config/nvim` | Yes |
-| Tmux | `tmux/` | `~/.tmux.conf` | No (symlinked by main) |
+| Tmux | `tmux/` | `~/.tmux.conf` | Yes |
 | Zsh | `zsh/` | `~/.zshrc`, `~/.zsh/` | Yes (`install.zsh`) |
-| Git | `git/` | `~/.gitconfig` | No (symlinked by main) |
+| Git | `git/` | `~/.gitconfig` | Yes |
 | Ghostty | `ghostty/` | `~/.config/ghostty` | No |
 | Helix | `helix/` | `~/.config/helix` | Yes (builds from source) |
 | Whisper | `whisper/` | N/A | Yes (macOS/Arch only) |
 | OpenCode | `opencode/` | `~/.config/opencode/` | Yes |
 | Skills | `skills/` | `~/.config/opencode/skill/`, `~/.claude/skills/` | Yes |
+| Rust | `rust/` | N/A | Yes (rustup) |
+| Go | `go/` | N/A | Yes (Go tools: gopls, gofumpt, etc.) |
+| Node | `node/` | N/A | Yes (fnm + TypeScript tools) |
+| Bin | `bin/` | `~/bin` | Yes (custom scripts) |
 
 ## Platform Support
 
@@ -49,6 +53,12 @@ See [references/tool-template.md](references/tool-template.md) for the install s
 | Arch/Omarchy | `command -v pacman` | `pacman`/`yay` | Arch + Hyprland |
 
 See [references/platform-detection.md](references/platform-detection.md) for detection code snippets.
+
+## Key Principles
+
+- **Always install latest versions**: Install scripts should always fetch the latest stable/LTS version of tools, not pin to specific versions. Use `@latest` tags, `--lts` flags, or omit version specifiers where possible.
+- **Idempotent scripts**: Install scripts should be safe to run multiple times. Check if tools are already installed before reinstalling.
+- **Platform-aware**: Use platform detection to handle differences between Codespaces, macOS, and Arch.
 
 ## Common Tasks
 
@@ -72,11 +82,18 @@ Key locations:
 ### Running Install Scripts
 
 ```bash
-# Main install (primarily for Codespaces)
+# Main install (dispatches to platform-specific script)
 ~/dotfiles/install
+
+# Platform-specific scripts (called by main install)
+~/dotfiles/install-codespaces   # GitHub Codespaces
+~/dotfiles/install-local        # macOS and Arch
 
 # Tool-specific installs
 ~/dotfiles/nvim/install
 ~/dotfiles/zsh/install.zsh
 ~/dotfiles/skills/install
+~/dotfiles/node/install
+~/dotfiles/rust/install
+~/dotfiles/go/install
 ```
