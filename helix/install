@@ -1,52 +1,48 @@
-#!/bin/zsh
-set -x
+#!/bin/bash
+set -e
 
-# Build Helix from source
-function build_helix_from_source() {
-  echo "Building Helix from source..."
-  
-  # Check if Rust is installed
-  if ! command -v cargo &> /dev/null; then
-    echo "Rust is not installed. Installing Rust..."
-    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-    source "$HOME/.cargo/env"
-  fi
-  
-  # Clone the Helix repository
-  if [ ! -d "helix-source" ]; then
-    git clone https://github.com/helix-editor/helix helix-source
-  fi
-  
-  cd helix-source || exit 1
-  git pull  # Get latest changes
-  
-  # Build the project
-  cargo install --path helix-term --locked
-  
-  cd ..
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+HELIX_CONFIG_DIR="$HOME/.config/helix"
+
+install() {
+    echo "Installing Helix from source..."
+
+    # Check if Rust is installed
+    if ! command -v cargo &>/dev/null; then
+        echo "Rust is not installed. Installing Rust..."
+        curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+        source "$HOME/.cargo/env"
+    fi
+
+    mkdir -p "$HELIX_CONFIG_DIR"
+    cd "$HELIX_CONFIG_DIR"
+
+    # Clone the Helix repository
+    if [[ ! -d "helix-source" ]]; then
+        git clone https://github.com/helix-editor/helix helix-source
+    fi
+
+    cd helix-source
+    git pull  # Get latest changes
+
+    # Build the project
+    cargo install --path helix-term --locked
+
+    # Setup runtime files
+    echo "Setting up runtime files..."
+    ln -sf "$HELIX_CONFIG_DIR/helix-source/runtime" "$HELIX_CONFIG_DIR/runtime"
+
+    # Add hx to ~/bin (cargo install puts binaries in ~/.cargo/bin)
+    echo "Adding hx to ~/bin..."
+    mkdir -p "$HOME/bin"
+    ln -sf "$HOME/.cargo/bin/hx" "$HOME/bin/hx"
 }
 
-# Download runtime files
-function setup_runtime() {
-  echo "Setting up runtime files..."
-  if [ -d "helix-source/runtime" ]; then
-    ln -sf "$(pwd)/helix-source/runtime" "$HOME/.config/helix/runtime"
-  fi
+configure() {
+    mkdir -p "$HELIX_CONFIG_DIR"
+    ln -sf "$SCRIPT_DIR/config.toml" "$HELIX_CONFIG_DIR/config.toml"
 }
 
-# Add the hx binary to our system's $PATH
-function add_binary_to_path() {
-  echo "Adding hx to PATH..."
-  # cargo install puts binaries in ~/.cargo/bin by default
-  ln -sf "$HOME/.cargo/bin/hx" "$HOME/bin/hx"
-}
-
-# Main script
-current_dir="$(pwd)"
-mkdir -p ~/.config/helix
-cd ~/.config/helix || exit 1
-build_helix_from_source
-setup_runtime
-add_binary_to_path
-cd "$current_dir" || exit 1
-
+# Main
+install
+configure
