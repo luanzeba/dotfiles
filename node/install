@@ -1,0 +1,38 @@
+#!/bin/bash
+set -e
+
+FNM_DIR="$HOME/.local/share/fnm"
+
+install() {
+    if command -v fnm &>/dev/null; then
+        echo "fnm already installed"
+    else
+        echo "Installing fnm..."
+        curl -fsSL https://fnm.vercel.app/install | bash -s -- --install-dir "$FNM_DIR" --skip-shell
+    fi
+
+    # Ensure fnm is in PATH for this script
+    export PATH="$FNM_DIR:$PATH"
+    eval "$(fnm env)"
+
+    echo "Installing latest LTS Node.js..."
+    fnm install --lts
+    fnm default lts-latest
+}
+
+configure() {
+    export PATH="$FNM_DIR:$PATH"
+    eval "$(fnm env)"
+
+    if ! command -v npm &>/dev/null; then
+        echo "npm not available, skipping TypeScript packages"
+        return
+    fi
+
+    echo "Installing TypeScript packages..."
+    npm install -g typescript-language-server typescript prettier
+}
+
+# Main
+install
+configure
