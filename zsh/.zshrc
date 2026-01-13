@@ -41,3 +41,6 @@ setopt CHASE_LINKS
 if [[ -x ~/.local/bin/mise ]]; then
   eval "$(~/.local/bin/mise activate zsh)"
 fi
+
+# opencode
+export PATH="$HOME/.opencode/bin:$PATH"

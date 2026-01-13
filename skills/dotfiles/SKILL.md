@@ -37,6 +37,7 @@ See [references/tool-template.md](references/tool-template.md) for the install s
 | Ghostty | `ghostty/` | `~/.config/ghostty` | No |
 | Helix | `helix/` | `~/.config/helix` | Yes (builds from source) |
 | Whisper | `whisper/` | N/A | Yes (macOS/Arch only) |
+| OpenCode | `opencode/` | `~/.config/opencode/` | Yes |
 | Skills | `skills/` | `~/.config/opencode/skill/`, `~/.claude/skills/` | Yes |
 
 ## Platform Support

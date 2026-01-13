@@ -57,6 +57,10 @@ function install_typescript_packages() {
   fi
 }
 
+function install_opencode() {
+  bash opencode/install
+}
+
 function install_software() {
   # Install Node.js
   curl -sL https://deb.nodesource.com/setup_16.x | sudo bash -
@@ -73,6 +77,9 @@ function install_software() {
   install_typescript_packages
   install_rust_and_cargo
   install_go_packages
+  
+  # Install tools
+  install_opencode
   
   # Install Neovim configuration
   zsh nvim/install
@@ -130,6 +137,7 @@ else
   echo `date +"%Y-%m-%d %T"`
   install_typescript_packages
   install_go_packages
+  install_opencode
   zsh zsh/install.zsh
   zsh nvim/install
   zsh helix/install

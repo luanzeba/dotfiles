@@ -1,0 +1,17 @@
+#!/bin/bash
+set -e
+
+# Install opencode binary
+install() {
+    echo "Installing opencode..."
+    curl -fsSL https://opencode.ai/install | bash -s -- --no-modify-path
+}
+
+# PATH is managed in zsh/.zshrc, no additional configuration needed
+configure() {
+    :
+}
+
+# Main
+install
+configure
