@@ -1,0 +1,25 @@
+#!/bin/bash
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+install() {
+    # Scripts are part of dotfiles, nothing to install
+    :
+}
+
+configure() {
+    # Symlink bin directory to ~/bin
+    if [[ ! -e "$HOME/bin" ]]; then
+        ln -s "$SCRIPT_DIR" "$HOME/bin"
+    elif [[ -L "$HOME/bin" ]]; then
+        # Already a symlink, update it
+        ln -sf "$SCRIPT_DIR" "$HOME/bin"
+    else
+        echo "Warning: ~/bin exists and is not a symlink, skipping"
+    fi
+}
+
+# Main
+install
+configure
