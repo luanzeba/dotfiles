@@ -1,0 +1,21 @@
+#!/bin/bash
+set -e
+
+install() {
+    if command -v rustc &>/dev/null && command -v cargo &>/dev/null; then
+        echo "Rust already installed: $(rustc --version)"
+        return
+    fi
+
+    echo "Installing Rust via rustup..."
+    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+}
+
+configure() {
+    # PATH managed in shell config (~/.cargo/bin is added by rustup)
+    :
+}
+
+# Main
+install
+configure
