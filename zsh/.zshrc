@@ -44,3 +44,9 @@ fi
 
 # opencode
 export PATH="$HOME/.opencode/bin:$PATH"
+
+# fnm (Fast Node Manager)
+if [[ -d "$HOME/.local/share/fnm" ]]; then
+    export PATH="$HOME/.local/share/fnm:$PATH"
+    eval "$(fnm env)"
+fi
