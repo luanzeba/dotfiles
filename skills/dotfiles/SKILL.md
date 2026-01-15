@@ -43,6 +43,7 @@ See [references/tool-template.md](references/tool-template.md) for the install s
 | Go | `go/` | N/A | Yes (Go tools: gopls, gofumpt, etc.) |
 | Node | `node/` | N/A | Yes (fnm + TypeScript tools) |
 | Bin | `bin/` | `~/bin` | Yes (custom scripts) |
+| jj | `jj/` | `~/.jjconfig.toml` | Yes (Jujutsu VCS) |
 
 ## Platform Support
 
@@ -51,6 +52,7 @@ See [references/tool-template.md](references/tool-template.md) for the install s
 | GitHub Codespaces | `$CODESPACES` set | `apt` | Debian-based, ephemeral |
 | macOS | `uname == Darwin` | `brew` | Personal machines |
 | Arch/Omarchy | `command -v pacman` | `pacman`/`yay` | Arch + Hyprland |
+| Omarchy | `~/.local/share/omarchy` exists | `pacman`/`yay` | Uses default configs, skip apply() |
 
 See [references/platform-detection.md](references/platform-detection.md) for detection code snippets.
 
@@ -59,13 +61,32 @@ See [references/platform-detection.md](references/platform-detection.md) for det
 - **Always install latest versions**: Install scripts should always fetch the latest stable/LTS version of tools, not pin to specific versions. Use `@latest` tags, `--lts` flags, or omit version specifiers where possible.
 - **Idempotent scripts**: Install scripts should be safe to run multiple times. Check if tools are already installed before reinstalling.
 - **Platform-aware**: Use platform detection to handle differences between Codespaces, macOS, and Arch.
+- **Script pattern**: Each tool script should have `install()`, `configure()`, and optionally `apply()` and `update()` functions.
+
+## dotfiles CLI
+
+The `dotfiles` command (in `~/bin/dotfiles`) provides easy management:
+
+```bash
+dotfiles status   # Show VCS status of dotfiles repo
+dotfiles pull     # Pull latest and apply changes (skipped on Omarchy)
+dotfiles edit     # Open dotfiles in $EDITOR
+dotfiles update   # Update tools (brew, nvim plugins, rustup, etc.)
+dotfiles doctor   # Check if everything is set up correctly
+```
+
+The CLI uses jj (Jujutsu) if available, falling back to git.
 
 ## Common Tasks
 
 ### Adding a New Tool
 
 1. Create `<tool>/` directory at repo root
-2. Create `<tool>/install` script using the template (with `install()` and `configure()` functions)
+2. Create `<tool>/install` script using the template with:
+   - `install()` - Install the tool binary/package
+   - `configure()` - Symlink configs, set up environment
+   - `apply()` (optional) - Reload config after `dotfiles pull`
+   - `update()` (optional) - Update tool for `dotfiles update`
 3. Add config files to the directory
 4. Test on each platform
 5. Optionally integrate with main `./install` script
@@ -96,4 +117,21 @@ Key locations:
 ~/dotfiles/node/install
 ~/dotfiles/rust/install
 ~/dotfiles/go/install
+~/dotfiles/jj/install
+```
+
+## Shared Utilities
+
+The `lib/common.sh` file provides shared functions for all scripts:
+
+```bash
+source "$DOTFILES_DIR/lib/common.sh"
+
+dotfiles_dir    # Get dotfiles path (handles Codespaces)
+is_codespaces   # Check if running in Codespaces
+is_macos        # Check if running on macOS
+is_arch         # Check if running on Arch Linux
+is_omarchy      # Check if running on Omarchy
+vcs_cmd         # Run jj or git command
+log_info/log_success/log_warn/log_error  # Logging helpers
 ```

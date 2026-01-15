@@ -12,6 +12,14 @@ configure() {
     ln -sf "$SCRIPT_DIR/.tmux.conf" ~/.tmux.conf
 }
 
+apply() {
+    # Reload tmux config if tmux is running
+    if command -v tmux &>/dev/null && tmux list-sessions &>/dev/null; then
+        tmux source-file ~/.tmux.conf
+        echo "Reloaded tmux config"
+    fi
+}
+
 # Main
 install
 configure

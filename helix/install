@@ -43,6 +43,18 @@ configure() {
     ln -sf "$SCRIPT_DIR/config.toml" "$HELIX_CONFIG_DIR/config.toml"
 }
 
+apply() {
+    # Helix reads config on startup, nothing to reload
+    :
+}
+
+update() {
+    echo "Updating Helix..."
+    cd "$HELIX_CONFIG_DIR/helix-source"
+    git pull
+    cargo install --path helix-term --locked
+}
+
 # Main
 install
 configure

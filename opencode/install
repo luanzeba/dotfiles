@@ -12,6 +12,11 @@ configure() {
     :
 }
 
+update() {
+    echo "Updating opencode..."
+    curl -fsSL https://opencode.ai/install | bash -s -- --no-modify-path
+}
+
 # Main
 install
 configure

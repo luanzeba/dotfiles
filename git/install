@@ -15,6 +15,11 @@ configure() {
     touch ~/.gitconfig-macos  # create empty file for include directive
 }
 
+apply() {
+    # Git config is read on each command, nothing to reload
+    :
+}
+
 # Main
 install
 configure

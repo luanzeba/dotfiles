@@ -33,12 +33,18 @@ if command -v pacman &>/dev/null; then
 fi
 ```
 
-For Omarchy specifically (Arch + Hyprland), you might also check:
+### Omarchy
+
+Omarchy is Arch Linux with a custom Hyprland setup. Detect it by checking for its marker directory:
+
 ```bash
-if [[ -n "$HYPRLAND_INSTANCE_SIGNATURE" ]]; then
-    # Running under Hyprland
+if [[ -d "$HOME/.local/share/omarchy" ]]; then
+    # Running on Omarchy
+    # Uses default Omarchy configs, skip dotfiles apply()
 fi
 ```
+
+Note: Omarchy uses its own configs, so `dotfiles pull` skips `apply()` on Omarchy.
 
 ## Package Manager Commands
 

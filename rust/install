@@ -16,6 +16,13 @@ configure() {
     :
 }
 
+update() {
+    if command -v rustup &>/dev/null; then
+        echo "Updating Rust toolchain..."
+        rustup update
+    fi
+}
+
 # Main
 install
 configure

@@ -1,63 +1,72 @@
 #!/bin/zsh
-set -x
 
-function install_neovim() {
-  if ! command -v nvim &> /dev/null; then
-    previous=$(pwd)
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+install() {
+    if command -v nvim &>/dev/null; then
+        echo "Neovim already installed, skipping binary install..."
+        return 0
+    fi
+    
     echo "Neovim not found, installing..."
+    mkdir -p ~/bin
     cd ~/bin
+    
     curl -LO https://github.com/neovim/neovim/releases/latest/download/nvim.appimage
     chmod u+x nvim.appimage
-    if ./nvim.appimage --version >& /dev/null; then
-      sudo ln -s ./nvim.appimage nvim
+    
+    if ./nvim.appimage --version &>/dev/null; then
+        ln -sf ./nvim.appimage nvim
     else
-      ./nvim.appimage --appimage-extract
-      sudo mv squashfs-root /
-      sudo ln -s /squashfs-root/AppRun ~/bin/nvim
-      rm nvim.appimage
+        # FUSE not available, extract appimage
+        ./nvim.appimage --appimage-extract
+        sudo mv squashfs-root /
+        ln -sf /squashfs-root/AppRun ~/bin/nvim
+        rm nvim.appimage
     fi
-    cd $previous
-    echo "$HOME/bin/nvim"
-  else
-    echo "Neovim already installed, skipping..."
-    if nvim_path=$(command -v nvim); then
-      echo $nvim_path
-    else
-      echo "/home/linuxbrew/.linuxbrew/bin/nvim"
-    fi
-  fi
 }
 
-function setup_neovim {
-  nvim_path=$1
-
-  # Install Neovim plugins
-  $nvim_path --headless "+Lazy! sync" +qa
-  $nvim_path --headless +"MasonInstallAll" +qa
- 
-  # Accept Copilot license
-  mkdir -p ~/.config/github-copilot
-  echo '{"luanzeba":{"version":"2021-10-14"}}' > ~/.config/github-copilot/terms.json
-  $nvim_path --headless +"Copilot setup" +qa
-
-  # Install treesitter parsers
-  $nvim_path --headless +"TSInstall! go ruby" +qa
-
-  # Use lspconfig for Go language server
-  previous=$(pwd)
-  dir="${HOME}/.local/share/nvim/site/pack/nvim-lspconfig/opt/nvim-lspconfig/"
-  mkdir -p "$dir"
-  cd "$dir"
-  git clone 'https://github.com/neovim/nvim-lspconfig.git' .
-  cd $previous
+configure() {
+    # Symlink nvim config
+    mkdir -p "$HOME/.config"
+    if [[ ! -e "$HOME/.config/nvim" ]]; then
+        ln -s "$SCRIPT_DIR" "$HOME/.config/nvim"
+    elif [[ -L "$HOME/.config/nvim" ]]; then
+        ln -sf "$SCRIPT_DIR" "$HOME/.config/nvim"
+    fi
+    
+    local nvim_path
+    nvim_path=$(command -v nvim)
+    
+    # Install plugins
+    $nvim_path --headless "+Lazy! sync" +qa
+    $nvim_path --headless +"MasonInstallAll" +qa 2>/dev/null || true
+    
+    # Accept Copilot license
+    mkdir -p ~/.config/github-copilot
+    echo '{"luanzeba":{"version":"2021-10-14"}}' > ~/.config/github-copilot/terms.json
+    
+    # Install treesitter parsers
+    $nvim_path --headless +"TSInstall! go ruby" +qa 2>/dev/null || true
 }
 
-cd "$( dirname "$0" )"
+apply() {
+    # Nvim reads config on startup, nothing to reload
+    # But we can sync plugins
+    if command -v nvim &>/dev/null; then
+        nvim --headless "+Lazy! sync" +qa 2>/dev/null || true
+    fi
+}
 
-nvim_path=$(install_neovim | tail -n 1)
+update() {
+    echo "Updating Neovim plugins..."
+    if command -v nvim &>/dev/null; then
+        nvim --headless "+Lazy! update" +qa
+        nvim --headless "+MasonUpdate" +qa 2>/dev/null || true
+        nvim --headless "+TSUpdate" +qa 2>/dev/null || true
+    fi
+}
 
-# Copy contents of `nvim` directory to `~/.config/nvim`
-mkdir -p $HOME/.config/
-ln -s "$(pwd)" "$HOME/.config/nvim"
-
-setup_neovim $nvim_path
+# Main
+install
+configure

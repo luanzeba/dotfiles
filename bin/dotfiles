@@ -1,0 +1,251 @@
+#!/bin/bash
+#
+# dotfiles - CLI for managing dotfiles
+#
+# Usage:
+#   dotfiles <command>
+#
+# Commands:
+#   status    Show VCS status of dotfiles repo
+#   pull      Pull latest changes and apply them
+#   edit      Open dotfiles in editor
+#   update    Update installed tools (brew, nvim plugins, etc.)
+#   doctor    Check if everything is set up correctly
+#
+
+set -e
+
+# Load common utilities
+SCRIPT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+source "$SCRIPT_DIR/lib/common.sh"
+
+# Commands
+
+cmd_status() {
+    local dir
+    dir="$(dotfiles_dir)"
+    cd "$dir" || exit 1
+    
+    echo "Dotfiles: $dir"
+    echo ""
+    vcs_status
+}
+
+cmd_edit() {
+    local dir
+    dir="$(dotfiles_dir)"
+    
+    if [[ -n "$EDITOR" ]]; then
+        $EDITOR "$dir"
+    elif command -v nvim &>/dev/null; then
+        nvim "$dir"
+    elif command -v vim &>/dev/null; then
+        vim "$dir"
+    else
+        echo "No editor found. Set \$EDITOR or install nvim/vim."
+        exit 1
+    fi
+}
+
+cmd_pull() {
+    if is_omarchy; then
+        echo "Skipping pull on Omarchy (using default configs)"
+        return 0
+    fi
+    
+    local dir
+    dir="$(dotfiles_dir)"
+    cd "$dir" || exit 1
+    
+    log_info "Pulling latest changes..."
+    vcs_pull
+    
+    log_info "Applying changes..."
+    apply_all
+    
+    log_success "Done!"
+}
+
+cmd_update() {
+    log_info "Updating tools..."
+    
+    # Homebrew (macOS only)
+    if is_macos && command -v brew &>/dev/null; then
+        log_info "Updating Homebrew..."
+        brew update && brew upgrade
+    fi
+    
+    # Call update() for each tool that has it
+    local dir
+    dir="$(dotfiles_dir)"
+    
+    for tool in node nvim rust go helix opencode; do
+        local install_script="$dir/$tool/install"
+        if [[ -f "$install_script" ]]; then
+            # Source the script and call update if it exists
+            (
+                source "$install_script"
+                if declare -f update &>/dev/null; then
+                    log_info "Updating $tool..."
+                    update
+                fi
+            )
+        fi
+    done
+    
+    log_success "All tools updated!"
+}
+
+cmd_doctor() {
+    local dir
+    dir="$(dotfiles_dir)"
+    local issues=0
+    
+    echo "Dotfiles Doctor"
+    echo "==============="
+    echo ""
+    echo "Location: $dir"
+    echo ""
+    
+    # Check platform
+    echo "Platform:"
+    if is_codespaces; then
+        echo "  - GitHub Codespaces"
+    elif is_omarchy; then
+        echo "  - Omarchy (Arch Linux)"
+    elif is_macos; then
+        echo "  - macOS"
+    elif is_arch; then
+        echo "  - Arch Linux"
+    else
+        echo "  - Unknown"
+    fi
+    echo ""
+    
+    # Check essential tools
+    echo "Essential tools:"
+    for tool in git zsh nvim tmux; do
+        if command -v "$tool" &>/dev/null; then
+            echo "  ✅ $tool"
+        else
+            echo "  ❌ $tool (not installed)"
+            ((issues++))
+        fi
+    done
+    echo ""
+    
+    # Check optional tools
+    echo "Optional tools:"
+    for tool in jj fzf rg bat eza; do
+        if command -v "$tool" &>/dev/null; then
+            echo "  ✅ $tool"
+        else
+            echo "  ⚪ $tool (not installed)"
+        fi
+    done
+    echo ""
+    
+    # Check symlinks
+    echo "Symlinks:"
+    check_symlink "$HOME/.zshrc" "$dir/zsh/.zshrc"
+    check_symlink "$HOME/.tmux.conf" "$dir/tmux/.tmux.conf"
+    check_symlink "$HOME/.gitconfig" "$dir/git/.gitconfig"
+    check_symlink "$HOME/bin" "$dir/bin"
+    echo ""
+    
+    # Summary
+    if [[ $issues -eq 0 ]]; then
+        echo "✅ Everything looks good!"
+    else
+        echo "⚠️  Found $issues issue(s)"
+    fi
+}
+
+check_symlink() {
+    local link="$1"
+    local target="$2"
+    
+    if [[ -L "$link" ]]; then
+        local actual
+        actual=$(readlink "$link")
+        if [[ "$actual" == "$target" ]]; then
+            echo "  ✅ $link -> $target"
+        else
+            echo "  ⚠️  $link -> $actual (expected $target)"
+        fi
+    elif [[ -e "$link" ]]; then
+        echo "  ⚠️  $link exists but is not a symlink"
+    else
+        echo "  ❌ $link does not exist"
+    fi
+}
+
+apply_all() {
+    local dir
+    dir="$(dotfiles_dir)"
+    
+    for tool in zsh tmux nvim git helix; do
+        local install_script="$dir/$tool/install"
+        if [[ -f "$install_script" ]]; then
+            (
+                source "$install_script"
+                if declare -f apply &>/dev/null; then
+                    log_info "Applying $tool..."
+                    apply
+                fi
+            )
+        fi
+    done
+}
+
+show_help() {
+    cat <<EOF
+dotfiles - CLI for managing dotfiles
+
+Usage:
+  dotfiles <command>
+
+Commands:
+  status    Show VCS status of dotfiles repo
+  pull      Pull latest changes and apply them
+  edit      Open dotfiles in editor
+  update    Update installed tools (brew, nvim plugins, etc.)
+  doctor    Check if everything is set up correctly
+  help      Show this help message
+
+Environment:
+  DOTFILES_DIR    Override dotfiles directory location
+  EDITOR          Editor to use for 'edit' command
+EOF
+}
+
+# Main dispatch
+case "${1:-}" in
+    status)
+        cmd_status
+        ;;
+    pull)
+        cmd_pull
+        ;;
+    edit)
+        cmd_edit
+        ;;
+    update)
+        cmd_update
+        ;;
+    doctor)
+        cmd_doctor
+        ;;
+    help|--help|-h)
+        show_help
+        ;;
+    "")
+        show_help
+        exit 1
+        ;;
+    *)
+        echo "Unknown command: $1"
+        echo "Run 'dotfiles help' for usage."
+        exit 1
+        ;;
+esac

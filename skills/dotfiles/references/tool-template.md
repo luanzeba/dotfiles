@@ -6,7 +6,7 @@ Use this template when adding a new tool to dotfiles.
 
 ```
 <tool>/
-├── install             # Installation script with install() and configure()
+├── install             # Installation script with install(), configure(), apply(), update()
 ├── config/             # Config files to symlink (or individual config file)
 └── ...                 # Any other supporting files
 ```
@@ -60,6 +60,22 @@ configure() {
     # Symlink config
     ln -s "$SCRIPT_DIR/config" "$config_dir"
     echo "Linked: $config_dir -> $SCRIPT_DIR/config"
+}
+
+# Reload config after dotfiles pull (optional)
+apply() {
+    # Example: reload config if tool is running
+    # if pgrep -x "$TOOL_NAME" &>/dev/null; then
+    #     $TOOL_NAME reload
+    # fi
+    :
+}
+
+# Update tool for dotfiles update (optional)
+update() {
+    # Example: update to latest version
+    # brew upgrade <package-name>
+    :
 }
 
 # Main
@@ -126,6 +142,8 @@ bash <tool>/install
 
 - [ ] `install()` function handles all three platforms (or uses `:` if nothing to install)
 - [ ] `configure()` function symlinks configs (or uses `:` if nothing to configure)
+- [ ] `apply()` function reloads config if needed (optional, for `dotfiles pull`)
+- [ ] `update()` function updates the tool (optional, for `dotfiles update`)
 - [ ] Config files are symlinked, not copied
 - [ ] Script is executable (`chmod +x install`)
 - [ ] Tested on at least one platform

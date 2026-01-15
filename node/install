@@ -33,6 +33,18 @@ configure() {
     npm install -g typescript-language-server typescript prettier
 }
 
+update() {
+    export PATH="$FNM_DIR:$PATH"
+    eval "$(fnm env)"
+    
+    echo "Updating Node.js to latest LTS..."
+    fnm install --lts
+    fnm default lts-latest
+    
+    echo "Updating global npm packages..."
+    npm update -g
+}
+
 # Main
 install
 configure

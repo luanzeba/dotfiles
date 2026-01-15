@@ -18,6 +18,18 @@ configure() {
     go install mvdan.cc/gofumpt@latest
 }
 
+update() {
+    if ! command -v go &>/dev/null; then
+        echo "Go not installed, skipping Go tools update"
+        return
+    fi
+
+    echo "Updating Go tools..."
+    go install golang.org/x/tools/gopls@latest
+    go install github.com/incu6us/goimports-reviser/v3@latest
+    go install mvdan.cc/gofumpt@latest
+}
+
 # Main
 install
 configure

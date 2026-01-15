@@ -1,0 +1,45 @@
+#!/bin/bash
+set -e
+
+# jj (Jujutsu) - A Git-compatible VCS
+# https://github.com/martinvonz/jj
+
+install() {
+    if command -v jj &>/dev/null; then
+        echo "jj already installed: $(jj --version)"
+        return
+    fi
+
+    echo "Installing jj..."
+    
+    if command -v cargo &>/dev/null; then
+        # Install via cargo (works everywhere)
+        cargo install --locked jj-cli
+    elif command -v brew &>/dev/null; then
+        # macOS with Homebrew
+        brew install jj
+    else
+        echo "Please install cargo or brew to install jj"
+        return 1
+    fi
+}
+
+configure() {
+    # jj uses git for auth, so no additional config needed
+    # User can customize ~/.jjconfig.toml if desired
+    :
+}
+
+update() {
+    if command -v cargo &>/dev/null && [[ -f "$HOME/.cargo/bin/jj" ]]; then
+        echo "Updating jj via cargo..."
+        cargo install --locked jj-cli
+    elif command -v brew &>/dev/null; then
+        echo "Updating jj via brew..."
+        brew upgrade jj 2>/dev/null || true
+    fi
+}
+
+# Main
+install
+configure
