@@ -16,7 +16,12 @@
 set -e
 
 # Load common utilities
-SCRIPT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+# Resolve symlinks to find the real script location
+REAL_SCRIPT="$0"
+if [[ -L "$0" ]]; then
+    REAL_SCRIPT="$(readlink "$0")"
+fi
+SCRIPT_DIR="$(cd "$(dirname "$REAL_SCRIPT")/.." && pwd)"
 source "$SCRIPT_DIR/lib/common.sh"
 
 # Commands
