@@ -1,6 +1,9 @@
 # Enable true color support for terminals (helps helix, nvim, etc.)
 export COLORTERM=truecolor
 
+# Add ~/bin to PATH for custom scripts
+export PATH="$HOME/bin:$PATH"
+
 # Source configs
 for config_file ($HOME/.zsh/*.zsh); do
   source $config_file
