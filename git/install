@@ -11,7 +11,7 @@ install() {
 configure() {
     ln -sf "$SCRIPT_DIR/.gitconfig" ~/.gitconfig
     ln -sf "$SCRIPT_DIR/.gitignore_global" ~/.gitignore_global
-    ln -sf "$SCRIPT_DIR/.git_template" ~/.git_template
+    ln -sfn "$SCRIPT_DIR/.git_template" ~/.git_template
     touch ~/.gitconfig-macos  # create empty file for include directive
 }
 

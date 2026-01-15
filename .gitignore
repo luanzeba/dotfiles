@@ -3,3 +3,6 @@ bin/csw
 
 # Neovim plugin lockfile (we prefer latest versions)
 nvim/lazy-lock.json
+
+# Runtime config files (created by install scripts)
+.config/

@@ -32,7 +32,7 @@ configure() {
     if [[ ! -e "$HOME/.config/nvim" ]]; then
         ln -s "$SCRIPT_DIR" "$HOME/.config/nvim"
     elif [[ -L "$HOME/.config/nvim" ]]; then
-        ln -sf "$SCRIPT_DIR" "$HOME/.config/nvim"
+        ln -sfn "$SCRIPT_DIR" "$HOME/.config/nvim"
     fi
     
     local nvim_path
