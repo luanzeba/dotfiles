@@ -155,7 +155,15 @@ cmd_doctor() {
     check_symlink "$HOME/.zshrc" "$dir/zsh/.zshrc"
     check_symlink "$HOME/.tmux.conf" "$dir/tmux/.tmux.conf"
     check_symlink "$HOME/.gitconfig" "$dir/git/.gitconfig"
-    check_symlink "$HOME/bin" "$dir/bin"
+    # For ~/bin, check if key scripts are symlinked (supports both full symlink and individual symlinks)
+    if [[ -L "$HOME/bin" ]]; then
+        check_symlink "$HOME/bin" "$dir/bin"
+    elif [[ -d "$HOME/bin" ]]; then
+        # Check if dotfiles script is symlinked correctly
+        check_symlink "$HOME/bin/dotfiles" "$dir/bin/dotfiles"
+    else
+        echo "  ❌ $HOME/bin does not exist"
+    fi
     echo ""
     
     # Summary
