@@ -1,2 +1,5 @@
 # Downloaded as part of the install script
 bin/csw
+
+# Neovim plugin lockfile (we prefer latest versions)
+nvim/lazy-lock.json
