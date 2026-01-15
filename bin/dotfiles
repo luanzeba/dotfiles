@@ -3,14 +3,16 @@
 # dotfiles - CLI for managing dotfiles
 #
 # Usage:
-#   dotfiles <command>
+#   dotfiles <command> [args]
 #
 # Commands:
-#   status    Show VCS status of dotfiles repo
-#   pull      Pull latest changes and apply them
-#   edit      Open dotfiles in editor
-#   update    Update installed tools (brew, nvim plugins, etc.)
-#   doctor    Check if everything is set up correctly
+#   status            Show VCS status of dotfiles repo
+#   pull              Pull latest changes and apply them
+#   edit              Open dotfiles in editor
+#   install           Run main install script
+#   install <tools>   Install specific tool(s)
+#   update            Update installed tools (brew, nvim plugins, etc.)
+#   doctor            Check if everything is set up correctly
 #
 
 set -e
@@ -211,20 +213,114 @@ apply_all() {
     done
 }
 
+# Get list of available tools (directories with install scripts)
+get_available_tools() {
+    local dir
+    dir="$(dotfiles_dir)"
+    
+    for tool_dir in "$dir"/*/; do
+        local tool_name
+        tool_name=$(basename "$tool_dir")
+        # Check for install script (could be 'install' or 'install.zsh')
+        if [[ -f "$tool_dir/install" ]] || [[ -f "$tool_dir/install.zsh" ]]; then
+            echo "$tool_name"
+        fi
+    done | sort
+}
+
+# Run install script for a single tool
+install_tool() {
+    local tool="$1"
+    local dir
+    dir="$(dotfiles_dir)"
+    
+    local install_script=""
+    if [[ -f "$dir/$tool/install" ]]; then
+        install_script="$dir/$tool/install"
+    elif [[ -f "$dir/$tool/install.zsh" ]]; then
+        install_script="$dir/$tool/install.zsh"
+    fi
+    
+    if [[ -z "$install_script" ]]; then
+        return 1
+    fi
+    
+    log_info "Installing $tool..."
+    
+    # Determine interpreter based on extension
+    if [[ "$install_script" == *.zsh ]]; then
+        zsh "$install_script"
+    else
+        bash "$install_script"
+    fi
+}
+
+cmd_install() {
+    local dir
+    dir="$(dotfiles_dir)"
+    
+    # No arguments: run main install script
+    if [[ $# -eq 0 ]]; then
+        log_info "Running main install script..."
+        "$dir/install"
+        return $?
+    fi
+    
+    # With arguments: install specific tools
+    local failed_tools=()
+    local unknown_tools=()
+    
+    for tool in "$@"; do
+        if [[ -f "$dir/$tool/install" ]] || [[ -f "$dir/$tool/install.zsh" ]]; then
+            if ! install_tool "$tool"; then
+                failed_tools+=("$tool")
+            fi
+        else
+            unknown_tools+=("$tool")
+        fi
+    done
+    
+    # Report unknown tools
+    if [[ ${#unknown_tools[@]} -gt 0 ]]; then
+        echo ""
+        log_error "Unknown tool(s): ${unknown_tools[*]}"
+        echo ""
+        echo "Available tools:"
+        get_available_tools | while read -r t; do
+            echo "  - $t"
+        done
+        echo ""
+    fi
+    
+    # Report failed tools
+    if [[ ${#failed_tools[@]} -gt 0 ]]; then
+        log_warn "Failed to install: ${failed_tools[*]}"
+    fi
+    
+    # Exit with error if any issues
+    if [[ ${#unknown_tools[@]} -gt 0 ]] || [[ ${#failed_tools[@]} -gt 0 ]]; then
+        return 1
+    fi
+    
+    log_success "Done!"
+}
+
 show_help() {
     cat <<EOF
 dotfiles - CLI for managing dotfiles
 
 Usage:
-  dotfiles <command>
+  dotfiles <command> [args]
 
 Commands:
-  status    Show VCS status of dotfiles repo
-  pull      Pull latest changes and apply them
-  edit      Open dotfiles in editor
-  update    Update installed tools (brew, nvim plugins, etc.)
-  doctor    Check if everything is set up correctly
-  help      Show this help message
+  status            Show VCS status of dotfiles repo
+  pull              Pull latest changes and apply them
+  edit              Open dotfiles in editor
+  install           Run main install script
+  install <tools>   Install specific tool(s), e.g. 'dotfiles install jj node'
+  update            Update installed tools (brew, nvim plugins, etc.)
+  doctor            Check if everything is set up correctly
+  help              Show this help message
 
 Environment:
   DOTFILES_DIR    Override dotfiles directory location
@@ -242,6 +338,10 @@ case "${1:-}" in
         ;;
     edit)
         cmd_edit
+        ;;
+    install)
+        shift
+        cmd_install "$@"
         ;;
     update)
         cmd_update
