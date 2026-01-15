@@ -59,9 +59,39 @@ See [references/platform-detection.md](references/platform-detection.md) for det
 ## Key Principles
 
 - **Always install latest versions**: Install scripts should always fetch the latest stable/LTS version of tools, not pin to specific versions. Use `@latest` tags, `--lts` flags, or omit version specifiers where possible.
-- **Idempotent scripts**: Install scripts should be safe to run multiple times. Check if tools are already installed before reinstalling.
+- **Idempotent scripts**: Install scripts must be safe to run multiple times without side effects.
 - **Platform-aware**: Use platform detection to handle differences between Codespaces, macOS, and Arch.
 - **Script pattern**: Each tool script should have `install()`, `configure()`, and optionally `apply()` and `update()` functions.
+
+### Idempotency Guidelines
+
+Scripts should produce the same result whether run once or many times:
+
+1. **Check before installing**: Use `command -v <tool>` to skip if already installed
+   ```bash
+   if command -v rustc &>/dev/null; then
+       echo "Rust already installed"
+       return
+   fi
+   ```
+
+2. **Use `-sf` for symlinks**: The `-f` flag overwrites existing symlinks safely
+   ```bash
+   ln -sf "$SCRIPT_DIR/.config" "$HOME/.config/tool"
+   ```
+
+3. **Handle existing directories**: Check and backup if needed
+   ```bash
+   if [[ -e "$target" && ! -L "$target" ]]; then
+       mv "$target" "$target.backup"
+   fi
+   ```
+
+4. **Use `--noconfirm` for package managers**: Avoid interactive prompts
+   ```bash
+   sudo pacman -S --noconfirm package
+   brew install package  # Already non-interactive
+   ```
 
 ## dotfiles CLI
 
