@@ -1,4 +1,12 @@
 #!/usr/bin/env ruby -w
+#
+# repro - Download Rails bug reproduction templates
+#
+# Interactive script to select and download a Rails bug report template
+# from the official Rails repository. Copies the output filename to clipboard.
+#
+# Usage: repro
+#
 
 templates = %w[
 action_controller_gem

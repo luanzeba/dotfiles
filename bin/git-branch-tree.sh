@@ -1,4 +1,12 @@
 #!/bin/bash
+#
+# git-branch-tree - Visualize branch relationships in a GitHub repo
+#
+# Clones a repo (bare) and displays a tree showing how branches relate
+# to each other, including commits ahead/behind their parent branch.
+#
+# Usage: git-branch-tree.sh <github-repo-url>
+#
 
 set -e
 

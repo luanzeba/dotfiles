@@ -1,4 +1,16 @@
 #!/bin/bash
+#
+# dev - Quickly create and SSH into GitHub Codespaces
+#
+# Creates a codespace for the specified repo with preferred settings,
+# copies Ghostty terminfo for terminal support, and SSHes in with
+# RDM socket forwarding for copy/paste support.
+#
+# Usage: dev <repo>
+#   repo: gh (github/github), meuse, bp (billing-platform)
+#
+# Notifies when the codespace is ready.
+#
 
 if [[ $# > 0 ]]; then
   case "$1" in
