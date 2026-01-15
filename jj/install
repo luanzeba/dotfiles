@@ -4,6 +4,10 @@ set -e
 # jj (Jujutsu) - A Git-compatible VCS
 # https://github.com/martinvonz/jj
 
+check_installed() {
+    command -v jj &>/dev/null
+}
+
 install() {
     if command -v jj &>/dev/null; then
         echo "jj already installed: $(jj --version)"
@@ -40,6 +44,8 @@ update() {
     fi
 }
 
-# Main
-install
-configure
+# Main (only run when executed directly, not when sourced)
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    install
+    configure
+fi

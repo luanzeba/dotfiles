@@ -8,6 +8,10 @@ install() {
     :
 }
 
+check_installed() {
+    command -v git &>/dev/null && [[ -L "$HOME/.gitconfig" ]]
+}
+
 configure() {
     ln -sf "$SCRIPT_DIR/.gitconfig" ~/.gitconfig
     ln -sf "$SCRIPT_DIR/.gitignore_global" ~/.gitignore_global
@@ -20,6 +24,8 @@ apply() {
     :
 }
 
-# Main
-install
-configure
+# Main (only run when executed directly, not when sourced)
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    install
+    configure
+fi

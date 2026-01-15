@@ -4,6 +4,10 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 HELIX_CONFIG_DIR="$HOME/.config/helix"
 
+check_installed() {
+    command -v hx &>/dev/null
+}
+
 install() {
     echo "Installing Helix from source..."
 
@@ -55,6 +59,8 @@ update() {
     cargo install --path helix-term --locked
 }
 
-# Main
-install
-configure
+# Main (only run when executed directly, not when sourced)
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    install
+    configure
+fi

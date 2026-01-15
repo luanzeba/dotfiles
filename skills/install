@@ -7,6 +7,11 @@ SKILL_CREATOR_DIR="$EXTERNAL_DIR/skill-creator"
 PRIVATE_DIR="$EXTERNAL_DIR/private"
 PRIVATE_REPO="luanzeba/private-dotfiles"
 
+check_installed() {
+    # Check if the dotfiles skill is properly symlinked
+    [[ -L "$HOME/.config/opencode/skill/dotfiles" ]]
+}
+
 # Download skill-creator from Anthropic's skills repo
 download_skill_creator() {
     local base_url="https://raw.githubusercontent.com/anthropics/skills/main/skills/skill-creator"
@@ -136,12 +141,14 @@ configure() {
     fi
 }
 
-# Main
-echo "Installing skills..."
-install
-configure
-echo ""
-echo "Skills installation complete!"
-echo ""
-echo "Installed skills:"
-ls -la ~/.config/opencode/skill/
+# Main (only run when executed directly, not when sourced)
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    echo "Installing skills..."
+    install
+    configure
+    echo ""
+    echo "Skills installation complete!"
+    echo ""
+    echo "Installed skills:"
+    ls -la ~/.config/opencode/skill/
+fi

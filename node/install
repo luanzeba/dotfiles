@@ -3,6 +3,10 @@ set -e
 
 FNM_DIR="$HOME/.local/share/fnm"
 
+check_installed() {
+    command -v node &>/dev/null
+}
+
 install() {
     if command -v fnm &>/dev/null; then
         echo "fnm already installed"
@@ -45,6 +49,8 @@ update() {
     npm update -g
 }
 
-# Main
-install
-configure
+# Main (only run when executed directly, not when sourced)
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    install
+    configure
+fi

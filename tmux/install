@@ -3,6 +3,10 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
+check_installed() {
+    command -v tmux &>/dev/null && [[ -L "$HOME/.tmux.conf" ]]
+}
+
 install() {
     # Tmux installed via system package manager
     :
@@ -20,6 +24,8 @@ apply() {
     fi
 }
 
-# Main
-install
-configure
+# Main (only run when executed directly, not when sourced)
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    install
+    configure
+fi

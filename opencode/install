@@ -1,6 +1,10 @@
 #!/bin/bash
 set -e
 
+check_installed() {
+    command -v opencode &>/dev/null
+}
+
 # Install opencode binary
 install() {
     echo "Installing opencode..."
@@ -17,6 +21,8 @@ update() {
     curl -fsSL https://opencode.ai/install | bash -s -- --no-modify-path
 }
 
-# Main
-install
-configure
+# Main (only run when executed directly, not when sourced)
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    install
+    configure
+fi

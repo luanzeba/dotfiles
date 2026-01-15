@@ -17,6 +17,9 @@
 
 set -e
 
+# Verbose mode (set via -v or --verbose flag)
+VERBOSE=false
+
 # Load common utilities
 # Resolve symlinks to find the real script location
 REAL_SCRIPT="$0"
@@ -25,6 +28,23 @@ if [[ -L "$0" ]]; then
 fi
 SCRIPT_DIR="$(cd "$(dirname "$REAL_SCRIPT")/.." && pwd)"
 source "$SCRIPT_DIR/lib/common.sh"
+
+# Helper for verbose logging
+log_verbose() {
+    if [[ "$VERBOSE" == true ]]; then
+        echo "  $*"
+    fi
+}
+
+# Get the install script for a tool (returns path or empty string)
+get_install_script() {
+    local tool_dir="$1"
+    if [[ -f "$tool_dir/install" ]]; then
+        echo "$tool_dir/install"
+    elif [[ -f "$tool_dir/install.zsh" ]]; then
+        echo "$tool_dir/install.zsh"
+    fi
+}
 
 # Commands
 
@@ -86,18 +106,25 @@ cmd_update() {
     local dir
     dir="$(dotfiles_dir)"
     
-    for tool in node nvim rust go helix opencode; do
-        local install_script="$dir/$tool/install"
-        if [[ -f "$install_script" ]]; then
-            # Source the script and call update if it exists
-            (
-                source "$install_script"
-                if declare -f update &>/dev/null; then
-                    log_info "Updating $tool..."
-                    update
-                fi
-            )
-        fi
+    for tool_dir in "$dir"/*/; do
+        local tool_name
+        tool_name=$(basename "$tool_dir")
+        local install_script
+        install_script=$(get_install_script "$tool_dir")
+        
+        # Skip directories without install scripts
+        [[ -n "$install_script" ]] || continue
+        
+        # Source the script and call update if it exists
+        (
+            source "$install_script"
+            if declare -f update &>/dev/null; then
+                log_info "Updating $tool_name..."
+                update
+            else
+                log_verbose "Skipping $tool_name (no update function)"
+            fi
+        )
     done
     
     log_success "All tools updated!"
@@ -106,7 +133,6 @@ cmd_update() {
 cmd_doctor() {
     local dir
     dir="$(dotfiles_dir)"
-    local issues=0
     
     echo "Dotfiles Doctor"
     echo "==============="
@@ -117,81 +143,72 @@ cmd_doctor() {
     # Check platform
     echo "Platform:"
     if is_codespaces; then
-        echo "  - GitHub Codespaces"
+        echo "  GitHub Codespaces"
     elif is_omarchy; then
-        echo "  - Omarchy (Arch Linux)"
+        echo "  Omarchy (Arch Linux)"
     elif is_macos; then
-        echo "  - macOS"
+        echo "  macOS"
     elif is_arch; then
-        echo "  - Arch Linux"
+        echo "  Arch Linux"
     else
-        echo "  - Unknown"
+        echo "  Unknown"
     fi
     echo ""
     
-    # Check essential tools
-    echo "Essential tools:"
-    for tool in git zsh nvim tmux; do
-        if command -v "$tool" &>/dev/null; then
-            echo "  ✅ $tool"
-        else
-            echo "  ❌ $tool (not installed)"
-            ((issues++))
-        fi
-    done
-    echo ""
+    # Check all tools dynamically
+    echo "Tools:"
+    local installed=()
+    local not_installed=()
+    local unknown=()
     
-    # Check optional tools
-    echo "Optional tools:"
-    for tool in jj fzf rg bat eza; do
-        if command -v "$tool" &>/dev/null; then
-            echo "  ✅ $tool"
-        else
-            echo "  ⚪ $tool (not installed)"
-        fi
+    for tool_dir in "$dir"/*/; do
+        local tool_name
+        tool_name=$(basename "$tool_dir")
+        local install_script
+        install_script=$(get_install_script "$tool_dir")
+        
+        # Skip directories without install scripts
+        [[ -n "$install_script" ]] || continue
+        
+        # Source the script and call check_installed if it exists
+        local status
+        status=$(
+            source "$install_script"
+            if declare -f check_installed &>/dev/null; then
+                if check_installed; then
+                    echo "installed"
+                else
+                    echo "not_installed"
+                fi
+            else
+                echo "unknown"
+            fi
+        )
+        
+        case "$status" in
+            installed) installed+=("$tool_name") ;;
+            not_installed) not_installed+=("$tool_name") ;;
+            unknown) unknown+=("$tool_name") ;;
+        esac
     done
-    echo ""
     
-    # Check symlinks
-    echo "Symlinks:"
-    check_symlink "$HOME/.zshrc" "$dir/zsh/.zshrc"
-    check_symlink "$HOME/.tmux.conf" "$dir/tmux/.tmux.conf"
-    check_symlink "$HOME/.gitconfig" "$dir/git/.gitconfig"
-    # For ~/bin, check if key scripts are symlinked (supports both full symlink and individual symlinks)
-    if [[ -L "$HOME/bin" ]]; then
-        check_symlink "$HOME/bin" "$dir/bin"
-    elif [[ -d "$HOME/bin" ]]; then
-        # Check if dotfiles script is symlinked correctly
-        check_symlink "$HOME/bin/dotfiles" "$dir/bin/dotfiles"
-    else
-        echo "  ❌ $HOME/bin does not exist"
-    fi
+    # Output results
+    for tool in "${installed[@]}"; do
+        echo "  ✅ $tool"
+    done
+    for tool in "${not_installed[@]}"; do
+        echo "  ❌ $tool"
+    done
+    for tool in "${unknown[@]}"; do
+        echo "  ❓ $tool"
+    done
     echo ""
     
     # Summary
-    if [[ $issues -eq 0 ]]; then
-        echo "✅ Everything looks good!"
-    else
-        echo "⚠️  Found $issues issue(s)"
-    fi
-}
-
-check_symlink() {
-    local link="$1"
-    local target="$2"
-    
-    if [[ -L "$link" ]]; then
-        local actual
-        actual=$(readlink "$link")
-        if [[ "$actual" == "$target" ]]; then
-            echo "  ✅ $link -> $target"
-        else
-            echo "  ⚠️  $link -> $actual (expected $target)"
-        fi
-    elif [[ -e "$link" ]]; then
-        echo "  ⚠️  $link exists but is not a symlink"
-    else
-        echo "  ❌ $link does not exist"
+    local total=$((${#installed[@]} + ${#not_installed[@]} + ${#unknown[@]}))
+    echo "${#installed[@]}/$total tools installed"
+    if [[ ${#not_installed[@]} -gt 0 ]]; then
+        echo "Run 'dot install <tool>' to install missing tools"
     fi
 }
 
@@ -199,17 +216,24 @@ apply_all() {
     local dir
     dir="$(dotfiles_dir)"
     
-    for tool in zsh tmux nvim git helix; do
-        local install_script="$dir/$tool/install"
-        if [[ -f "$install_script" ]]; then
-            (
-                source "$install_script"
-                if declare -f apply &>/dev/null; then
-                    log_info "Applying $tool..."
-                    apply
-                fi
-            )
-        fi
+    for tool_dir in "$dir"/*/; do
+        local tool_name
+        tool_name=$(basename "$tool_dir")
+        local install_script
+        install_script=$(get_install_script "$tool_dir")
+        
+        # Skip directories without install scripts
+        [[ -n "$install_script" ]] || continue
+        
+        (
+            source "$install_script"
+            if declare -f apply &>/dev/null; then
+                log_info "Applying $tool_name..."
+                apply
+            else
+                log_verbose "Skipping $tool_name (no apply function)"
+            fi
+        )
     done
 }
 
@@ -310,7 +334,7 @@ show_help() {
 dotfiles - CLI for managing dotfiles
 
 Usage:
-  dotfiles <command> [args]
+  dotfiles [options] <command> [args]
 
 Commands:
   status            Show VCS status of dotfiles repo
@@ -322,11 +346,30 @@ Commands:
   doctor            Check if everything is set up correctly
   help              Show this help message
 
+Options:
+  -v, --verbose     Show verbose output (e.g., skipped tools)
+
 Environment:
   DOTFILES_DIR    Override dotfiles directory location
   EDITOR          Editor to use for 'edit' command
 EOF
 }
+
+# Parse global flags
+while [[ "${1:-}" == -* ]]; do
+    case "$1" in
+        -v|--verbose)
+            VERBOSE=true
+            shift
+            ;;
+        *)
+            break
+            ;;
+    esac
+done
+
+# Export VERBOSE for subshells
+export VERBOSE
 
 # Main dispatch
 case "${1:-}" in

@@ -2,6 +2,10 @@
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
+check_installed() {
+    command -v zsh &>/dev/null && [[ -L "$HOME/.zshrc" ]]
+}
+
 install() {
     # Zsh is installed via system package manager
     :
@@ -26,6 +30,8 @@ apply() {
     echo "Zsh config updated. Start a new terminal to apply changes."
 }
 
-# Main
-install
-configure
+# Main (only run when executed directly, not when sourced)
+if [[ "${ZSH_EVAL_CONTEXT:-}" == "toplevel" ]] || [[ "${BASH_SOURCE[0]:-$0}" == "${0}" ]]; then
+    install
+    configure
+fi

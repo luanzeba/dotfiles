@@ -8,6 +8,11 @@ install() {
     :
 }
 
+check_installed() {
+    # Check if ~/bin exists and dotfiles script is accessible
+    [[ -L "$HOME/bin" ]] || [[ -x "$HOME/bin/dotfiles" ]]
+}
+
 configure() {
     # Create dot -> dotfiles alias in the repo itself
     # This works whether ~/bin is a symlink or directory
@@ -34,6 +39,8 @@ configure() {
     fi
 }
 
-# Main
-install
-configure
+# Main (only run when executed directly, not when sourced)
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    install
+    configure
+fi

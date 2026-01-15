@@ -1,5 +1,4 @@
 #!/bin/zsh
-set -x
 
 echo "Installing Whisper dependencies for macOS..."
 

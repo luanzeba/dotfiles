@@ -1,20 +1,49 @@
 #!/bin/zsh
-set -x
 
-echo "🎙️  Whisper installation script"
-echo "================================"
+# Whisper - OpenAI's speech recognition model
+# https://github.com/openai/whisper
 
-OS=$(uname)
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
-if [[ $OS == "Darwin" ]]; then
-  echo "Detected macOS"
-  source "$(dirname "$0")/install-macos"
-elif [[ -f /etc/arch-release ]]; then
-  echo "Detected Arch Linux"
-  source "$(dirname "$0")/install-arch"
-else
-  echo "⚠️  Whisper installation only supported on macOS and Arch Linux"
-  echo "Current OS: $OS"
-  echo "Skipping installation..."
-  exit 0
+is_macos() {
+    [[ "$(uname)" == "Darwin" ]]
+}
+
+is_arch() {
+    [[ -f /etc/arch-release ]]
+}
+
+check_installed() {
+    command -v whisper &>/dev/null
+}
+
+install() {
+    echo "Installing Whisper..."
+
+    if is_macos; then
+        source "$SCRIPT_DIR/install-macos"
+    elif is_arch; then
+        source "$SCRIPT_DIR/install-arch"
+    else
+        echo "Whisper installation only supported on macOS and Arch Linux"
+        return 1
+    fi
+}
+
+configure() {
+    # No configuration needed
+    :
+}
+
+update() {
+    if command -v pipx &>/dev/null && pipx list | grep -q openai-whisper; then
+        echo "Updating Whisper..."
+        pipx upgrade openai-whisper
+    fi
+}
+
+# Main (only run when executed directly, not when sourced)
+if [[ "${ZSH_EVAL_CONTEXT:-}" == "toplevel" ]] || [[ "${BASH_SOURCE[0]:-$0}" == "${0}" ]]; then
+    install
+    configure
 fi
