@@ -9,6 +9,12 @@ install() {
 }
 
 configure() {
+    # Create dot -> dotfiles alias in the repo itself
+    # This works whether ~/bin is a symlink or directory
+    if [[ ! -e "$SCRIPT_DIR/dot" ]]; then
+        ln -s "$SCRIPT_DIR/dotfiles" "$SCRIPT_DIR/dot"
+    fi
+
     # Symlink bin directory to ~/bin
     if [[ ! -e "$HOME/bin" ]]; then
         ln -s "$SCRIPT_DIR" "$HOME/bin"
@@ -16,7 +22,15 @@ configure() {
         # Already a symlink, update it
         ln -sf "$SCRIPT_DIR" "$HOME/bin"
     else
-        echo "Warning: ~/bin exists and is not a symlink, skipping"
+        # ~/bin exists as a directory, symlink individual scripts
+        echo "~/bin is a directory, symlinking scripts individually..."
+        for script in "$SCRIPT_DIR"/*; do
+            local name
+            name=$(basename "$script")
+            # Skip the install script itself
+            [[ "$name" == "install" ]] && continue
+            ln -sf "$script" "$HOME/bin/$name"
+        done
     fi
 }
 
