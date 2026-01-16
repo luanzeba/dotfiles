@@ -31,6 +31,7 @@ echo "$(date +'%Y-%m-%d %T') - Configuring tools"
 run_step "git/install" bash "$SCRIPT_DIR/git/install"
 run_step "tmux/install" bash "$SCRIPT_DIR/tmux/install"
 run_step "bin/install" bash "$SCRIPT_DIR/bin/install"
+run_step "1password/install" bash "$SCRIPT_DIR/1password/install"
 
 echo "$(date +'%Y-%m-%d %T') - Installing languages and tools"
 run_step "go/install" bash "$SCRIPT_DIR/go/install"

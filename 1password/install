@@ -1,0 +1,48 @@
+#!/bin/bash
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+source "$SCRIPT_DIR/../lib/common.sh"
+
+check_installed() {
+    command -v op &>/dev/null
+}
+
+install() {
+    if check_installed; then
+        echo "1Password CLI already installed"
+        return 0
+    fi
+
+    if is_macos; then
+        echo "Installing 1Password CLI via Homebrew..."
+        brew install --cask 1password-cli
+    elif is_omarchy || is_arch; then
+        echo "Installing 1Password CLI via yay..."
+        yay -S --noconfirm 1password-cli
+    else
+        echo "Unsupported platform for 1Password CLI installation"
+        echo "Please install manually: https://developer.1password.com/docs/cli/get-started/"
+        return 1
+    fi
+}
+
+configure() {
+    if ! check_installed; then
+        echo "1Password CLI not installed, skipping configuration"
+        return 0
+    fi
+
+    echo ""
+    echo "To complete setup, enable CLI integration in the 1Password app:"
+    echo "  1. Open 1Password"
+    echo "  2. Go to Settings > Developer"
+    echo "  3. Enable 'Integrate with 1Password CLI'"
+    echo ""
+}
+
+# Main (only run when executed directly, not when sourced)
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    install
+    configure
+fi
