@@ -21,12 +21,15 @@ set -e
 VERBOSE=false
 
 # Load common utilities
-# Resolve symlinks to find the real script location
+# Resolve symlinks to find the real script location (portable across macOS/Linux)
 REAL_SCRIPT="$0"
-if [[ -L "$0" ]]; then
-    REAL_SCRIPT="$(readlink "$0")"
-fi
-SCRIPT_DIR="$(cd "$(dirname "$REAL_SCRIPT")/.." && pwd)"
+while [[ -L "$REAL_SCRIPT" ]]; do
+    LINK_DIR="$(cd -P "$(dirname "$REAL_SCRIPT")" && pwd)"
+    REAL_SCRIPT="$(readlink "$REAL_SCRIPT")"
+    # Handle relative symlinks
+    [[ "$REAL_SCRIPT" != /* ]] && REAL_SCRIPT="$LINK_DIR/$REAL_SCRIPT"
+done
+SCRIPT_DIR="$(cd -P "$(dirname "$REAL_SCRIPT")/.." && pwd)"
 source "$SCRIPT_DIR/lib/common.sh"
 
 # Helper for verbose logging
