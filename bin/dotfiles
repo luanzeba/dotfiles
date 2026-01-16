@@ -13,6 +13,8 @@
 #   install <tools>   Install specific tool(s)
 #   update            Update installed tools (brew, nvim plugins, etc.)
 #   doctor            Check if everything is set up correctly
+#   patch create      Create patch from uncommitted changes (Codespaces)
+#   patch pull        Pull and apply patch from a Codespace (local)
 #
 
 set -e
@@ -131,6 +133,143 @@ cmd_update() {
     done
     
     log_success "All tools updated!"
+}
+
+cmd_patch() {
+    local subcmd="${1:-}"
+    
+    case "$subcmd" in
+        create)
+            cmd_patch_create
+            ;;
+        pull)
+            shift
+            cmd_patch_pull "$@"
+            ;;
+        ""|help)
+            show_patch_help
+            ;;
+        *)
+            echo "Unknown patch subcommand: $subcmd"
+            show_patch_help
+            exit 1
+            ;;
+    esac
+}
+
+cmd_patch_create() {
+    if ! is_codespaces; then
+        log_error "This command is intended for use in GitHub Codespaces"
+        echo "Use 'dot patch pull' from your local machine to pull patches."
+        exit 1
+    fi
+    
+    local dir
+    dir="$(dotfiles_dir)"
+    cd "$dir" || exit 1
+    
+    local patch_file="/tmp/dotfiles.patch"
+    
+    if git diff --quiet HEAD; then
+        log_error "No uncommitted changes to create patch from"
+        exit 1
+    fi
+    
+    git diff HEAD > "$patch_file"
+    
+    log_success "Patch created: $patch_file"
+    echo ""
+    echo "From your local machine, run:"
+    echo "  dot patch pull"
+}
+
+cmd_patch_pull() {
+    if is_codespaces; then
+        log_error "This command is intended for use on your local machine"
+        echo "Use 'dot patch create' in Codespaces to create a patch."
+        exit 1
+    fi
+    
+    if ! command -v gh &>/dev/null; then
+        log_error "GitHub CLI (gh) is required but not installed"
+        exit 1
+    fi
+    
+    local codespace_name="${1:-}"
+    local patch_file="/tmp/dotfiles.patch"
+    local remote_patch="remote:/tmp/dotfiles.patch"
+    
+    # If no codespace specified, try ~/.codespace (set by csw)
+    if [[ -z "$codespace_name" && -f "$HOME/.codespace" ]]; then
+        codespace_name="$(cat "$HOME/.codespace")"
+        log_info "Using codespace from ~/.codespace: $codespace_name"
+    fi
+    
+    local gh_args=()
+    if [[ -n "$codespace_name" ]]; then
+        gh_args+=(-c "$codespace_name")
+    fi
+    
+    log_info "Pulling patch from Codespace..."
+    if ! gh cs cp "${gh_args[@]}" "$remote_patch" "$patch_file"; then
+        log_error "Failed to copy patch from Codespace"
+        echo ""
+        echo "Make sure you've run 'dot patch create' in the Codespace first."
+        exit 1
+    fi
+    
+    log_success "Patch downloaded to $patch_file"
+    echo ""
+    echo "Patch contents:"
+    echo "---------------"
+    cat "$patch_file"
+    echo "---------------"
+    echo ""
+    
+    local dir
+    dir="$(dotfiles_dir)"
+    cd "$dir" || exit 1
+    
+    log_info "Applying patch to $dir..."
+    if git apply "$patch_file"; then
+        rm -f "$patch_file"
+        log_success "Patch applied successfully!"
+        echo ""
+        echo "Next steps:"
+        echo "  1. Review changes: git diff"
+        echo "  2. Commit: git add -A && git commit -m 'Your message'"
+        echo "  3. Push: git push"
+        echo "  4. In Codespace: dot pull"
+    else
+        log_error "Failed to apply patch"
+        echo "The patch may have conflicts. Try manually:"
+        echo "  git apply --3way $patch_file"
+        exit 1
+    fi
+}
+
+show_patch_help() {
+    cat <<EOF
+dot patch - Transfer dotfiles changes from Codespaces
+
+Usage:
+  dot patch create          Create a patch from uncommitted changes (run in Codespace)
+  dot patch pull [name]     Pull and apply patch from Codespace (run locally)
+
+This workflow exists because Codespaces cannot push to your personal dotfiles
+repo (the GITHUB_TOKEN is scoped to the workspace repo only).
+
+Workflow:
+  1. In Codespace:  dot patch create
+  2. On local:      dot patch pull
+  3. On local:      git commit && git push
+  4. In Codespace:  dot pull
+
+Arguments:
+  name    Optional codespace name. If omitted, uses ~/.codespace (set by csw).
+          If neither exists, gh will prompt interactively.
+          Use 'gh cs list' to see available codespaces.
+EOF
 }
 
 cmd_doctor() {
@@ -347,6 +486,8 @@ Commands:
   install <tools>   Install specific tool(s), e.g. 'dotfiles install jj node'
   update            Update installed tools (brew, nvim plugins, etc.)
   doctor            Check if everything is set up correctly
+  patch create      Create patch from uncommitted changes (Codespaces)
+  patch pull        Pull and apply patch from a Codespace (local)
   help              Show this help message
 
 Options:
@@ -394,6 +535,10 @@ case "${1:-}" in
         ;;
     doctor)
         cmd_doctor
+        ;;
+    patch)
+        shift
+        cmd_patch "$@"
         ;;
     help|--help|-h)
         show_help

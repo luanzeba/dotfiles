@@ -49,12 +49,43 @@ See [references/tool-template.md](references/tool-template.md) for the install s
 
 | Platform | Detection | Package Manager | Notes |
 |----------|-----------|-----------------|-------|
-| GitHub Codespaces | `$CODESPACES` set | `apt` | Debian-based, ephemeral |
+| GitHub Codespaces | `$CODESPACES` set | `apt` | Debian-based, **read-only for push** (use `dot patch`) |
 | macOS | `uname == Darwin` | `brew` | Personal machines |
 | Arch/Omarchy | `command -v pacman` | `pacman`/`yay` | Arch + Hyprland |
 | Omarchy | `~/.local/share/omarchy` exists | `pacman`/`yay` | Uses default configs, skip apply() |
 
 See [references/platform-detection.md](references/platform-detection.md) for detection code snippets.
+
+## Important Constraints
+
+### Codespaces: Read-Only for Pushing
+
+**You cannot push dotfiles changes directly from GitHub Codespaces.**
+
+Why:
+- Codespaces use a scoped `GITHUB_TOKEN` that only has access to the workspace repository (e.g., `github/github`), not your personal `luanzeba/dotfiles` repo
+- Pushing changes would require setting up SSH keys or manually providing a PAT
+
+**Workaround - Use `dot patch`:**
+
+```bash
+# 1. In Codespace: Create a patch from your changes
+dot patch create
+
+# 2. On local machine: Pull and apply the patch
+dot patch pull
+
+# 3. On local: Review, commit, and push
+cd ~/dotfiles
+git diff
+git add -A && git commit -m "Fix from Codespace"
+git push
+
+# 4. In Codespace: Pull the committed changes
+dot pull
+```
+
+This uses `gh cs cp` to transfer a patch file, authenticating through GitHub's Codespace infrastructure rather than requiring repo-specific credentials.
 
 ## Key Principles
 
