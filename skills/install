@@ -4,6 +4,7 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 EXTERNAL_DIR="$SCRIPT_DIR/external"
 SKILL_CREATOR_DIR="$EXTERNAL_DIR/skill-creator"
+PLAYWRIGHT_SKILL_DIR="$EXTERNAL_DIR/playwright-skill"
 PRIVATE_DIR="$EXTERNAL_DIR/private"
 PRIVATE_REPO="luanzeba/private-dotfiles"
 
@@ -51,6 +52,37 @@ download_skill_creator() {
     return 0
 }
 
+# Clone or update playwright-skill from lackeyjb/playwright-skill
+download_playwright_skill() {
+    local repo_url="https://github.com/lackeyjb/playwright-skill"
+    
+    echo "Fetching playwright-skill from $repo_url..."
+    
+    if [[ -d "$PLAYWRIGHT_SKILL_DIR/.git" ]]; then
+        # Update existing clone
+        if ! git -C "$PLAYWRIGHT_SKILL_DIR" pull --ff-only 2>/dev/null; then
+            echo "WARNING: Failed to update playwright-skill (may have local changes)"
+            return 1
+        fi
+    else
+        # Fresh clone
+        if ! git clone --depth 1 "$repo_url" "$PLAYWRIGHT_SKILL_DIR" 2>/dev/null; then
+            echo "WARNING: Failed to clone playwright-skill"
+            return 1
+        fi
+    fi
+    
+    # Run setup (installs Playwright + Chromium)
+    local skill_path="$PLAYWRIGHT_SKILL_DIR/skills/playwright-skill"
+    if [[ -f "$skill_path/package.json" ]]; then
+        echo "Running playwright-skill setup (installing Playwright + Chromium)..."
+        (cd "$skill_path" && npm run setup) || echo "WARNING: playwright-skill setup had issues"
+    fi
+    
+    echo "playwright-skill installed successfully."
+    return 0
+}
+
 # Clone or update private-dotfiles repo
 download_private_skills() {
     echo "Fetching private skills from $PRIVATE_REPO..."
@@ -88,6 +120,7 @@ download_private_skills() {
 # Download external and private skills
 install() {
     download_skill_creator || echo "Continuing without skill-creator..."
+    download_playwright_skill || echo "Continuing without playwright-skill..."
     download_private_skills || echo "Continuing without private skills..."
 }
 
@@ -127,6 +160,11 @@ configure() {
     # Link external skills
     if [[ -d "$SKILL_CREATOR_DIR" ]]; then
         symlink_skill "$SKILL_CREATOR_DIR" "skill-creator"
+    fi
+
+    # Link playwright-skill (nested structure from plugin format)
+    if [[ -d "$PLAYWRIGHT_SKILL_DIR/skills/playwright-skill" ]]; then
+        symlink_skill "$PLAYWRIGHT_SKILL_DIR/skills/playwright-skill" "playwright-skill"
     fi
 
     # Link private skills (each skill in private repo's skills/ directory)

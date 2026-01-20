@@ -12,6 +12,7 @@ skills/
 │   └── references/      # Supporting documentation
 └── external/            # Downloaded/cloned skills (gitignored)
     ├── skill-creator/   # From anthropics/skills repo
+    ├── playwright-skill/# From lackeyjb/playwright-skill
     └── private/         # From luanzeba/private-dotfiles repo
 ```
 
@@ -19,8 +20,9 @@ skills/
 
 The `install` script:
 1. Downloads `skill-creator` from [anthropics/skills](https://github.com/anthropics/skills)
-2. Clones private skills from a private repo (if accessible)
-3. Symlinks all skills to global locations:
+2. Downloads `playwright-skill` from [lackeyjb/playwright-skill](https://github.com/lackeyjb/playwright-skill) and runs setup
+3. Clones private skills from a private repo (if accessible)
+4. Symlinks all skills to global locations:
    - `~/.config/opencode/skill/<name>` (OpenCode)
    - `~/.claude/skills/<name>` (Claude Code)
 
@@ -72,3 +74,21 @@ dotfiles install skills
 # Or directly
 ~/dotfiles/skills/install
 ```
+
+## Playwright Skill vs Playwright MCP
+
+This dotfiles repo includes both the Playwright Skill and Playwright MCP:
+
+| | Playwright MCP | Playwright Skill |
+|--|----------------|------------------|
+| **Location** | `opencode/opencode.json` | `skills/external/playwright-skill/` |
+| **How it works** | Tool-based (MCP protocol) | Claude writes custom scripts |
+| **Best for** | Quick single actions | Complex multi-step automation |
+
+They're complementary:
+- **MCP**: Quick tasks like "take a screenshot of this page"
+- **Skill**: Complex flows like "test the login, then verify dashboard loads, then check responsive design"
+
+### Codespaces Note
+
+In Codespaces, Playwright must run headless (no display available). The `HEADLESS=true` env var is automatically set in `.zshrc` when `$CODESPACES` is detected. When using the playwright-skill, Claude should use `headless: true` or the `helpers.launchBrowser()` function which respects this env var.

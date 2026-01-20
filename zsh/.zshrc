@@ -4,6 +4,12 @@ export COLORTERM=truecolor
 # Add ~/bin to PATH for custom scripts
 export PATH="$HOME/bin:$PATH"
 
+# Codespaces-specific configuration
+if [[ -n "$CODESPACES" ]]; then
+    # Playwright must run headless in Codespaces (no display available)
+    export HEADLESS=true
+fi
+
 # Source configs
 for config_file ($HOME/.zsh/*.zsh); do
   source $config_file
