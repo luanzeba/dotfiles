@@ -1,5 +1,0 @@
-# Wrapper for opencode that ensures GITHUB_TOKEN is set
-opencode() {
-    ensure-github-token || return 1
-    command opencode "$@"
-}
