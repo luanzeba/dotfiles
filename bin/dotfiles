@@ -97,7 +97,19 @@ cmd_pull() {
     
     clear_error_log  # Clear errors before pull
     log_info "Pulling latest changes..."
-    vcs_pull
+    
+    local output
+    local exit_code
+    output=$(vcs_pull 2>&1)
+    exit_code=$?
+    
+    if [[ $exit_code -ne 0 ]]; then
+        log_error_persistent "pull" "-" "$exit_code" "$output"
+        log_error "Pull failed"
+        echo "$output"
+        return $exit_code
+    fi
+    [[ -n "$output" ]] && echo "$output"
     
     log_info "Applying changes..."
     apply_all
@@ -109,11 +121,16 @@ cmd_update() {
     [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]] && { show_update_help; return 0; }
     
     log_info "Updating tools..."
+    local failed_tools=()
     
     # Homebrew (macOS only)
     if is_macos && command -v brew &>/dev/null; then
         log_info "Updating Homebrew..."
-        brew update && brew upgrade
+        local output
+        output=$(brew update && brew upgrade 2>&1) || {
+            log_error_persistent "update" "homebrew" "$?" "$output"
+            log_warn "Homebrew update failed"
+        }
     fi
     
     # Call update() for each tool that has it
@@ -130,16 +147,34 @@ cmd_update() {
         [[ -n "$install_script" ]] || continue
         
         # Source the script and call update if it exists
-        (
-            source "$install_script"
-            if declare -f update &>/dev/null; then
-                log_info "Updating $tool_name..."
-                update
-            else
-                log_verbose "Skipping $tool_name (no update function)"
+        local has_update
+        has_update=$(source "$install_script" 2>/dev/null; declare -f update &>/dev/null && echo "yes")
+        
+        if [[ "$has_update" == "yes" ]]; then
+            log_info "Updating $tool_name..."
+            local output
+            local exit_code
+            output=$(
+                source "$install_script"
+                update 2>&1
+            )
+            exit_code=$?
+            
+            if [[ $exit_code -ne 0 ]]; then
+                log_error_persistent "update" "$tool_name" "$exit_code" "$output"
+                failed_tools+=("$tool_name")
+                log_warn "Failed to update $tool_name"
             fi
-        )
+            [[ -n "$output" ]] && echo "$output"
+        else
+            log_verbose "Skipping $tool_name (no update function)"
+        fi
     done
+    
+    if [[ ${#failed_tools[@]} -gt 0 ]]; then
+        log_warn "Some tools failed to update: ${failed_tools[*]}"
+        echo "Run 'dot logs' to see error details"
+    fi
     
     log_success "All tools updated!"
 }
@@ -609,17 +644,21 @@ install_tool() {
         )
     fi
     
+    local output
+    local exit_code
+    
     if [[ "$already_installed" == "true" ]]; then
         # Already installed: only run configure()
         log_info "$tool already installed, configuring only..."
-        (
+        output=$(
             source "$install_script"
             if declare -f configure &>/dev/null; then
-                configure
+                configure 2>&1
             else
                 log_verbose "$tool has no configure function"
             fi
         )
+        exit_code=$?
     else
         # Not installed or forcing: run full install script
         if [[ "$force" == "true" ]]; then
@@ -628,13 +667,25 @@ install_tool() {
             log_info "Installing $tool..."
         fi
         
-        # Determine interpreter based on extension
+        # Determine interpreter based on extension and capture output
         if [[ "$install_script" == *.zsh ]]; then
-            zsh "$install_script"
+            output=$(zsh "$install_script" 2>&1)
         else
-            bash "$install_script"
+            output=$(bash "$install_script" 2>&1)
         fi
+        exit_code=$?
     fi
+    
+    # Log error if failed
+    if [[ $exit_code -ne 0 ]]; then
+        log_error_persistent "install" "$tool" "$exit_code" "$output"
+        echo "$output"  # Show output to user
+        return $exit_code
+    fi
+    
+    # Show output on success too (for progress visibility)
+    [[ -n "$output" ]] && echo "$output"
+    return 0
 }
 
 cmd_install() {
