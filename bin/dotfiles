@@ -569,8 +569,10 @@ get_available_tools() {
 }
 
 # Run install script for a single tool
+# Usage: install_tool <tool> [force]
 install_tool() {
     local tool="$1"
+    local force="${2:-false}"
     local dir
     dir="$(dotfiles_dir)"
     
@@ -585,34 +587,78 @@ install_tool() {
         return 1
     fi
     
-    log_info "Installing $tool..."
+    # Check if already installed (unless forcing)
+    local already_installed=false
+    if [[ "$force" != "true" ]]; then
+        already_installed=$(
+            source "$install_script"
+            if declare -f check_installed &>/dev/null && check_installed; then
+                echo "true"
+            else
+                echo "false"
+            fi
+        )
+    fi
     
-    # Determine interpreter based on extension
-    if [[ "$install_script" == *.zsh ]]; then
-        zsh "$install_script"
+    if [[ "$already_installed" == "true" ]]; then
+        # Already installed: only run configure()
+        log_info "$tool already installed, configuring only..."
+        (
+            source "$install_script"
+            if declare -f configure &>/dev/null; then
+                configure
+            else
+                log_verbose "$tool has no configure function"
+            fi
+        )
     else
-        bash "$install_script"
+        # Not installed or forcing: run full install script
+        if [[ "$force" == "true" ]]; then
+            log_info "Force reinstalling $tool..."
+        else
+            log_info "Installing $tool..."
+        fi
+        
+        # Determine interpreter based on extension
+        if [[ "$install_script" == *.zsh ]]; then
+            zsh "$install_script"
+        else
+            bash "$install_script"
+        fi
     fi
 }
 
 cmd_install() {
     local dir
     dir="$(dotfiles_dir)"
+    local force=false
+    local tools=()
     
-    # No arguments: run main install script
-    if [[ $# -eq 0 ]]; then
+    # Parse arguments
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            -f|--force) force=true; shift ;;
+            -h|--help) show_install_help; return 0 ;;
+            -*) log_error "Unknown option: $1"; show_install_help; return 1 ;;
+            *) tools+=("$1"); shift ;;
+        esac
+    done
+    
+    # No tools specified: run main install script
+    if [[ ${#tools[@]} -eq 0 ]]; then
+        clear_error_log  # Clear errors before full install
         log_info "Running main install script..."
         "$dir/install"
         return $?
     fi
     
-    # With arguments: install specific tools
+    # With tools specified: install each one
     local failed_tools=()
     local unknown_tools=()
     
-    for tool in "$@"; do
+    for tool in "${tools[@]}"; do
         if [[ -f "$dir/$tool/install" ]] || [[ -f "$dir/$tool/install.zsh" ]]; then
-            if ! install_tool "$tool"; then
+            if ! install_tool "$tool" "$force"; then
                 failed_tools+=("$tool")
             fi
         else
@@ -643,6 +689,29 @@ cmd_install() {
     fi
     
     log_success "Done!"
+}
+
+show_install_help() {
+    cat <<EOF
+dot install - Install tools and configurations
+
+Usage:
+  dot install                       Run full install script
+  dot install <tool> [tool...]      Install specific tool(s)
+  dot install <tool> -f|--force     Force reinstall even if already installed
+  dot install -h|--help             Show this help
+
+Options:
+  -f, --force     Force full reinstall (skip "already installed" check)
+
+Behavior:
+  - If a tool is already installed, only configure() is run
+  - Use -f/--force to run the full install() + configure()
+  - Running 'dot install' without arguments clears the error log first
+
+Available tools:
+$(get_available_tools | sed 's/^/  /')
+EOF
 }
 
 show_doctor_help() {
