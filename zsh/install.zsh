@@ -3,7 +3,11 @@
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 check_installed() {
-    command -v zsh &>/dev/null && [[ -L "$HOME/.zshrc" ]]
+    command -v zsh &>/dev/null
+}
+
+check_configured() {
+    [[ -L "$HOME/.zshrc" ]]
 }
 
 install() {
@@ -31,7 +35,13 @@ apply() {
 }
 
 # Main (only run when executed directly, not when sourced)
-if [[ "${ZSH_EVAL_CONTEXT:-}" == "toplevel" ]] || [[ "${BASH_SOURCE[0]:-$0}" == "${0}" ]]; then
+# In zsh: ZSH_EVAL_CONTEXT contains 'file' when sourced
+# In bash: BASH_SOURCE[0] differs from $0 when sourced
+if [[ -z "${ZSH_EVAL_CONTEXT:-}" ]]; then
+    # Bash
+    [[ "${BASH_SOURCE[0]}" == "${0}" ]] && { install; configure; }
+elif [[ ! "$ZSH_EVAL_CONTEXT" == *:file* ]]; then
+    # Zsh executed directly (toplevel)
     install
     configure
 fi

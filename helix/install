@@ -1,11 +1,15 @@
 #!/bin/bash
 set -e
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 HELIX_CONFIG_DIR="$HOME/.config/helix"
 
 check_installed() {
     command -v hx &>/dev/null
+}
+
+check_configured() {
+    [[ -L "$HOME/.config/helix/config.toml" ]]
 }
 
 install() {

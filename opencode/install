@@ -1,10 +1,14 @@
 #!/bin/bash
 set -e
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 check_installed() {
-    command -v opencode &>/dev/null && [[ -L "$HOME/.config/opencode/opencode.json" ]]
+    command -v opencode &>/dev/null
+}
+
+check_configured() {
+    [[ -L "$HOME/.config/opencode/opencode.json" ]]
 }
 
 # Install opencode binary

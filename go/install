@@ -5,6 +5,11 @@ check_installed() {
     command -v go &>/dev/null
 }
 
+check_configured() {
+    # Check if Go tools are installed
+    command -v gopls &>/dev/null
+}
+
 install() {
     # Go binary installed via system package manager
     :

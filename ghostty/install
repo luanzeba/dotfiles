@@ -6,7 +6,7 @@ set -e
 #
 # macOS only - Ghostty doesn't support Linux yet
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 is_macos() {
     [[ "$(uname)" == "Darwin" ]]
@@ -15,6 +15,11 @@ is_macos() {
 check_installed() {
     # Ghostty is macOS-only
     is_macos && [[ -d "/Applications/Ghostty.app" ]]
+}
+
+check_configured() {
+    # Check if config is symlinked
+    is_macos && [[ -L "$HOME/.config/ghostty/config" ]]
 }
 
 install() {

@@ -8,6 +8,11 @@ check_installed() {
     command -v op &>/dev/null
 }
 
+check_configured() {
+    # 1Password config is done in the app, not via dotfiles
+    return 0
+}
+
 install() {
     if check_installed; then
         echo "1Password CLI already installed"

@@ -5,6 +5,11 @@ check_installed() {
     command -v cargo &>/dev/null
 }
 
+check_configured() {
+    # Rust has no dotfiles config, just the toolchain
+    return 0
+}
+
 install() {
     if command -v rustc &>/dev/null && command -v cargo &>/dev/null; then
         echo "Rust already installed: $(rustc --version)"

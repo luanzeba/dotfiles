@@ -8,6 +8,11 @@ check_installed() {
     command -v jj &>/dev/null
 }
 
+check_configured() {
+    # jj uses git for auth, no dotfiles config needed
+    return 0
+}
+
 install() {
     if command -v jj &>/dev/null; then
         echo "jj already installed: $(jj --version)"

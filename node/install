@@ -7,6 +7,11 @@ check_installed() {
     command -v node &>/dev/null
 }
 
+check_configured() {
+    # Check if TypeScript packages are installed
+    command -v typescript-language-server &>/dev/null
+}
+
 install() {
     if command -v fnm &>/dev/null; then
         echo "fnm already installed"

@@ -146,18 +146,18 @@ cmd_update() {
         # Skip directories without install scripts
         [[ -n "$install_script" ]] || continue
         
-        # Source the script and call update if it exists
+        local interpreter
+        interpreter=$(get_script_interpreter "$install_script")
+        
+        # Check if script has update function
         local has_update
-        has_update=$(source "$install_script" 2>/dev/null; declare -f update &>/dev/null && echo "yes")
+        has_update=$($interpreter -c "source '$install_script' 2>/dev/null; declare -f update &>/dev/null && echo yes")
         
         if [[ "$has_update" == "yes" ]]; then
             log_info "Updating $tool_name..."
             local output
             local exit_code
-            output=$(
-                source "$install_script"
-                update 2>&1
-            )
+            output=$($interpreter -c "source '$install_script'; update" 2>&1)
             exit_code=$?
             
             if [[ $exit_code -ne 0 ]]; then
@@ -359,33 +359,37 @@ cmd_doctor() {
         
         tool_names+=("$tool_name")
         
-        # Source the script and check status
+        # Get the right interpreter for this script
+        local interpreter
+        interpreter=$(get_script_interpreter "$install_script")
+        
+        # Check installed and configured status
         local statuses
-        statuses=$(
-            source "$install_script"
+        statuses=$($interpreter -c "
+            source '$install_script'
             
             # Check installed
             if declare -f check_installed &>/dev/null; then
                 if check_installed; then
-                    echo -n "yes "
+                    echo -n 'yes '
                 else
-                    echo -n "no "
+                    echo -n 'no '
                 fi
             else
-                echo -n "unknown "
+                echo -n 'unknown '
             fi
             
             # Check configured
             if declare -f check_configured &>/dev/null; then
                 if check_configured; then
-                    echo "yes"
+                    echo 'yes'
                 else
-                    echo "no"
+                    echo 'no'
                 fi
             else
-                echo "na"  # Not applicable / no config needed
+                echo 'na'  # Not applicable / no config needed
             fi
-        )
+        " 2>/dev/null)
         
         local inst_status conf_status
         read -r inst_status conf_status <<< "$statuses"
@@ -585,15 +589,19 @@ apply_all() {
         # Skip directories without install scripts
         [[ -n "$install_script" ]] || continue
         
-        (
-            source "$install_script"
-            if declare -f apply &>/dev/null; then
-                log_info "Applying $tool_name..."
-                apply
-            else
-                log_verbose "Skipping $tool_name (no apply function)"
-            fi
-        )
+        local interpreter
+        interpreter=$(get_script_interpreter "$install_script")
+        
+        # Check if script has apply function and run it
+        local has_apply
+        has_apply=$($interpreter -c "source '$install_script' 2>/dev/null; declare -f apply &>/dev/null && echo yes")
+        
+        if [[ "$has_apply" == "yes" ]]; then
+            log_info "Applying $tool_name..."
+            $interpreter -c "source '$install_script'; apply"
+        else
+            log_verbose "Skipping $tool_name (no apply function)"
+        fi
     done
 }
 
@@ -610,6 +618,25 @@ get_available_tools() {
             echo "$tool_name"
         fi
     done | sort
+}
+
+# Get the appropriate interpreter for a script
+# Returns "zsh" or "bash"
+get_script_interpreter() {
+    local script="$1"
+    # Check extension first
+    if [[ "$script" == *.zsh ]]; then
+        echo "zsh"
+        return
+    fi
+    # Check shebang
+    local shebang
+    shebang=$(head -1 "$script" 2>/dev/null)
+    if [[ "$shebang" == *zsh* ]]; then
+        echo "zsh"
+    else
+        echo "bash"
+    fi
 }
 
 # Run install script for a single tool
@@ -631,17 +658,13 @@ install_tool() {
         return 1
     fi
     
+    local interpreter
+    interpreter=$(get_script_interpreter "$install_script")
+    
     # Check if already installed (unless forcing)
     local already_installed=false
     if [[ "$force" != "true" ]]; then
-        already_installed=$(
-            source "$install_script"
-            if declare -f check_installed &>/dev/null && check_installed; then
-                echo "true"
-            else
-                echo "false"
-            fi
-        )
+        already_installed=$($interpreter -c "source '$install_script'; if declare -f check_installed &>/dev/null && check_installed; then echo true; else echo false; fi" 2>/dev/null)
     fi
     
     local output
@@ -650,14 +673,7 @@ install_tool() {
     if [[ "$already_installed" == "true" ]]; then
         # Already installed: only run configure()
         log_info "$tool already installed, configuring only..."
-        output=$(
-            source "$install_script"
-            if declare -f configure &>/dev/null; then
-                configure 2>&1
-            else
-                log_verbose "$tool has no configure function"
-            fi
-        )
+        output=$($interpreter -c "source '$install_script'; if declare -f configure &>/dev/null; then configure; fi" 2>&1)
         exit_code=$?
     else
         # Not installed or forcing: run full install script
@@ -667,12 +683,8 @@ install_tool() {
             log_info "Installing $tool..."
         fi
         
-        # Determine interpreter based on extension and capture output
-        if [[ "$install_script" == *.zsh ]]; then
-            output=$(zsh "$install_script" 2>&1)
-        else
-            output=$(bash "$install_script" 2>&1)
-        fi
+        # Run with appropriate interpreter
+        output=$($interpreter "$install_script" 2>&1)
         exit_code=$?
     fi
     
@@ -830,7 +842,8 @@ $(
         install_script=$(get_install_script "$tool_dir")
         [[ -n "$install_script" ]] || continue
         tool_name=$(basename "$tool_dir")
-        has_update=$(source "$install_script" 2>/dev/null; declare -f update &>/dev/null && echo "yes")
+        interpreter=$(get_script_interpreter "$install_script")
+        has_update=$($interpreter -c "source '$install_script' 2>/dev/null; declare -f update &>/dev/null && echo yes")
         [[ "$has_update" == "yes" ]] && echo "  $tool_name"
     done
 )
