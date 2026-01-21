@@ -17,6 +17,11 @@ configure() {
     ln -sf "$SCRIPT_DIR/.gitignore_global" ~/.gitignore_global
     ln -sfn "$SCRIPT_DIR/.git_template" ~/.git_template
     touch ~/.gitconfig-macos  # create empty file for include directive
+
+    # Override email in Codespaces
+    if [[ -n "$CODESPACES" ]]; then
+        git config --global user.email "luanzeba@github.com"
+    fi
 }
 
 apply() {
