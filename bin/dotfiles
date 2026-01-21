@@ -54,6 +54,8 @@ get_install_script() {
 # Commands
 
 cmd_status() {
+    [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]] && { show_status_help; return 0; }
+    
     local dir
     dir="$(dotfiles_dir)"
     cd "$dir" || exit 1
@@ -64,6 +66,8 @@ cmd_status() {
 }
 
 cmd_edit() {
+    [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]] && { show_edit_help; return 0; }
+    
     local dir
     dir="$(dotfiles_dir)"
     
@@ -80,6 +84,8 @@ cmd_edit() {
 }
 
 cmd_pull() {
+    [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]] && { show_pull_help; return 0; }
+    
     if is_omarchy; then
         echo "Skipping pull on Omarchy (using default configs)"
         return 0
@@ -89,6 +95,7 @@ cmd_pull() {
     dir="$(dotfiles_dir)"
     cd "$dir" || exit 1
     
+    clear_error_log  # Clear errors before pull
     log_info "Pulling latest changes..."
     vcs_pull
     
@@ -99,6 +106,8 @@ cmd_pull() {
 }
 
 cmd_update() {
+    [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]] && { show_update_help; return 0; }
+    
     log_info "Updating tools..."
     
     # Homebrew (macOS only)
@@ -146,7 +155,7 @@ cmd_patch() {
             shift
             cmd_patch_pull "$@"
             ;;
-        ""|help)
+        ""|help|-h|--help)
             show_patch_help
             ;;
         *)
@@ -714,6 +723,69 @@ $(get_available_tools | sed 's/^/  /')
 EOF
 }
 
+show_status_help() {
+    cat <<EOF
+dot status - Show VCS status of dotfiles repo
+
+Usage:
+  dot status [-h|--help]
+
+Shows uncommitted changes in your dotfiles repository using
+jj (if available) or git.
+EOF
+}
+
+show_edit_help() {
+    cat <<EOF
+dot edit - Open dotfiles in editor
+
+Usage:
+  dot edit [-h|--help]
+
+Opens the dotfiles directory in your preferred editor.
+Uses \$EDITOR, or falls back to nvim/vim.
+EOF
+}
+
+show_pull_help() {
+    cat <<EOF
+dot pull - Pull latest changes and apply them
+
+Usage:
+  dot pull [-h|--help]
+
+Pulls the latest changes from the remote repository and runs
+apply() for each tool to reload configurations.
+
+Clears the error log before pulling.
+Note: Skipped on Omarchy (uses default configs).
+EOF
+}
+
+show_update_help() {
+    cat <<EOF
+dot update - Update installed tools
+
+Usage:
+  dot update [-h|--help]
+
+Updates all installed tools that have an update() function defined.
+On macOS, also runs 'brew update && brew upgrade'.
+
+Tools with update functions:
+$(
+    dir="$(dotfiles_dir)"
+    for tool_dir in "$dir"/*/; do
+        install_script=$(get_install_script "$tool_dir")
+        [[ -n "$install_script" ]] || continue
+        tool_name=$(basename "$tool_dir")
+        has_update=$(source "$install_script" 2>/dev/null; declare -f update &>/dev/null && echo "yes")
+        [[ "$has_update" == "yes" ]] && echo "  $tool_name"
+    done
+)
+EOF
+}
+
 show_doctor_help() {
     cat <<EOF
 dot doctor - Check system health
@@ -809,20 +881,24 @@ export VERBOSE
 # Main dispatch
 case "${1:-}" in
     status)
-        cmd_status
+        shift
+        cmd_status "$@"
         ;;
     pull)
-        cmd_pull
+        shift
+        cmd_pull "$@"
         ;;
     edit)
-        cmd_edit
+        shift
+        cmd_edit "$@"
         ;;
     install)
         shift
         cmd_install "$@"
         ;;
     update)
-        cmd_update
+        shift
+        cmd_update "$@"
         ;;
     doctor)
         shift
