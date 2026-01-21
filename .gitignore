@@ -1,3 +1,6 @@
+# macOS
+.DS_Store
+
 # Downloaded as part of the install script
 bin/csw
 

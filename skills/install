@@ -154,8 +154,14 @@ configure() {
     mkdir -p ~/.config/opencode/skill
     mkdir -p ~/.claude/skills
 
-    # Link custom skills from this repo
-    symlink_skill "$SCRIPT_DIR/dotfiles" "dotfiles"
+    # Link custom skills from this repo (all directories except 'external')
+    for skill_dir in "$SCRIPT_DIR"/*/; do
+        local skill_name
+        skill_name=$(basename "$skill_dir")
+        # Skip the external directory (handled separately below)
+        [[ "$skill_name" == "external" ]] && continue
+        symlink_skill "$skill_dir" "$skill_name"
+    done
 
     # Link external skills
     if [[ -d "$SKILL_CREATOR_DIR" ]]; then
