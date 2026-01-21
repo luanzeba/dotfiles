@@ -132,14 +132,15 @@ log_error_persistent() {
     
     # Create short message (first line, truncated to 80 chars)
     local short_msg
-    short_msg=$(echo "$full_msg" | head -n1 | cut -c1-80)
+    short_msg=$(printf '%s' "$full_msg" | head -n1 | cut -c1-80)
     
     # Escape newlines and pipes in full message for storage
-    local escaped_msg
-    escaped_msg=$(echo "$full_msg" | sed ':a;N;$!ba;s/\n/\\n/g' | sed 's/|/\\|/g')
+    # Use bash parameter expansion for newlines, then escape pipes
+    local escaped_msg="${full_msg//$'\n'/\\n}"
+    escaped_msg="${escaped_msg//|/\\|}"
     
     # Format: TIMESTAMP|COMMAND|TOOL|EXIT_CODE|SHORT_MSG|FULL_MSG
-    echo "$(date -Iseconds)|$command|$tool|$exit_code|$short_msg|$escaped_msg" >> "$ERROR_LOG"
+    printf '%s|%s|%s|%s|%s|%s\n' "$(date -Iseconds)" "$command" "$tool" "$exit_code" "$short_msg" "$escaped_msg" >> "$ERROR_LOG"
 }
 
 # Get the number of logged errors

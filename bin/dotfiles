@@ -354,6 +354,112 @@ cmd_doctor() {
     fi
 }
 
+cmd_logs() {
+    local show_all=false
+    local verbose=false
+    local clear=false
+    local last_n=10
+    local filter_tool=""
+    
+    # Parse arguments
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            -a|--all) show_all=true; shift ;;
+            -v|--verbose) verbose=true; shift ;;
+            -n|--last)
+                shift
+                if [[ -n "$1" && "$1" =~ ^[0-9]+$ ]]; then
+                    last_n="$1"
+                    shift
+                else
+                    log_error "--last requires a number"
+                    return 1
+                fi
+                ;;
+            --clear) clear=true; shift ;;
+            -h|--help) show_logs_help; return 0 ;;
+            -*) log_error "Unknown option: $1"; show_logs_help; return 1 ;;
+            *) filter_tool="$1"; shift ;;
+        esac
+    done
+    
+    # Handle clear
+    if [[ "$clear" == true ]]; then
+        local count
+        count=$(error_count)
+        if [[ "$count" -gt 0 ]]; then
+            clear_error_log
+            log_success "Cleared $count error(s)"
+        else
+            log_info "No errors to clear"
+        fi
+        return 0
+    fi
+    
+    # Check if log exists
+    if [[ ! -f "$ERROR_LOG" ]] || [[ ! -s "$ERROR_LOG" ]]; then
+        log_success "No errors recorded"
+        return 0
+    fi
+    
+    # Filter by tool if specified
+    local log_content
+    if [[ -n "$filter_tool" ]]; then
+        log_content=$(grep "|$filter_tool|" "$ERROR_LOG" || true)
+        if [[ -z "$log_content" ]]; then
+            log_success "No errors for '$filter_tool'"
+            return 0
+        fi
+    else
+        log_content=$(cat "$ERROR_LOG")
+    fi
+    
+    # Get total count and apply limit
+    local total_count
+    total_count=$(echo "$log_content" | wc -l | tr -d ' ')
+    
+    if [[ "$show_all" != true ]]; then
+        log_content=$(echo "$log_content" | tail -n "$last_n")
+    fi
+    
+    # Print header
+    if [[ -n "$filter_tool" ]]; then
+        echo "Errors for '$filter_tool' ($total_count total)"
+    else
+        echo "Recent Errors ($total_count total)"
+    fi
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo ""
+    
+    if [[ "$verbose" == true ]]; then
+        # Verbose view: show full error details
+        echo "$log_content" | while IFS='|' read -r ts cmd tool code short full; do
+            local date_part="${ts:0:19}"
+            date_part="${date_part/T/ }"
+            echo "[$date_part] $cmd ${tool:+$tool }(exit $code)"
+            echo "────────────────────────────────────────────────────────────"
+            # Unescape the full message
+            echo -e "${full//\\n/$'\n'}" | sed 's/\\|/|/g'
+            echo ""
+        done
+    else
+        # Summary view: one line per error
+        printf "%-16s  %-8s  %-12s  %s\n" "Timestamp" "Command" "Tool" "Message"
+        printf "%-16s  %-8s  %-12s  %s\n" "────────────────" "────────" "────────────" "────────────────────────────────"
+        echo "$log_content" | while IFS='|' read -r ts cmd tool _code short _full; do
+            local date_part="${ts:0:16}"
+            date_part="${date_part/T/ }"
+            printf "%-16s  %-8s  %-12s  %s\n" "$date_part" "$cmd" "${tool:--}" "$short"
+        done
+    fi
+    
+    echo ""
+    if [[ "$verbose" != true ]]; then
+        echo "Run 'dot logs -v' for full details"
+    fi
+    echo "Run 'dot logs --clear' to clear"
+}
+
 apply_all() {
     local dir
     dir="$(dotfiles_dir)"
@@ -471,6 +577,31 @@ cmd_install() {
     log_success "Done!"
 }
 
+show_logs_help() {
+    cat <<EOF
+dot logs - View installation and operation logs
+
+Usage:
+  dot logs                    Show recent errors (last 10)
+  dot logs -a, --all          Show all logged errors
+  dot logs -n, --last N       Show last N errors (default: 10)
+  dot logs <tool>             Show errors for a specific tool
+  dot logs --clear            Clear the error log
+  dot logs -v, --verbose      Show full error details (not truncated)
+  dot logs -h, --help         Show this help
+
+Examples:
+  dot logs                    # Recent errors, truncated
+  dot logs helix              # Errors for helix only
+  dot logs -v                 # Recent errors with full details
+  dot logs --all -v           # Everything, full details
+  dot logs --clear            # Clear log after reviewing
+
+Errors are recorded during install, pull, and update operations.
+The log is automatically cleared before 'dot install' (full) or 'dot pull'.
+EOF
+}
+
 show_help() {
     cat <<EOF
 dotfiles - CLI for managing dotfiles
@@ -486,12 +617,14 @@ Commands:
   install <tools>   Install specific tool(s), e.g. 'dotfiles install jj node'
   update            Update installed tools (brew, nvim plugins, etc.)
   doctor            Check if everything is set up correctly
+  logs              View installation and operation error logs
   patch create      Create patch from uncommitted changes (Codespaces)
   patch pull        Pull and apply patch from a Codespace (local)
   help              Show this help message
 
 Options:
   -v, --verbose     Show verbose output (e.g., skipped tools)
+  -h, --help        Show help for a command
 
 Environment:
   DOTFILES_DIR    Override dotfiles directory location
@@ -535,6 +668,10 @@ case "${1:-}" in
         ;;
     doctor)
         cmd_doctor
+        ;;
+    logs)
+        shift
+        cmd_logs "$@"
         ;;
     patch)
         shift
