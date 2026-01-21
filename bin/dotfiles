@@ -273,6 +273,8 @@ EOF
 }
 
 cmd_doctor() {
+    [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]] && { show_doctor_help; return 0; }
+    
     local dir
     dir="$(dotfiles_dir)"
     
@@ -283,25 +285,24 @@ cmd_doctor() {
     echo ""
     
     # Check platform
-    echo "Platform:"
+    echo -n "Platform: "
     if is_codespaces; then
-        echo "  GitHub Codespaces"
+        echo "GitHub Codespaces"
     elif is_omarchy; then
-        echo "  Omarchy (Arch Linux)"
+        echo "Omarchy (Arch Linux)"
     elif is_macos; then
-        echo "  macOS"
+        echo "macOS"
     elif is_arch; then
-        echo "  Arch Linux"
+        echo "Arch Linux"
     else
-        echo "  Unknown"
+        echo "Unknown"
     fi
     echo ""
     
-    # Check all tools dynamically
-    echo "Tools:"
-    local installed=()
-    local not_installed=()
-    local unknown=()
+    # Collect tool status into parallel arrays
+    local tool_names=()
+    local installed_statuses=()
+    local configured_statuses=()
     
     for tool_dir in "$dir"/*/; do
         local tool_name
@@ -312,45 +313,112 @@ cmd_doctor() {
         # Skip directories without install scripts
         [[ -n "$install_script" ]] || continue
         
-        # Source the script and call check_installed if it exists
-        local status
-        status=$(
+        tool_names+=("$tool_name")
+        
+        # Source the script and check status
+        local statuses
+        statuses=$(
             source "$install_script"
+            
+            # Check installed
             if declare -f check_installed &>/dev/null; then
                 if check_installed; then
-                    echo "installed"
+                    echo -n "yes "
                 else
-                    echo "not_installed"
+                    echo -n "no "
                 fi
             else
-                echo "unknown"
+                echo -n "unknown "
+            fi
+            
+            # Check configured
+            if declare -f check_configured &>/dev/null; then
+                if check_configured; then
+                    echo "yes"
+                else
+                    echo "no"
+                fi
+            else
+                echo "na"  # Not applicable / no config needed
             fi
         )
         
-        case "$status" in
-            installed) installed+=("$tool_name") ;;
-            not_installed) not_installed+=("$tool_name") ;;
-            unknown) unknown+=("$tool_name") ;;
-        esac
+        local inst_status conf_status
+        read -r inst_status conf_status <<< "$statuses"
+        installed_statuses+=("$inst_status")
+        configured_statuses+=("$conf_status")
     done
     
-    # Output results
-    for tool in "${installed[@]}"; do
-        echo "  ✅ $tool"
+    # Calculate column widths dynamically
+    local tool_width
+    tool_width=$(max_width 4 "${tool_names[@]}")
+    local inst_width=9   # "Installed"
+    local conf_width=10  # "Configured"
+    
+    # Print table header
+    print_table_line "─" "$tool_width" "$inst_width" "$conf_width"
+    print_table_row "$tool_width" "Tool" "$inst_width" "Installed" "$conf_width" "Configured"
+    print_table_separator "$tool_width" "$inst_width" "$conf_width"
+    
+    # Print each tool's status
+    local fully_configured=0
+    local total=${#tool_names[@]}
+    local i
+    
+    for ((i=0; i<total; i++)); do
+        local tool="${tool_names[$i]}"
+        local inst="${installed_statuses[$i]}"
+        local conf="${configured_statuses[$i]}"
+        
+        # Convert to display symbols
+        local inst_display conf_display
+        case "$inst" in
+            yes) inst_display="✅" ;;
+            no) inst_display="❌" ;;
+            *) inst_display="❓" ;;
+        esac
+        
+        case "$conf" in
+            yes) conf_display="✅" ;;
+            no) conf_display="❌" ;;
+            na) 
+                # If installed and no config needed, show checkmark
+                if [[ "$inst" == "yes" ]]; then
+                    conf_display="✅"
+                else
+                    conf_display="-"
+                fi
+                ;;
+            *) conf_display="❓" ;;
+        esac
+        
+        # Count fully configured (installed + configured or no config needed)
+        if [[ "$inst" == "yes" && ("$conf" == "yes" || "$conf" == "na") ]]; then
+            ((fully_configured++))
+        fi
+        
+        print_table_row "$tool_width" "$tool" "$inst_width" "   $inst_display" "$conf_width" "    $conf_display"
     done
-    for tool in "${not_installed[@]}"; do
-        echo "  ❌ $tool"
-    done
-    for tool in "${unknown[@]}"; do
-        echo "  ❓ $tool"
-    done
+    
+    print_table_bottom "$tool_width" "$inst_width" "$conf_width"
     echo ""
     
     # Summary
-    local total=$((${#installed[@]} + ${#not_installed[@]} + ${#unknown[@]}))
-    echo "${#installed[@]}/$total tools installed"
-    if [[ ${#not_installed[@]} -gt 0 ]]; then
-        echo "Run 'dot install <tool>' to install missing tools"
+    echo "$fully_configured/$total tools fully configured"
+    
+    if [[ $fully_configured -lt $total ]]; then
+        echo "Run 'dot install <tool>' to install/configure missing tools"
+    fi
+    
+    # Show recent errors if any
+    local err_count
+    err_count=$(error_count)
+    if [[ "$err_count" -gt 0 ]]; then
+        echo ""
+        echo "Recent errors ($err_count total):"
+        show_recent_errors 3
+        echo ""
+        echo "Run 'dot logs' for details"
     fi
 }
 
@@ -577,6 +645,27 @@ cmd_install() {
     log_success "Done!"
 }
 
+show_doctor_help() {
+    cat <<EOF
+dot doctor - Check system health
+
+Usage:
+  dot doctor [-h|--help]
+
+Shows a table of all tools with their installation and configuration status:
+  - Installed: Whether the tool binary/command exists
+  - Configured: Whether the tool's config files are symlinked
+
+Status indicators:
+  ✅  Installed/Configured
+  ❌  Not installed/Not configured  
+  ❓  No health check defined
+  -   Not applicable (tool has no config)
+
+Also displays any recent errors from the log.
+EOF
+}
+
 show_logs_help() {
     cat <<EOF
 dot logs - View installation and operation logs
@@ -667,7 +756,8 @@ case "${1:-}" in
         cmd_update
         ;;
     doctor)
-        cmd_doctor
+        shift
+        cmd_doctor "$@"
         ;;
     logs)
         shift
