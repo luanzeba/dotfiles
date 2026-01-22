@@ -418,26 +418,26 @@ cmd_doctor() {
         local inst="${installed_statuses[$i]}"
         local conf="${configured_statuses[$i]}"
         
-        # Convert to display symbols
+        # Convert to colored display indicators
         local inst_display conf_display
         case "$inst" in
-            yes) inst_display="✅" ;;
-            no) inst_display="❌" ;;
-            *) inst_display="❓" ;;
+            yes) inst_display="${GREEN}[OK]${NC}" ;;
+            no)  inst_display="${RED}[NO]${NC}" ;;
+            *)   inst_display="${YELLOW}[??]${NC}" ;;
         esac
         
         case "$conf" in
-            yes) conf_display="✅" ;;
-            no) conf_display="❌" ;;
+            yes) conf_display="${GREEN}[OK]${NC}" ;;
+            no)  conf_display="${RED}[NO]${NC}" ;;
             na) 
-                # If installed and no config needed, show checkmark
+                # If installed and no config needed, show OK
                 if [[ "$inst" == "yes" ]]; then
-                    conf_display="✅"
+                    conf_display="${GREEN}[OK]${NC}"
                 else
-                    conf_display="-"
+                    conf_display="${DIM}[--]${NC}"
                 fi
                 ;;
-            *) conf_display="❓" ;;
+            *)   conf_display="${YELLOW}[??]${NC}" ;;
         esac
         
         # Count fully configured (installed + configured or no config needed)
@@ -445,7 +445,10 @@ cmd_doctor() {
             ((fully_configured++))
         fi
         
-        print_table_row "$tool_width" "$tool" "$inst_width" "   $inst_display" "$conf_width" "    $conf_display"
+        # Print row with proper alignment (ANSI codes don't affect printf width)
+        # [OK] is 4 chars, inst_width=9 needs 11 chars between │: 3 + 4 + 4 = 11
+        # [OK] is 4 chars, conf_width=10 needs 12 chars between │: 4 + 4 + 4 = 12
+        printf "│ %-${tool_width}s │   %b    │    %b    │\n" "$tool" "$inst_display" "$conf_display"
     done
     
     print_table_bottom "$tool_width" "$inst_width" "$conf_width"
@@ -862,10 +865,10 @@ Shows a table of all tools with their installation and configuration status:
   - Configured: Whether the tool's config files are symlinked
 
 Status indicators:
-  ✅  Installed/Configured
-  ❌  Not installed/Not configured  
-  ❓  No health check defined
-  -   Not applicable (tool has no config)
+  ${GREEN}[OK]${NC}  Installed/Configured
+  ${RED}[NO]${NC}  Not installed/Not configured  
+  ${YELLOW}[??]${NC}  No health check defined
+  ${DIM}[--]${NC}  Not applicable (tool has no config)
 
 Also displays any recent errors from the log.
 EOF
