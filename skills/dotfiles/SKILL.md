@@ -58,6 +58,22 @@ See [references/platform-detection.md](references/platform-detection.md) for det
 
 ## Important Constraints
 
+### Always Modify Dotfiles, Not Config Targets
+
+Never create or edit files directly in config target directories like `~/.config/` or `~/bin/`. These locations contain symlinks to `~/dotfiles/`, so changes made there are either not version controlled or will be overwritten by install scripts.
+
+Always make changes in `~/dotfiles/` so they are:
+1. Version controlled (git)
+2. Propagated to other machines via `dot pull`
+3. Not overwritten by install scripts
+
+Common mistakes to avoid:
+- Creating skills in `~/.config/opencode/skill/` instead of `~/dotfiles/skills/`
+- Editing nvim config in `~/.config/nvim/` instead of `~/dotfiles/nvim/`
+- Adding scripts to `~/bin/` instead of `~/dotfiles/bin/`
+
+After creating or modifying files in `~/dotfiles/`, run the appropriate install script to create symlinks (e.g., `dot install skills`, `dot install nvim`).
+
 ### Codespaces: Read-Only for Pushing
 
 **You cannot push dotfiles changes directly from GitHub Codespaces.**
