@@ -1,8 +1,85 @@
 #!/bin/bash
 set -e
 
+# Go installation directory (managed by this script)
+GO_INSTALL_DIR="$HOME/.local/go"
+
+# Get the latest Go version from go.dev
+get_latest_version() {
+    curl -sL 'https://go.dev/VERSION?m=text' | head -1
+}
+
+# Get currently installed Go version (from our managed installation)
+get_installed_version() {
+    if [[ -x "$GO_INSTALL_DIR/bin/go" ]]; then
+        "$GO_INSTALL_DIR/bin/go" version | awk '{print $3}'
+    fi
+}
+
+# Detect OS and architecture for download URL
+get_os() {
+    uname -s | tr '[:upper:]' '[:lower:]'
+}
+
+get_arch() {
+    local arch
+    arch=$(uname -m)
+    case "$arch" in
+        x86_64)         echo "amd64" ;;
+        aarch64|arm64)  echo "arm64" ;;
+        armv6l)         echo "armv6l" ;;
+        i386|i686)      echo "386" ;;
+        *)              echo "$arch" ;;
+    esac
+}
+
+# Download and install Go
+install_go() {
+    local version="$1"
+    local os
+    local arch
+    os=$(get_os)
+    arch=$(get_arch)
+    
+    local url="https://go.dev/dl/${version}.${os}-${arch}.tar.gz"
+    local tmp_file="/tmp/${version}.${os}-${arch}.tar.gz"
+    
+    echo "Downloading Go ${version} for ${os}/${arch}..."
+    echo "  URL: $url"
+    
+    if ! curl -fsSL -o "$tmp_file" "$url"; then
+        echo "Failed to download Go from $url"
+        return 1
+    fi
+    
+    # Remove old installation if exists (per Go's official instructions)
+    if [[ -d "$GO_INSTALL_DIR" ]]; then
+        echo "Removing old Go installation..."
+        rm -rf "$GO_INSTALL_DIR"
+    fi
+    
+    # Create parent directory if needed
+    mkdir -p "$(dirname "$GO_INSTALL_DIR")"
+    
+    # Extract (tar creates 'go' directory, we rename it)
+    echo "Extracting to $GO_INSTALL_DIR..."
+    tar -C "$(dirname "$GO_INSTALL_DIR")" -xzf "$tmp_file"
+    
+    # Clean up
+    rm -f "$tmp_file"
+    
+    # Verify installation
+    if [[ -x "$GO_INSTALL_DIR/bin/go" ]]; then
+        echo "Go installed successfully: $("$GO_INSTALL_DIR/bin/go" version)"
+    else
+        echo "Installation failed: $GO_INSTALL_DIR/bin/go not found"
+        return 1
+    fi
+}
+
 check_installed() {
-    command -v go &>/dev/null
+    # Only consider "installed" if it's our managed installation
+    [[ -x "$GO_INSTALL_DIR/bin/go" ]]
 }
 
 check_configured() {
@@ -11,32 +88,79 @@ check_configured() {
 }
 
 install() {
-    # Go binary installed via system package manager
-    :
+    local latest
+    local installed
+    
+    latest=$(get_latest_version)
+    installed=$(get_installed_version)
+    
+    if [[ -z "$latest" ]]; then
+        echo "Failed to fetch latest Go version"
+        return 1
+    fi
+    
+    if [[ "$installed" == "$latest" ]]; then
+        echo "Go is already up to date: $installed"
+        return 0
+    fi
+    
+    if [[ -n "$installed" ]]; then
+        echo "Upgrading Go from $installed to $latest..."
+    else
+        echo "Installing Go $latest..."
+    fi
+    
+    install_go "$latest"
 }
 
 configure() {
+    # Ensure our Go is in PATH for this session
+    export PATH="$GO_INSTALL_DIR/bin:$HOME/go/bin:$PATH"
+    
     if ! command -v go &>/dev/null; then
-        echo "Go not installed, skipping Go tools"
-        return
+        echo "Go not available in PATH, skipping Go tools installation"
+        return 1
     fi
-
+    
     echo "Installing Go tools..."
     go install golang.org/x/tools/gopls@latest
     go install github.com/incu6us/goimports-reviser/v3@latest
     go install mvdan.cc/gofumpt@latest
+    
+    echo "Go tools installed successfully"
 }
 
 update() {
-    if ! command -v go &>/dev/null; then
-        echo "Go not installed, skipping Go tools update"
-        return
+    echo "Checking for Go updates..."
+    
+    local latest
+    local installed
+    
+    latest=$(get_latest_version)
+    installed=$(get_installed_version)
+    
+    if [[ -z "$latest" ]]; then
+        echo "Failed to fetch latest Go version"
+        return 1
     fi
-
-    echo "Updating Go tools..."
-    go install golang.org/x/tools/gopls@latest
-    go install github.com/incu6us/goimports-reviser/v3@latest
-    go install mvdan.cc/gofumpt@latest
+    
+    if [[ "$installed" != "$latest" ]]; then
+        echo "Updating Go from ${installed:-'not installed'} to $latest..."
+        install_go "$latest"
+    else
+        echo "Go is already up to date: $installed"
+    fi
+    
+    # Update Go tools
+    export PATH="$GO_INSTALL_DIR/bin:$HOME/go/bin:$PATH"
+    
+    if command -v go &>/dev/null; then
+        echo "Updating Go tools..."
+        go install golang.org/x/tools/gopls@latest
+        go install github.com/incu6us/goimports-reviser/v3@latest
+        go install mvdan.cc/gofumpt@latest
+        echo "Go tools updated successfully"
+    fi
 }
 
 # Main (only run when executed directly, not when sourced)
