@@ -10,8 +10,6 @@ description: Create and organize GitHub issues effectively. Use when creating is
 Keep issues concise. The default structure has two sections:
 
 ```markdown
-Depends on #123
-
 ### Description
 
 [Context, problem statement, relevant code links, clarifications in flowing prose]
@@ -21,7 +19,33 @@ Depends on #123
 [Clear definition of done]
 ```
 
-If an issue depends on another, add `Depends on #123` at the very top, above the description.
+## Issue Dependencies
+
+Use GitHub's Issue Dependencies API to track blocking relationships between issues. This enables proper dependency visualization and tracking in GitHub's UI.
+
+**Do NOT use text-based dependencies** like `Depends on #123` in issue bodies. While this convention was common historically, it's not machine-readable and doesn't integrate with GitHub's dependency features.
+
+### Adding Dependencies
+
+After creating an issue that depends on another:
+
+```bash
+# Get the blocking issue's ID (not number)
+BLOCKING_ID=$(gh api repos/OWNER/REPO/issues/BLOCKING_NUM --jq '.id')
+
+# Add the dependency
+gh api repos/OWNER/REPO/issues/ISSUE_NUM/dependencies/blocked_by \
+  -X POST \
+  -F issue_id=$BLOCKING_ID
+```
+
+### Workflow for Issues with Dependencies
+
+1. Create the issue (without dependency text in body)
+2. Add dependencies via the API
+3. Dependencies appear in GitHub's UI automatically
+
+See [references/api-reference.md](references/api-reference.md) for more dependency API operations.
 
 ### Writing Style
 

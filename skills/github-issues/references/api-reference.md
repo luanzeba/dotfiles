@@ -95,6 +95,73 @@ To get an issue's node ID:
 gh api repos/OWNER/REPO/issues/NUMBER --jq '.node_id'
 ```
 
+## Issue Dependencies
+
+GitHub's Issue Dependencies API tracks blocking relationships between issues. This is the preferred way to represent dependencies (not text in issue bodies).
+
+### List Dependencies (what blocks this issue)
+
+```bash
+gh api repos/OWNER/REPO/issues/NUMBER/dependencies/blocked_by --jq '.[] | {number, title, state}'
+```
+
+### List Dependents (what this issue blocks)
+
+```bash
+gh api repos/OWNER/REPO/issues/NUMBER/dependencies/blocking --jq '.[] | {number, title, state}'
+```
+
+### Add Dependency
+
+The API requires the blocking issue's **ID** (not number):
+
+```bash
+# Get the blocking issue's ID
+BLOCKING_ID=$(gh api repos/OWNER/REPO/issues/BLOCKING_NUM --jq '.id')
+
+# Add the dependency (use -F for integer, not -f)
+gh api repos/OWNER/REPO/issues/ISSUE_NUM/dependencies/blocked_by \
+  -X POST \
+  -F issue_id=$BLOCKING_ID
+```
+
+### Remove Dependency
+
+```bash
+# Get the blocking issue's ID
+BLOCKING_ID=$(gh api repos/OWNER/REPO/issues/BLOCKING_NUM --jq '.id')
+
+# Remove the dependency
+gh api repos/OWNER/REPO/issues/ISSUE_NUM/dependencies/blocked_by/$BLOCKING_ID \
+  -X DELETE
+```
+
+### Bulk Add Dependencies
+
+```bash
+# Issue 100 is blocked by issues 101, 102, 103
+for BLOCKING_NUM in 101 102 103; do
+  BLOCKING_ID=$(gh api repos/OWNER/REPO/issues/$BLOCKING_NUM --jq '.id')
+  gh api repos/OWNER/REPO/issues/100/dependencies/blocked_by \
+    -X POST \
+    -F issue_id=$BLOCKING_ID
+done
+```
+
+### Cross-Repository Dependencies
+
+Dependencies can reference issues in other repositories. The blocking issue ID is globally unique, so the same API works:
+
+```bash
+# Get ID from another repo
+BLOCKING_ID=$(gh api repos/OTHER_OWNER/OTHER_REPO/issues/NUMBER --jq '.id')
+
+# Add as dependency to current repo's issue
+gh api repos/OWNER/REPO/issues/ISSUE_NUM/dependencies/blocked_by \
+  -X POST \
+  -F issue_id=$BLOCKING_ID
+```
+
 ## Sub-Issues
 
 ### List Sub-Issues (REST)
@@ -166,6 +233,24 @@ mutation($repoId: ID!, $title: String!, $body: String!, $typeId: ID!, $parentId:
 2. Get repository node ID
 3. Create the Batch issue
 4. Create Task issues with `parentIssueId` pointing to the Batch
+
+### Create Issues with Dependencies
+
+1. Create all issues first (without dependency text in body)
+2. Add dependencies via the API after issues exist
+
+```bash
+# Example: Create task that depends on another task
+# First, create both issues, then link them
+
+# Get the blocking issue's ID
+BLOCKING_ID=$(gh api repos/OWNER/REPO/issues/101 --jq '.id')
+
+# Add dependency: issue 102 is blocked by issue 101
+gh api repos/OWNER/REPO/issues/102/dependencies/blocked_by \
+  -X POST \
+  -F issue_id=$BLOCKING_ID
+```
 
 ### Bulk Add Existing Issues as Sub-Issues
 
