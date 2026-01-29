@@ -1,0 +1,10 @@
+#!/bin/bash
+# pbpaste shim - uses rdm in Codespaces, native pbpaste on macOS
+if [[ -n "$CODESPACES" ]]; then
+    exec rdm paste
+elif [[ -x /usr/bin/pbpaste ]]; then
+    exec /usr/bin/pbpaste
+else
+    echo "pbpaste not available" >&2
+    exit 1
+fi

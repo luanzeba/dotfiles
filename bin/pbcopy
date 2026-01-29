@@ -1,0 +1,10 @@
+#!/bin/bash
+# pbcopy shim - uses rdm in Codespaces, native pbcopy on macOS
+if [[ -n "$CODESPACES" ]]; then
+    exec rdm copy
+elif [[ -x /usr/bin/pbcopy ]]; then
+    exec /usr/bin/pbcopy
+else
+    echo "pbcopy not available" >&2
+    exit 1
+fi

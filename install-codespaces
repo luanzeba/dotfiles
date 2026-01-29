@@ -34,7 +34,7 @@ setup_friendly_name() {
 # Install remote-development-manager for copy/paste and open support
 install_rdm() {
     echo "Installing rdm..."
-    wget -q https://github.com/BlakeWilliams/remote-development-manager/releases/download/v0.0.3/rdm-linux-amd64 -O /tmp/rdm
+    wget -q https://github.com/BlakeWilliams/remote-development-manager/releases/latest/download/rdm-linux-amd64 -O /tmp/rdm
     sudo mv /tmp/rdm /usr/bin/rdm
     sudo chmod +x /usr/bin/rdm
     gh config set browser "rdm open"
