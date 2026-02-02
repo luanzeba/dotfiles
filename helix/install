@@ -2,6 +2,7 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+HELIX_INSTALL_DIR="$HOME/.local/helix"
 HELIX_CONFIG_DIR="$HOME/.config/helix"
 
 check_installed() {
@@ -12,38 +13,77 @@ check_configured() {
     [[ -L "$HOME/.config/helix/config.toml" ]]
 }
 
+# Get the latest helix version from GitHub
+get_latest_version() {
+    curl -sL https://api.github.com/repos/helix-editor/helix/releases/latest | \
+        grep '"tag_name"' | cut -d'"' -f4
+}
+
+# Get currently installed version
+get_installed_version() {
+    if command -v hx &>/dev/null; then
+        hx --version 2>/dev/null | awk '{print $2}'
+    fi
+}
+
 install() {
-    echo "Installing Helix from source..."
-
-    # Check if Rust is installed
-    if ! command -v cargo &>/dev/null; then
-        echo "Rust is not installed. Installing Rust..."
-        curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-        source "$HOME/.cargo/env"
+    if command -v hx &>/dev/null; then
+        echo "Helix already installed: $(hx --version)"
+        return 0
     fi
 
-    mkdir -p "$HELIX_CONFIG_DIR"
-    cd "$HELIX_CONFIG_DIR"
+    echo "Installing Helix..."
 
-    # Clone the Helix repository
-    if [[ ! -d "helix-source" ]]; then
-        git clone https://github.com/helix-editor/helix helix-source
+    local os arch
+    case "$(uname -s)" in
+        Darwin) os="macos" ;;
+        Linux) os="linux" ;;
+        *) echo "Unsupported OS: $(uname -s)"; return 1 ;;
+    esac
+
+    case "$(uname -m)" in
+        x86_64) arch="x86_64" ;;
+        arm64|aarch64) arch="aarch64" ;;
+        *) echo "Unsupported architecture: $(uname -m)"; return 1 ;;
+    esac
+
+    # Get latest version
+    local version
+    version=$(get_latest_version)
+
+    if [[ -z "$version" ]]; then
+        echo "Error: Failed to fetch latest Helix version"
+        return 1
     fi
 
-    cd helix-source
-    git pull  # Get latest changes
+    local url="https://github.com/helix-editor/helix/releases/download/${version}/helix-${version}-${arch}-${os}.tar.xz"
 
-    # Build the project
-    cargo install --path helix-term --locked
+    echo "Downloading Helix ${version} from $url..."
+    curl -fsSL "$url" -o /tmp/helix.tar.xz
 
-    # Setup runtime files
-    echo "Setting up runtime files..."
-    ln -sf "$HELIX_CONFIG_DIR/helix-source/runtime" "$HELIX_CONFIG_DIR/runtime"
+    if [[ ! -s /tmp/helix.tar.xz ]]; then
+        echo "Error: Failed to download Helix"
+        return 1
+    fi
 
-    # Add hx to ~/bin (cargo install puts binaries in ~/.cargo/bin)
-    echo "Adding hx to ~/bin..."
+    # Clean up old installation if exists
+    [[ -d "$HELIX_INSTALL_DIR" ]] && rm -rf "$HELIX_INSTALL_DIR"
+
+    # Extract - helix tarball contains helix-VERSION/ directory with bin and runtime
+    mkdir -p "$HOME/.local"
+    tar -xJf /tmp/helix.tar.xz -C "$HOME/.local"
+    mv "$HOME/.local/helix-${version}-${arch}-${os}" "$HELIX_INSTALL_DIR"
+    rm /tmp/helix.tar.xz
+
+    # Symlink binary to ~/bin
     mkdir -p "$HOME/bin"
-    ln -sf "$HOME/.cargo/bin/hx" "$HOME/bin/hx"
+    ln -sf "$HELIX_INSTALL_DIR/hx" "$HOME/bin/hx"
+
+    # Symlink runtime to config directory
+    mkdir -p "$HELIX_CONFIG_DIR"
+    ln -sfn "$HELIX_INSTALL_DIR/runtime" "$HELIX_CONFIG_DIR/runtime"
+
+    echo "Helix installed: $(hx --version)"
 }
 
 configure() {
@@ -57,10 +97,55 @@ apply() {
 }
 
 update() {
-    echo "Updating Helix..."
-    cd "$HELIX_CONFIG_DIR/helix-source"
-    git pull
-    cargo install --path helix-term --locked
+    echo "Checking for Helix updates..."
+
+    local latest installed
+    latest=$(get_latest_version)
+    installed=$(get_installed_version)
+
+    if [[ -z "$latest" ]]; then
+        echo "Error: Failed to fetch latest Helix version"
+        return 1
+    fi
+
+    if [[ "$installed" == "$latest" ]]; then
+        echo "Helix is already up to date: $installed"
+        return 0
+    fi
+
+    echo "Updating Helix from ${installed:-'not installed'} to $latest..."
+
+    local os arch
+    case "$(uname -s)" in
+        Darwin) os="macos" ;;
+        Linux) os="linux" ;;
+        *) echo "Unsupported OS"; return 1 ;;
+    esac
+
+    case "$(uname -m)" in
+        x86_64) arch="x86_64" ;;
+        arm64|aarch64) arch="aarch64" ;;
+        *) echo "Unsupported architecture"; return 1 ;;
+    esac
+
+    local url="https://github.com/helix-editor/helix/releases/download/${latest}/helix-${latest}-${arch}-${os}.tar.xz"
+
+    curl -fsSL "$url" -o /tmp/helix.tar.xz
+
+    [[ -d "$HELIX_INSTALL_DIR" ]] && rm -rf "$HELIX_INSTALL_DIR"
+
+    mkdir -p "$HOME/.local"
+    tar -xJf /tmp/helix.tar.xz -C "$HOME/.local"
+    mv "$HOME/.local/helix-${latest}-${arch}-${os}" "$HELIX_INSTALL_DIR"
+    rm /tmp/helix.tar.xz
+
+    mkdir -p "$HOME/bin"
+    ln -sf "$HELIX_INSTALL_DIR/hx" "$HOME/bin/hx"
+
+    mkdir -p "$HELIX_CONFIG_DIR"
+    ln -sfn "$HELIX_INSTALL_DIR/runtime" "$HELIX_CONFIG_DIR/runtime"
+
+    echo "Helix updated: $(hx --version)"
 }
 
 # Main (only run when executed directly, not when sourced)
