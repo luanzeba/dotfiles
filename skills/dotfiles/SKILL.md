@@ -35,15 +35,16 @@ See [references/tool-template.md](references/tool-template.md) for the install s
 | Zsh | `zsh/` | `~/.zshrc`, `~/.zsh/` | Yes (`install.zsh`) |
 | Git | `git/` | `~/.gitconfig` | Yes |
 | Ghostty | `ghostty/` | `~/.config/ghostty` | No |
-| Helix | `helix/` | `~/.config/helix` | Yes (builds from source) |
+| Helix | `helix/` | `~/.config/helix` | Yes |
 | Whisper | `whisper/` | N/A | Yes (macOS/Arch only) |
 | OpenCode | `opencode/` | `~/.config/opencode/` | Yes |
 | Skills | `skills/` | `~/.config/opencode/skill/`, `~/.claude/skills/` | Yes |
 | Rust | `rust/` | N/A | Yes (rustup) |
 | Go | `go/` | N/A | Yes (Go tools: gopls, gofumpt, etc.) |
 | Node | `node/` | N/A | Yes (fnm + TypeScript tools) |
-| Bin | `bin/` | `~/bin` | Yes (custom scripts) |
+| Bin | `bin/` | `~/.local/bin` | Yes (custom scripts) |
 | jj | `jj/` | `~/.jjconfig.toml` | Yes (Jujutsu VCS) |
+| gh | `gh/` | `~/.local/gh`, `~/.local/bin/gh` | Yes (GitHub CLI + extensions) |
 
 ## Platform Support
 
@@ -60,7 +61,7 @@ See [references/platform-detection.md](references/platform-detection.md) for det
 
 ### Always Modify Dotfiles, Not Config Targets
 
-Never create or edit files directly in config target directories like `~/.config/` or `~/bin/`. These locations contain symlinks to `~/dotfiles/`, so changes made there are either not version controlled or will be overwritten by install scripts.
+Never create or edit files directly in config target directories like `~/.config/` or `~/.local/bin/`. These locations contain symlinks to `~/dotfiles/`, so changes made there are either not version controlled or will be overwritten by install scripts.
 
 Always make changes in `~/dotfiles/` so they are:
 1. Version controlled (git)
@@ -70,7 +71,7 @@ Always make changes in `~/dotfiles/` so they are:
 Common mistakes to avoid:
 - Creating skills in `~/.config/opencode/skill/` instead of `~/dotfiles/skills/`
 - Editing nvim config in `~/.config/nvim/` instead of `~/dotfiles/nvim/`
-- Adding scripts to `~/bin/` instead of `~/dotfiles/bin/`
+- Adding scripts to `~/.local/bin/` instead of `~/dotfiles/bin/`
 
 After creating or modifying files in `~/dotfiles/`, run the appropriate install script to create symlinks (e.g., `dot install skills`, `dot install nvim`).
 
@@ -110,6 +111,22 @@ This uses `gh cs cp` to transfer a patch file, authenticating through GitHub's C
 - **Platform-aware**: Use platform detection to handle differences between Codespaces, macOS, and Arch.
 - **Script pattern**: Each tool script should have `install()`, `configure()`, and optionally `apply()` and `update()` functions.
 
+### Installation Preference Hierarchy
+
+1. **Direct GitHub releases** - Preferred for tools with prebuilt binaries (nvim, jj, gh, helix, fnm)
+2. **Package managers** - Only when no prebuilt binaries exist (tmux via brew, system tools via apt/pacman)
+
+Homebrew is installed lazily in Phase 3 of `install-local`, only when needed for brew-dependent tools.
+
+### Standard Binary Locations
+
+| Purpose | Location | Example |
+|---------|----------|---------|
+| User binaries/scripts | `~/.local/bin/` | `dotfiles`, `dot` |
+| Tool extractions | `~/.local/<tool>/` | `~/.local/nvim/`, `~/.local/gh/` |
+
+Scripts from `bin/` are symlinked individually to `~/.local/bin/`.
+
 ### Idempotency Guidelines
 
 Scripts should produce the same result whether run once or many times:
@@ -142,7 +159,7 @@ Scripts should produce the same result whether run once or many times:
 
 ## dotfiles CLI
 
-The `dotfiles` command (in `~/bin/dotfiles`) provides easy management:
+The `dot` command (symlinked to `~/.local/bin/` from `bin/dotfiles`) provides easy management:
 
 ```bash
 dotfiles status   # Show VCS status of dotfiles repo
@@ -162,11 +179,15 @@ The CLI uses jj (Jujutsu) if available, falling back to git.
 2. Create `<tool>/install` script using the template with:
    - `install()` - Install the tool binary/package
    - `configure()` - Symlink configs, set up environment
-   - `apply()` (optional) - Reload config after `dotfiles pull`
+   - `apply()` (optional) - Reload config after `dotfiles pull`, or handle migrations
    - `update()` (optional) - Update tool for `dotfiles update`
+   - `check_installed()` / `check_configured()` - For `dot doctor` health checks
 3. Add config files to the directory
 4. Test on each platform
-5. Optionally integrate with main `./install` script
+5. Optionally integrate with `install-local` in the appropriate phase
+
+See [references/tool-template.md](references/tool-template.md) for the install script template.
+See [references/install-patterns.md](references/install-patterns.md) for version checking, migrations, and Codespaces patterns.
 
 ### Modifying Neovim Config
 
