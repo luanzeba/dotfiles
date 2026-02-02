@@ -1,0 +1,156 @@
+#!/bin/bash
+set -e
+
+# GitHub CLI (gh)
+# https://github.com/cli/cli
+
+GH_INSTALL_DIR="$HOME/.local/gh"
+
+check_installed() {
+    command -v gh &>/dev/null
+}
+
+check_configured() {
+    # Check if gh-csd extension is installed
+    gh extension list 2>/dev/null | grep -q "gh-csd"
+}
+
+get_latest_version() {
+    curl -sL https://api.github.com/repos/cli/cli/releases/latest | \
+        grep '"tag_name"' | cut -d'"' -f4
+}
+
+get_installed_version() {
+    if command -v gh &>/dev/null; then
+        gh --version 2>/dev/null | head -1 | awk '{print "v" $3}'
+    fi
+}
+
+install() {
+    # In Codespaces, gh is pre-installed
+    if [[ -n "$CODESPACES" ]] && command -v gh &>/dev/null; then
+        echo "gh already available in Codespaces: $(gh --version | head -1)"
+        return 0
+    fi
+
+    if command -v gh &>/dev/null; then
+        echo "gh already installed: $(gh --version | head -1)"
+        return 0
+    fi
+
+    echo "Installing GitHub CLI..."
+
+    local os arch
+    case "$(uname -s)" in
+        Darwin) os="macOS" ;;
+        Linux) os="linux" ;;
+        *) echo "Unsupported OS: $(uname -s)"; return 1 ;;
+    esac
+
+    case "$(uname -m)" in
+        x86_64) arch="amd64" ;;
+        arm64|aarch64) arch="arm64" ;;
+        *) echo "Unsupported architecture: $(uname -m)"; return 1 ;;
+    esac
+
+    local version
+    version=$(get_latest_version)
+
+    if [[ -z "$version" ]]; then
+        echo "Error: Failed to fetch latest gh version"
+        return 1
+    fi
+
+    # Remove 'v' prefix for URL
+    local version_num="${version#v}"
+    local ext="tar.gz"
+    [[ "$os" == "macOS" ]] && ext="zip"
+
+    local url="https://github.com/cli/cli/releases/download/${version}/gh_${version_num}_${os}_${arch}.${ext}"
+
+    echo "Downloading gh ${version} from $url..."
+
+    if [[ "$ext" == "zip" ]]; then
+        curl -fsSL "$url" -o /tmp/gh.zip
+        [[ ! -s /tmp/gh.zip ]] && { echo "Error: Failed to download gh"; return 1; }
+
+        [[ -d "$GH_INSTALL_DIR" ]] && rm -rf "$GH_INSTALL_DIR"
+
+        unzip -q /tmp/gh.zip -d /tmp
+        mkdir -p "$GH_INSTALL_DIR"
+        mv /tmp/gh_${version_num}_${os}_${arch}/* "$GH_INSTALL_DIR/"
+        rm -rf /tmp/gh.zip /tmp/gh_${version_num}_${os}_${arch}
+    else
+        curl -fsSL "$url" -o /tmp/gh.tar.gz
+        [[ ! -s /tmp/gh.tar.gz ]] && { echo "Error: Failed to download gh"; return 1; }
+
+        [[ -d "$GH_INSTALL_DIR" ]] && rm -rf "$GH_INSTALL_DIR"
+
+        mkdir -p "$GH_INSTALL_DIR"
+        tar -xzf /tmp/gh.tar.gz -C /tmp
+        mv /tmp/gh_${version_num}_${os}_${arch}/* "$GH_INSTALL_DIR/"
+        rm -rf /tmp/gh.tar.gz /tmp/gh_${version_num}_${os}_${arch}
+    fi
+
+    # Symlink to ~/.local/bin
+    mkdir -p "$HOME/.local/bin"
+    ln -sf "$GH_INSTALL_DIR/bin/gh" "$HOME/.local/bin/gh"
+
+    echo "gh installed: $(gh --version | head -1)"
+}
+
+configure() {
+    if ! command -v gh &>/dev/null; then
+        echo "gh not installed, skipping extension installation"
+        return 0
+    fi
+
+    echo "Installing gh extensions..."
+
+    if [[ -n "$CODESPACES" ]]; then
+        # Codespaces: only need gh-csd for local machine communication
+        gh extension install luanzeba/gh-csd 2>/dev/null || true
+    else
+        # Local: install all useful extensions
+        gh extension install luanzeba/gh-csd 2>/dev/null || true
+        gh extension install github/gh-shell 2>/dev/null || true
+        gh extension install rneatherway/gh-slack 2>/dev/null || true
+    fi
+}
+
+update() {
+    echo "Checking for gh updates..."
+
+    # Skip binary update in Codespaces (managed by GitHub)
+    if [[ -z "$CODESPACES" ]]; then
+        local latest installed
+        latest=$(get_latest_version)
+        installed=$(get_installed_version)
+
+        if [[ -z "$latest" ]]; then
+            echo "Error: Failed to fetch latest gh version"
+            return 1
+        fi
+
+        if [[ "$installed" == "$latest" ]]; then
+            echo "gh is already up to date: $installed"
+        else
+            echo "Updating gh from ${installed:-'not installed'} to $latest..."
+            rm -f "$HOME/.local/bin/gh"
+            [[ -d "$GH_INSTALL_DIR" ]] && rm -rf "$GH_INSTALL_DIR"
+            install
+        fi
+    fi
+
+    # Update extensions
+    if command -v gh &>/dev/null; then
+        echo "Updating gh extensions..."
+        gh extension upgrade --all 2>/dev/null || true
+    fi
+}
+
+# Main (only run when executed directly, not when sourced)
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    install
+    configure
+fi

@@ -1,15 +1,27 @@
 #!/bin/bash
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+source "$SCRIPT_DIR/lib/common.sh"
+
 FAILED_STEPS=()
 
-# Helper to run a step and track failures
+# Helper to run a step and track failures with persistent error logging
 run_step() {
     local name="$1"
     shift
-    if ! "$@"; then
+    local output
+    local exit_code
+
+    output=$("$@" 2>&1)
+    exit_code=$?
+
+    if [[ $exit_code -ne 0 ]]; then
         FAILED_STEPS+=("$name")
+        log_error_persistent "install" "$name" "$exit_code" "$output"
         echo "⚠️  $name failed, continuing..."
+        echo "$output"
+    else
+        [[ -n "$output" ]] && echo "$output"
     fi
 }
 
@@ -67,30 +79,31 @@ install_apt_packages() {
 }
 
 # Main execution
-echo "$(date +'%Y-%m-%d %T') - Installing apt packages"
+log_info "Installing apt packages"
 run_step "apt packages" install_apt_packages
 
-echo "$(date +'%Y-%m-%d %T') - Configuring tools"
+log_info "Configuring tools"
 run_step "git/install" bash "$SCRIPT_DIR/git/install"
 run_step "tmux/install" bash "$SCRIPT_DIR/tmux/install"
 run_step "bin/install" bash "$SCRIPT_DIR/bin/install"
+run_step "gh/install" bash "$SCRIPT_DIR/gh/install"
 run_step "skills/install" bash "$SCRIPT_DIR/skills/install"
 
-echo "$(date +'%Y-%m-%d %T') - Installing languages and tools"
+log_info "Installing languages and tools"
 run_step "rust/install" bash "$SCRIPT_DIR/rust/install"
 run_step "go/install" bash "$SCRIPT_DIR/go/install"
 run_step "node/install" bash "$SCRIPT_DIR/node/install"
 run_step "opencode/install" bash "$SCRIPT_DIR/opencode/install"
 
-echo "$(date +'%Y-%m-%d %T') - Setting up shell"
+log_info "Setting up shell"
 run_step "ensure zsh default" ensure_zsh_default
 run_step "zsh/install.zsh" zsh "$SCRIPT_DIR/zsh/install.zsh"
 
-echo "$(date +'%Y-%m-%d %T') - Setting up Neovim"
+log_info "Setting up editors"
 run_step "nvim/install" zsh "$SCRIPT_DIR/nvim/install"
-run_step "helix/install" zsh "$SCRIPT_DIR/helix/install"
+run_step "helix/install" bash "$SCRIPT_DIR/helix/install"
 
-echo "$(date +'%Y-%m-%d %T') - Codespaces-specific setup"
+log_info "Codespaces-specific setup"
 run_step "setup friendly name" setup_friendly_name
 run_step "install rdm" install_rdm
 run_step "setup ruby-lsp" setup_ruby_lsp
@@ -103,8 +116,8 @@ if [[ ${#FAILED_STEPS[@]} -gt 0 ]]; then
         echo "  - $step"
     done
     echo ""
-    echo "Review the log above for details."
-    echo "$(date +'%Y-%m-%d %T') - ⚠️ Codespaces setup completed with errors"
+    echo "Run 'dot logs' for error details."
+    log_warn "Codespaces setup completed with errors"
 else
-    echo "$(date +'%Y-%m-%d %T') - ✅ Codespaces setup complete!"
+    log_success "Codespaces setup complete!"
 fi

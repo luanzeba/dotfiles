@@ -63,6 +63,7 @@ run_step "go/install" bash "$SCRIPT_DIR/go/install"
 run_step "rust/install" bash "$SCRIPT_DIR/rust/install"
 run_step "node/install" bash "$SCRIPT_DIR/node/install"
 run_step "jj/install" bash "$SCRIPT_DIR/jj/install"
+run_step "gh/install" bash "$SCRIPT_DIR/gh/install"
 run_step "opencode/install" bash "$SCRIPT_DIR/opencode/install"
 run_step "skills/install" bash "$SCRIPT_DIR/skills/install"
 
