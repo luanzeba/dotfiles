@@ -1,11 +1,4 @@
-if [ -d /opt/homebrew/opt ]; then
-  source /opt/homebrew/opt/chruby/share/chruby/chruby.sh
-  source /opt/homebrew/opt/chruby/share/chruby/auto.sh
-
-  # Read ~/.ruby-version to determine version
-  chruby_auto
-fi
-
+# Helper functions for working with Ruby gems
 selectgem(){
        if [ -z "$1" ]; then
                bundle show | tr -s ' ' | cut -d ' ' -f 3 | fzy
