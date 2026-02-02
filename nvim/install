@@ -15,22 +15,60 @@ install() {
         echo "Neovim already installed, skipping binary install..."
         return 0
     fi
-    
-    echo "Neovim not found, installing..."
-    mkdir -p ~/bin
-    cd ~/bin
-    
-    curl -LO https://github.com/neovim/neovim/releases/latest/download/nvim.appimage
-    chmod u+x nvim.appimage
-    
-    if ./nvim.appimage --version &>/dev/null; then
-        ln -sf ./nvim.appimage nvim
+
+    echo "Installing Neovim..."
+    local os arch
+
+    os=$(uname -s)
+    arch=$(uname -m)
+
+    if [[ "$os" == "Darwin" ]]; then
+        # macOS: download tarball from GitHub releases
+        local nvim_dir="$HOME/.local/nvim"
+        local url="https://github.com/neovim/neovim/releases/latest/download/nvim-macos-${arch}.tar.gz"
+
+        echo "Downloading Neovim from $url..."
+        curl -fsSL "$url" -o /tmp/nvim.tar.gz
+
+        if [[ ! -s /tmp/nvim.tar.gz ]]; then
+            echo "Error: Failed to download Neovim"
+            return 1
+        fi
+
+        # Remove quarantine flag (macOS security)
+        xattr -c /tmp/nvim.tar.gz 2>/dev/null || true
+
+        # Clean up old installation if exists
+        [[ -d "$nvim_dir" ]] && rm -rf "$nvim_dir"
+
+        # Extract
+        mkdir -p "$HOME/.local"
+        tar -xzf /tmp/nvim.tar.gz -C "$HOME/.local"
+        mv "$HOME/.local/nvim-macos-${arch}" "$nvim_dir"
+        rm /tmp/nvim.tar.gz
+
+        # Symlink to ~/bin
+        mkdir -p "$HOME/bin"
+        ln -sf "$nvim_dir/bin/nvim" "$HOME/bin/nvim"
+
+        echo "Neovim installed to $nvim_dir"
     else
-        # FUSE not available, extract appimage
-        ./nvim.appimage --appimage-extract
-        sudo mv squashfs-root /
-        ln -sf /squashfs-root/AppRun ~/bin/nvim
-        rm nvim.appimage
+        # Linux: use appimage
+        mkdir -p ~/bin
+        cd ~/bin
+
+        curl -LO https://github.com/neovim/neovim/releases/latest/download/nvim.appimage
+        chmod u+x nvim.appimage
+
+        if ./nvim.appimage --version &>/dev/null; then
+            ln -sf ./nvim.appimage nvim
+        else
+            # FUSE not available, extract appimage
+            ./nvim.appimage --appimage-extract
+            sudo mv squashfs-root /
+            ln -sf /squashfs-root/AppRun ~/bin/nvim
+            rm nvim.appimage
+        fi
     fi
 }
 
@@ -42,18 +80,23 @@ configure() {
     elif [[ -L "$HOME/.config/nvim" ]]; then
         ln -sfn "$SCRIPT_DIR" "$HOME/.config/nvim"
     fi
-    
+
+    if ! command -v nvim &>/dev/null; then
+        echo "Neovim not found, skipping plugin installation"
+        return 0
+    fi
+
     local nvim_path
     nvim_path=$(command -v nvim)
-    
+
     # Install plugins
     $nvim_path --headless "+Lazy! sync" +qa
     $nvim_path --headless +"MasonInstallAll" +qa 2>/dev/null || true
-    
+
     # Accept Copilot license
     mkdir -p ~/.config/github-copilot
     echo '{"luanzeba":{"version":"2021-10-14"}}' > ~/.config/github-copilot/terms.json
-    
+
     # Install treesitter parsers
     $nvim_path --headless +"TSInstall! go ruby" +qa 2>/dev/null || true
 }
@@ -67,8 +110,42 @@ apply() {
 }
 
 update() {
-    echo "Updating Neovim plugins..."
+    echo "Updating Neovim..."
+
+    local os arch
+    os=$(uname -s)
+    arch=$(uname -m)
+
+    if [[ "$os" == "Darwin" ]]; then
+        local nvim_dir="$HOME/.local/nvim"
+        local url="https://github.com/neovim/neovim/releases/latest/download/nvim-macos-${arch}.tar.gz"
+
+        # Check current version
+        local current_version=""
+        if command -v nvim &>/dev/null; then
+            current_version=$(nvim --version | head -1)
+        fi
+
+        echo "Downloading latest Neovim..."
+        curl -fsSL "$url" -o /tmp/nvim.tar.gz
+        xattr -c /tmp/nvim.tar.gz 2>/dev/null || true
+
+        [[ -d "$nvim_dir" ]] && rm -rf "$nvim_dir"
+        mkdir -p "$HOME/.local"
+        tar -xzf /tmp/nvim.tar.gz -C "$HOME/.local"
+        mv "$HOME/.local/nvim-macos-${arch}" "$nvim_dir"
+        rm /tmp/nvim.tar.gz
+
+        mkdir -p "$HOME/bin"
+        ln -sf "$nvim_dir/bin/nvim" "$HOME/bin/nvim"
+
+        local new_version=$(nvim --version | head -1)
+        echo "Updated: $current_version -> $new_version"
+    fi
+
+    # Update plugins
     if command -v nvim &>/dev/null; then
+        echo "Updating Neovim plugins..."
         nvim --headless "+Lazy! update" +qa
         nvim --headless "+MasonUpdate" +qa 2>/dev/null || true
         nvim --headless "+TSUpdate" +qa 2>/dev/null || true
