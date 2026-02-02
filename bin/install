@@ -2,6 +2,7 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+LOCAL_BIN="$HOME/.local/bin"
 
 install() {
     # Scripts are part of dotfiles, nothing to install
@@ -14,34 +15,43 @@ check_installed() {
 }
 
 check_configured() {
-    # Check if ~/bin is symlinked or dotfiles script is accessible
-    [[ -L "$HOME/bin" ]] || [[ -x "$HOME/bin/dotfiles" ]]
+    # Check if dotfiles script is accessible in ~/.local/bin
+    [[ -x "$LOCAL_BIN/dotfiles" ]]
 }
 
 configure() {
     # Create dot -> dotfiles alias in the repo itself
-    # This works whether ~/bin is a symlink or directory
     if [[ ! -e "$SCRIPT_DIR/dot" ]]; then
-        ln -s "$SCRIPT_DIR/dotfiles" "$SCRIPT_DIR/dot"
+        ln -s dotfiles "$SCRIPT_DIR/dot"
     fi
 
-    # Symlink bin directory to ~/bin
-    if [[ ! -e "$HOME/bin" ]]; then
-        ln -s "$SCRIPT_DIR" "$HOME/bin"
-    elif [[ -L "$HOME/bin" ]]; then
-        # Already a symlink, update it
-        ln -sf "$SCRIPT_DIR" "$HOME/bin"
-    else
-        # ~/bin exists as a directory, symlink individual scripts
-        echo "~/bin is a directory, symlinking scripts individually..."
-        for script in "$SCRIPT_DIR"/*; do
-            local name
-            name=$(basename "$script")
-            # Skip the install script itself
-            [[ "$name" == "install" ]] && continue
-            ln -sf "$script" "$HOME/bin/$name"
-        done
+    # Ensure ~/.local/bin exists
+    mkdir -p "$LOCAL_BIN"
+
+    # Symlink each script individually to ~/.local/bin
+    for script in "$SCRIPT_DIR"/*; do
+        local name
+        name=$(basename "$script")
+        # Skip the install script itself
+        [[ "$name" == "install" ]] && continue
+        ln -sf "$script" "$LOCAL_BIN/$name"
+    done
+}
+
+apply() {
+    # TODO: Remove this migration block after 2025-03-01 (all machines should be migrated by then)
+    # Migration: Remove old ~/bin symlink if it points to dotfiles/bin
+    if [[ -L "$HOME/bin" ]]; then
+        local target
+        target=$(readlink "$HOME/bin")
+        if [[ "$target" == *"dotfiles/bin"* ]]; then
+            echo "Migrating from ~/bin to ~/.local/bin..."
+            rm "$HOME/bin"
+        fi
     fi
+
+    # Ensure all scripts are symlinked to ~/.local/bin
+    configure
 }
 
 # Main (only run when executed directly, not when sourced)

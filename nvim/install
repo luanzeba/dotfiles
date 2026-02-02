@@ -47,15 +47,15 @@ install() {
         mv "$HOME/.local/nvim-macos-${arch}" "$nvim_dir"
         rm /tmp/nvim.tar.gz
 
-        # Symlink to ~/bin
-        mkdir -p "$HOME/bin"
-        ln -sf "$nvim_dir/bin/nvim" "$HOME/bin/nvim"
+        # Symlink to ~/.local/bin
+        mkdir -p "$HOME/.local/bin"
+        ln -sf "$nvim_dir/bin/nvim" "$HOME/.local/bin/nvim"
 
         echo "Neovim installed to $nvim_dir"
     else
         # Linux: use appimage
-        mkdir -p ~/bin
-        cd ~/bin
+        mkdir -p ~/.local/bin
+        cd ~/.local/bin
 
         curl -LO https://github.com/neovim/neovim/releases/latest/download/nvim.appimage
         chmod u+x nvim.appimage
@@ -66,7 +66,7 @@ install() {
             # FUSE not available, extract appimage
             ./nvim.appimage --appimage-extract
             sudo mv squashfs-root /
-            ln -sf /squashfs-root/AppRun ~/bin/nvim
+            ln -sf /squashfs-root/AppRun ~/.local/bin/nvim
             rm nvim.appimage
         fi
     fi
@@ -136,8 +136,8 @@ update() {
         mv "$HOME/.local/nvim-macos-${arch}" "$nvim_dir"
         rm /tmp/nvim.tar.gz
 
-        mkdir -p "$HOME/bin"
-        ln -sf "$nvim_dir/bin/nvim" "$HOME/bin/nvim"
+        mkdir -p "$HOME/.local/bin"
+        ln -sf "$nvim_dir/bin/nvim" "$HOME/.local/bin/nvim"
 
         local new_version=$(nvim --version | head -1)
         echo "Updated: $current_version -> $new_version"

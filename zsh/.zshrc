@@ -1,8 +1,8 @@
 # Enable true color support for terminals (helps helix, nvim, etc.)
 export COLORTERM=truecolor
 
-# Add ~/bin to PATH for custom scripts
-export PATH="$HOME/bin:$PATH"
+# Add ~/.local/bin to PATH for user-installed binaries
+export PATH="$HOME/.local/bin:$PATH"
 
 # Codespaces-specific configuration
 if [[ -n "$CODESPACES" ]]; then

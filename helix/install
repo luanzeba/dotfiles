@@ -75,9 +75,9 @@ install() {
     mv "$HOME/.local/helix-${version}-${arch}-${os}" "$HELIX_INSTALL_DIR"
     rm /tmp/helix.tar.xz
 
-    # Symlink binary to ~/bin
-    mkdir -p "$HOME/bin"
-    ln -sf "$HELIX_INSTALL_DIR/hx" "$HOME/bin/hx"
+    # Symlink binary to ~/.local/bin
+    mkdir -p "$HOME/.local/bin"
+    ln -sf "$HELIX_INSTALL_DIR/hx" "$HOME/.local/bin/hx"
 
     # Symlink runtime to config directory
     mkdir -p "$HELIX_CONFIG_DIR"
@@ -139,8 +139,8 @@ update() {
     mv "$HOME/.local/helix-${latest}-${arch}-${os}" "$HELIX_INSTALL_DIR"
     rm /tmp/helix.tar.xz
 
-    mkdir -p "$HOME/bin"
-    ln -sf "$HELIX_INSTALL_DIR/hx" "$HOME/bin/hx"
+    mkdir -p "$HOME/.local/bin"
+    ln -sf "$HELIX_INSTALL_DIR/hx" "$HOME/.local/bin/hx"
 
     mkdir -p "$HELIX_CONFIG_DIR"
     ln -sfn "$HELIX_INSTALL_DIR/runtime" "$HELIX_CONFIG_DIR/runtime"

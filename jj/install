@@ -77,11 +77,6 @@ install() {
     chmod +x "$JJ_INSTALL_DIR/jj"
     rm /tmp/jj.tar.gz
 
-    # Symlink to ~/bin if it exists
-    if [[ -d "$HOME/bin" ]]; then
-        ln -sf "$JJ_INSTALL_DIR/jj" "$HOME/bin/jj"
-    fi
-
     echo "jj installed: $(jj --version)"
 }
 
@@ -132,10 +127,6 @@ update() {
     mv /tmp/jj "$JJ_INSTALL_DIR/"
     chmod +x "$JJ_INSTALL_DIR/jj"
     rm /tmp/jj.tar.gz
-
-    if [[ -d "$HOME/bin" ]]; then
-        ln -sf "$JJ_INSTALL_DIR/jj" "$HOME/bin/jj"
-    fi
 
     echo "jj updated: $(jj --version)"
 }
