@@ -17,7 +17,31 @@ install() {
         echo "fnm already installed"
     else
         echo "Installing fnm..."
-        curl -fsSL https://fnm.vercel.app/install | bash -s -- --install-dir "$FNM_DIR" --skip-shell
+
+        local os
+        case "$(uname -s)" in
+            Darwin) os="macos" ;;
+            Linux) os="linux" ;;
+            *) echo "Unsupported OS: $(uname -s)"; return 1 ;;
+        esac
+
+        # Download fnm binary from GitHub releases
+        local url="https://github.com/Schniz/fnm/releases/latest/download/fnm-${os}.zip"
+
+        echo "Downloading fnm from $url..."
+        mkdir -p "$FNM_DIR"
+        curl -fsSL "$url" -o /tmp/fnm.zip
+
+        if [[ ! -s /tmp/fnm.zip ]]; then
+            echo "Error: Failed to download fnm"
+            return 1
+        fi
+
+        unzip -o /tmp/fnm.zip -d "$FNM_DIR"
+        chmod +x "$FNM_DIR/fnm"
+        rm /tmp/fnm.zip
+
+        echo "fnm installed to $FNM_DIR"
     fi
 
     # Ensure fnm is in PATH for this script
@@ -31,7 +55,7 @@ install() {
 
 configure() {
     export PATH="$FNM_DIR:$PATH"
-    eval "$(fnm env)"
+    eval "$(fnm env)" 2>/dev/null || true
 
     if ! command -v npm &>/dev/null; then
         echo "npm not available, skipping TypeScript packages"
@@ -44,14 +68,31 @@ configure() {
 
 update() {
     export PATH="$FNM_DIR:$PATH"
-    eval "$(fnm env)"
-    
+    eval "$(fnm env)" 2>/dev/null || true
+
+    # Update fnm itself
+    echo "Updating fnm..."
+    local os
+    case "$(uname -s)" in
+        Darwin) os="macos" ;;
+        Linux) os="linux" ;;
+        *) echo "Unsupported OS"; return 1 ;;
+    esac
+
+    local url="https://github.com/Schniz/fnm/releases/latest/download/fnm-${os}.zip"
+    curl -fsSL "$url" -o /tmp/fnm.zip
+    unzip -o /tmp/fnm.zip -d "$FNM_DIR"
+    chmod +x "$FNM_DIR/fnm"
+    rm /tmp/fnm.zip
+
     echo "Updating Node.js to latest LTS..."
     fnm install --lts
     fnm default lts-latest
-    
-    echo "Updating global npm packages..."
-    npm update -g
+
+    if command -v npm &>/dev/null; then
+        echo "Updating global npm packages..."
+        npm update -g
+    fi
 }
 
 # Main (only run when executed directly, not when sourced)
