@@ -4,6 +4,8 @@ set -e
 # jj (Jujutsu) - A Git-compatible VCS
 # https://github.com/martinvonz/jj
 
+JJ_INSTALL_DIR="$HOME/.local/bin"
+
 check_installed() {
     command -v jj &>/dev/null
 }
@@ -13,24 +15,74 @@ check_configured() {
     return 0
 }
 
+# Get the latest jj version from GitHub
+get_latest_version() {
+    curl -sL https://api.github.com/repos/martinvonz/jj/releases/latest | \
+        grep '"tag_name"' | cut -d'"' -f4
+}
+
+# Get currently installed version
+get_installed_version() {
+    if command -v jj &>/dev/null; then
+        jj --version 2>/dev/null | awk '{print "v" $2}'
+    fi
+}
+
 install() {
     if command -v jj &>/dev/null; then
         echo "jj already installed: $(jj --version)"
-        return
+        return 0
     fi
 
     echo "Installing jj..."
-    
-    if command -v cargo &>/dev/null; then
-        # Install via cargo (works everywhere)
-        cargo install --locked jj-cli
-    elif command -v brew &>/dev/null; then
-        # macOS with Homebrew
-        brew install jj
-    else
-        echo "Please install cargo or brew to install jj"
+
+    local os arch
+    case "$(uname -s)" in
+        Darwin) os="apple-darwin" ;;
+        Linux) os="unknown-linux-gnu" ;;
+        *) echo "Unsupported OS: $(uname -s)"; return 1 ;;
+    esac
+
+    case "$(uname -m)" in
+        x86_64) arch="x86_64" ;;
+        arm64|aarch64) arch="aarch64" ;;
+        *) echo "Unsupported architecture: $(uname -m)"; return 1 ;;
+    esac
+
+    # Get latest version
+    local version
+    version=$(get_latest_version)
+
+    if [[ -z "$version" ]]; then
+        echo "Error: Failed to fetch latest jj version"
         return 1
     fi
+
+    local url="https://github.com/martinvonz/jj/releases/download/${version}/jj-${version}-${arch}-${os}.tar.gz"
+
+    echo "Downloading jj ${version} from $url..."
+    curl -fsSL "$url" -o /tmp/jj.tar.gz
+
+    if [[ ! -s /tmp/jj.tar.gz ]]; then
+        echo "Error: Failed to download jj"
+        return 1
+    fi
+
+    # Extract - jj tarball contains just the binary
+    tar -xzf /tmp/jj.tar.gz -C /tmp
+
+    # Install to ~/.local/bin
+    mkdir -p "$JJ_INSTALL_DIR"
+    mv /tmp/jj "$JJ_INSTALL_DIR/"
+    chmod +x "$JJ_INSTALL_DIR/jj"
+    rm /tmp/jj.tar.gz
+
+    # Symlink to ~/bin if it exists
+    if [[ -d "$HOME/bin" ]]; then
+        ln -sf "$JJ_INSTALL_DIR/jj" "$HOME/bin/jj"
+    fi
+
+    echo "jj installed: $(jj --version)"
 }
 
 configure() {
@@ -40,13 +92,52 @@ configure() {
 }
 
 update() {
-    if command -v cargo &>/dev/null && [[ -f "$HOME/.cargo/bin/jj" ]]; then
-        echo "Updating jj via cargo..."
-        cargo install --locked jj-cli
-    elif command -v brew &>/dev/null; then
-        echo "Updating jj via brew..."
-        brew upgrade jj 2>/dev/null || true
+    echo "Checking for jj updates..."
+
+    local latest installed
+    latest=$(get_latest_version)
+    installed=$(get_installed_version)
+
+    if [[ -z "$latest" ]]; then
+        echo "Error: Failed to fetch latest jj version"
+        return 1
     fi
+
+    if [[ "$installed" == "$latest" ]]; then
+        echo "jj is already up to date: $installed"
+        return 0
+    fi
+
+    echo "Updating jj from ${installed:-'not installed'} to $latest..."
+
+    local os arch
+    case "$(uname -s)" in
+        Darwin) os="apple-darwin" ;;
+        Linux) os="unknown-linux-gnu" ;;
+        *) echo "Unsupported OS"; return 1 ;;
+    esac
+
+    case "$(uname -m)" in
+        x86_64) arch="x86_64" ;;
+        arm64|aarch64) arch="aarch64" ;;
+        *) echo "Unsupported architecture"; return 1 ;;
+    esac
+
+    local url="https://github.com/martinvonz/jj/releases/download/${latest}/jj-${latest}-${arch}-${os}.tar.gz"
+
+    curl -fsSL "$url" -o /tmp/jj.tar.gz
+    tar -xzf /tmp/jj.tar.gz -C /tmp
+
+    mkdir -p "$JJ_INSTALL_DIR"
+    mv /tmp/jj "$JJ_INSTALL_DIR/"
+    chmod +x "$JJ_INSTALL_DIR/jj"
+    rm /tmp/jj.tar.gz
+
+    if [[ -d "$HOME/bin" ]]; then
+        ln -sf "$JJ_INSTALL_DIR/jj" "$HOME/bin/jj"
+    fi
+
+    echo "jj updated: $(jj --version)"
 }
 
 # Main (only run when executed directly, not when sourced)
