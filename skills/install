@@ -195,11 +195,21 @@ configure() {
     fi
 }
 
+# Install tools from private-dotfiles (iq, splunk-cli)
+install_private_tools() {
+    if [[ -x "$PRIVATE_DIR/install" ]]; then
+        echo ""
+        echo "Installing private tools..."
+        "$PRIVATE_DIR/install"
+    fi
+}
+
 # Main (only run when executed directly, not when sourced)
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     echo "Installing skills..."
     install
     configure
+    install_private_tools
     echo ""
     echo "Skills installation complete!"
     echo ""
