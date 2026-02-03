@@ -9,8 +9,9 @@ PRIVATE_DIR="$EXTERNAL_DIR/private"
 PRIVATE_REPO="luanzeba/private-dotfiles"
 
 check_installed() {
-    # Skills are part of dotfiles repo, always "installed"
-    return 0
+    # Check if external skills have been downloaded
+    # Built-in skills are always present, but external ones need fetching
+    [[ -d "$SKILL_CREATOR_DIR" ]] && [[ -d "$PLAYWRIGHT_SKILL_DIR" ]]
 }
 
 check_configured() {
@@ -88,7 +89,8 @@ download_playwright_skill() {
     return 0
 }
 
-# Clone or update private-dotfiles repo
+# Clone or update private-dotfiles repo (contains sensitive skills like copilot-policy-queries)
+# This will fail gracefully in Codespaces due to GITHUB_TOKEN scope limitations
 download_private_skills() {
     echo "Fetching private skills from $PRIVATE_REPO..."
 
@@ -103,16 +105,18 @@ download_private_skills() {
         if command -v gh &>/dev/null && gh auth status &>/dev/null; then
             if ! gh repo clone "$PRIVATE_REPO" "$PRIVATE_DIR" -- --depth 1 2>/dev/null; then
                 echo "WARNING: Failed to clone private skills."
-                echo "  Ensure you have access to $PRIVATE_REPO"
+                echo "  This is expected in Codespaces (GITHUB_TOKEN lacks access)."
+                echo "  On local machines, ensure you have access to $PRIVATE_REPO"
                 return 1
             fi
         else
             # Fall back to SSH
             if ! git clone --depth 1 "git@github.com:$PRIVATE_REPO.git" "$PRIVATE_DIR" 2>/dev/null; then
                 echo "WARNING: Failed to clone private skills."
-                echo "  Ensure you have access to $PRIVATE_REPO"
-                echo "  For SSH: Ensure your SSH key is set up"
-                echo "  Or install gh CLI and run 'gh auth login'"
+                echo "  This is expected in Codespaces (no SSH key)."
+                echo "  On local machines:"
+                echo "    - For SSH: Ensure your SSH key is set up"
+                echo "    - Or install gh CLI and run 'gh auth login'"
                 return 1
             fi
         fi
@@ -122,7 +126,7 @@ download_private_skills() {
     return 0
 }
 
-# Download external and private skills
+# Download external skills (public repos, plus private if auth available)
 install() {
     download_skill_creator || echo "Continuing without skill-creator..."
     download_playwright_skill || echo "Continuing without playwright-skill..."
@@ -179,6 +183,7 @@ configure() {
     fi
 
     # Link private skills (each skill in private repo's skills/ directory)
+    # These contain sensitive content and won't be available in Codespaces
     if [[ -d "$PRIVATE_DIR/skills" ]]; then
         for skill_dir in "$PRIVATE_DIR/skills"/*/; do
             if [[ -d "$skill_dir" ]]; then
