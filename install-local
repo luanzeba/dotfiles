@@ -5,6 +5,21 @@ source "$SCRIPT_DIR/lib/common.sh"
 
 FAILED_STEPS=()
 
+# Install fzf via package manager
+install_fzf() {
+    if command -v fzf &>/dev/null; then
+        echo "fzf already installed"
+        return 0
+    fi
+
+    echo "Installing fzf..."
+    if is_macos; then
+        brew install fzf
+    elif is_arch; then
+        sudo pacman -S --noconfirm fzf
+    fi
+}
+
 # Helper to run a step and track failures with persistent error logging
 run_step() {
     local name="$1"
@@ -77,6 +92,7 @@ log_info "Phase 3: Installing package-manager tools"
 if is_macos; then
     ensure_homebrew
 fi
+run_step "fzf" install_fzf
 run_step "tmux/install" bash "$SCRIPT_DIR/tmux/install"
 run_step "ghostty/install" bash "$SCRIPT_DIR/ghostty/install"
 run_step "1password/install" bash "$SCRIPT_DIR/1password/install"
