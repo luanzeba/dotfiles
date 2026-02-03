@@ -1,0 +1,107 @@
+#!/bin/bash
+set -e
+
+# Tailscale - Mesh VPN for secure networking
+# https://tailscale.com/
+
+check_installed() {
+    command -v tailscale &>/dev/null
+}
+
+check_configured() {
+    # Tailscale is "configured" when the daemon is running and we're logged in
+    # Check if tailscaled is active (works on both macOS and Linux)
+    if [[ "$(uname)" == "Darwin" ]]; then
+        # macOS: Tailscale runs as an app, check if it's in the menu bar
+        pgrep -x "Tailscale" &>/dev/null || return 1
+    else
+        # Linux: Check systemd service
+        systemctl is-active --quiet tailscaled 2>/dev/null || return 1
+    fi
+    # Check if logged in (has an IP assigned)
+    tailscale ip -4 &>/dev/null 2>&1
+}
+
+install() {
+    if command -v tailscale &>/dev/null; then
+        echo "tailscale already installed: $(tailscale version | head -1)"
+        return 0
+    fi
+
+    echo "Installing Tailscale..."
+
+    if [[ "$(uname)" == "Darwin" ]]; then
+        # macOS: Install via Homebrew cask (GUI app)
+        if command -v brew &>/dev/null; then
+            brew install --cask tailscale
+            echo ""
+            echo "Tailscale installed. Please:"
+            echo "  1. Open Tailscale from Applications"
+            echo "  2. Click the menu bar icon and log in"
+        else
+            echo "Error: Homebrew required for Tailscale on macOS"
+            echo "Install Homebrew first, then run: brew install --cask tailscale"
+            return 1
+        fi
+    elif command -v pacman &>/dev/null; then
+        # Arch Linux
+        sudo pacman -S --noconfirm tailscale
+
+        # Enable and start the daemon
+        sudo systemctl enable --now tailscaled
+
+        echo ""
+        echo "Tailscale installed. Run 'sudo tailscale up' to authenticate."
+    elif [[ -n "$CODESPACES" ]] || command -v apt-get &>/dev/null; then
+        # Debian/Ubuntu/Codespaces - use official install script
+        curl -fsSL https://tailscale.com/install.sh | sh
+
+        # Enable and start the daemon
+        sudo systemctl enable --now tailscaled
+
+        echo ""
+        echo "Tailscale installed. Run 'sudo tailscale up' to authenticate."
+    else
+        echo "Unknown platform. Please install Tailscale manually:"
+        echo "  https://tailscale.com/download"
+        return 1
+    fi
+
+    echo ""
+    echo "tailscale installed: $(tailscale version | head -1)"
+}
+
+configure() {
+    # Tailscale stores its state in /var/lib/tailscale (Linux) or
+    # ~/Library/Containers/io.tailscale.ipn.macos (macOS)
+    # No dotfiles configuration needed
+    :
+}
+
+apply() {
+    # No config files to reload
+    :
+}
+
+update() {
+    echo "Updating Tailscale..."
+
+    if [[ "$(uname)" == "Darwin" ]]; then
+        if command -v brew &>/dev/null; then
+            brew upgrade --cask tailscale 2>/dev/null || echo "Tailscale already up to date"
+        fi
+    elif command -v pacman &>/dev/null; then
+        sudo pacman -Syu --noconfirm tailscale
+    elif command -v apt-get &>/dev/null; then
+        sudo apt-get update
+        sudo apt-get install -y tailscale
+    fi
+
+    echo "tailscale version: $(tailscale version | head -1)"
+}
+
+# Main (only run when executed directly, not when sourced)
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    install
+    configure
+fi
