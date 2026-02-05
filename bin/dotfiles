@@ -58,11 +58,291 @@ cmd_status() {
     
     local dir
     dir="$(dotfiles_dir)"
-    cd "$dir" || exit 1
     
-    echo "Dotfiles: $dir"
+    # If a tool name is provided, show detailed status for that tool
+    if [[ -n "${1:-}" ]]; then
+        cmd_status_tool "$1"
+        return $?
+    fi
+    
+    echo "Dotfiles Status"
+    echo "==============="
     echo ""
-    vcs_status
+    echo "Location: $dir"
+    echo ""
+    
+    # Check platform
+    echo -n "Platform: "
+    if is_codespaces; then
+        echo "GitHub Codespaces"
+    elif is_omarchy; then
+        echo "Omarchy (Arch Linux)"
+    elif is_macos; then
+        echo "macOS"
+    elif is_arch; then
+        echo "Arch Linux"
+    else
+        echo "Unknown"
+    fi
+    echo ""
+    
+    # Collect tool status into parallel arrays
+    local tool_names=()
+    local installed_statuses=()
+    local configured_statuses=()
+    
+    for tool_dir in "$dir"/*/; do
+        local tool_name
+        tool_name=$(basename "$tool_dir")
+        local install_script
+        install_script=$(get_install_script "$tool_dir")
+        
+        # Skip directories without install scripts
+        [[ -n "$install_script" ]] || continue
+        
+        tool_names+=("$tool_name")
+        
+        # Get the right interpreter for this script
+        local interpreter
+        interpreter=$(get_script_interpreter "$install_script")
+        
+        # Check installed and configured status
+        local statuses
+        statuses=$($interpreter -c "
+            source '$install_script'
+            
+            # Check installed
+            if declare -f check_installed &>/dev/null; then
+                if check_installed; then
+                    echo -n 'yes '
+                else
+                    echo -n 'no '
+                fi
+            else
+                echo -n 'unknown '
+            fi
+            
+            # Check configured
+            if declare -f check_configured &>/dev/null; then
+                if check_configured; then
+                    echo 'yes'
+                else
+                    echo 'no'
+                fi
+            else
+                echo 'na'  # Not applicable / no config needed
+            fi
+        " 2>/dev/null)
+        
+        local inst_status conf_status
+        read -r inst_status conf_status <<< "$statuses"
+        installed_statuses+=("$inst_status")
+        configured_statuses+=("$conf_status")
+    done
+    
+    # Calculate column widths dynamically
+    local tool_width
+    tool_width=$(max_width 4 "${tool_names[@]}")
+    local inst_width=9   # "Installed"
+    local conf_width=10  # "Configured"
+    
+    # Print table header
+    print_table_line "─" "$tool_width" "$inst_width" "$conf_width"
+    print_table_row "$tool_width" "Tool" "$inst_width" "Installed" "$conf_width" "Configured"
+    print_table_separator "$tool_width" "$inst_width" "$conf_width"
+    
+    # Print each tool's status
+    local fully_configured=0
+    local total=${#tool_names[@]}
+    local i
+    
+    for ((i=0; i<total; i++)); do
+        local tool="${tool_names[$i]}"
+        local inst="${installed_statuses[$i]}"
+        local conf="${configured_statuses[$i]}"
+        
+        # Convert to colored display indicators
+        local inst_display conf_display
+        case "$inst" in
+            yes) inst_display="${GREEN}[OK]${NC}" ;;
+            no)  inst_display="${RED}[NO]${NC}" ;;
+            *)   inst_display="${YELLOW}[??]${NC}" ;;
+        esac
+        
+        case "$conf" in
+            yes) conf_display="${GREEN}[OK]${NC}" ;;
+            no)  conf_display="${RED}[NO]${NC}" ;;
+            na) 
+                # If installed and no config needed, show OK
+                if [[ "$inst" == "yes" ]]; then
+                    conf_display="${GREEN}[OK]${NC}"
+                else
+                    conf_display="${DIM}[--]${NC}"
+                fi
+                ;;
+            *)   conf_display="${YELLOW}[??]${NC}" ;;
+        esac
+        
+        # Count fully configured (installed + configured or no config needed)
+        if [[ "$inst" == "yes" && ("$conf" == "yes" || "$conf" == "na") ]]; then
+            ((fully_configured++))
+        fi
+        
+        # Print row with proper alignment (ANSI codes don't affect printf width)
+        # [OK] is 4 chars, inst_width=9 needs 11 chars between │: 3 + 4 + 4 = 11
+        # [OK] is 4 chars, conf_width=10 needs 12 chars between │: 4 + 4 + 4 = 12
+        printf "│ %-${tool_width}s │   %b    │    %b    │\n" "$tool" "$inst_display" "$conf_display"
+    done
+    
+    print_table_bottom "$tool_width" "$inst_width" "$conf_width"
+    echo ""
+    
+    # Summary
+    echo "$fully_configured/$total tools fully configured"
+    
+    if [[ $fully_configured -lt $total ]]; then
+        echo "Run 'dot install <tool>' to install/configure missing tools"
+    fi
+    
+    # Show recent errors if any
+    local err_count
+    err_count=$(error_count)
+    if [[ "$err_count" -gt 0 ]]; then
+        echo ""
+        echo "Recent errors ($err_count total):"
+        show_recent_errors 3
+        echo ""
+        echo "Run 'dot logs' for details"
+    fi
+}
+
+# Show detailed status for a specific tool
+cmd_status_tool() {
+    local tool_name="$1"
+    local dir
+    dir="$(dotfiles_dir)"
+    local tool_dir="$dir/$tool_name"
+    
+    # Check if tool exists
+    if [[ ! -d "$tool_dir" ]]; then
+        log_error "Unknown tool: $tool_name"
+        echo ""
+        echo "Available tools:"
+        for d in "$dir"/*/; do
+            local name
+            name=$(basename "$d")
+            local script
+            script=$(get_install_script "$d")
+            [[ -n "$script" ]] && echo "  $name"
+        done
+        return 1
+    fi
+    
+    local install_script
+    install_script=$(get_install_script "$tool_dir")
+    
+    if [[ -z "$install_script" ]]; then
+        log_error "Tool '$tool_name' has no install script"
+        return 1
+    fi
+    
+    local interpreter
+    interpreter=$(get_script_interpreter "$install_script")
+    
+    echo "Tool: $tool_name"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo ""
+    
+    # Get installed status and version
+    local inst_status version_info
+    inst_status=$($interpreter -c "
+        source '$install_script'
+        if declare -f check_installed &>/dev/null; then
+            if check_installed; then
+                echo 'yes'
+            else
+                echo 'no'
+            fi
+        else
+            echo 'unknown'
+        fi
+    " 2>/dev/null)
+    
+    # Try to get version
+    version_info=""
+    if [[ "$inst_status" == "yes" ]]; then
+        # First try get_installed_version from install script
+        version_info=$($interpreter -c "
+            source '$install_script'
+            if declare -f get_installed_version &>/dev/null; then
+                get_installed_version
+            fi
+        " 2>/dev/null)
+        
+        # If not available, try common version flags
+        if [[ -z "$version_info" ]] && command -v "$tool_name" &>/dev/null; then
+            version_info=$("$tool_name" --version 2>/dev/null | head -1) || \
+            version_info=$("$tool_name" -v 2>/dev/null | head -1) || \
+            version_info=$("$tool_name" version 2>/dev/null | head -1) || \
+            version_info=""
+        fi
+    fi
+    
+    # Print installed status
+    printf "Installed:  "
+    case "$inst_status" in
+        yes)
+            printf "${GREEN}[OK]${NC}"
+            if [[ -n "$version_info" ]]; then
+                printf " %s" "$version_info"
+            fi
+            ;;
+        no)  printf "${RED}[NO]${NC} (not installed)" ;;
+        *)   printf "${YELLOW}[??]${NC} (no check defined)" ;;
+    esac
+    echo ""
+    
+    # Get configured status
+    local conf_status
+    conf_status=$($interpreter -c "
+        source '$install_script'
+        if declare -f check_configured &>/dev/null; then
+            if check_configured; then
+                echo 'yes'
+            else
+                echo 'no'
+            fi
+        else
+            echo 'na'
+        fi
+    " 2>/dev/null)
+    
+    printf "Configured: "
+    case "$conf_status" in
+        yes) printf "${GREEN}[OK]${NC}" ;;
+        no)  printf "${RED}[NO]${NC} (not configured)" ;;
+        na)  printf "${DIM}[--]${NC} (no config required)" ;;
+        *)   printf "${YELLOW}[??]${NC}" ;;
+    esac
+    echo ""
+    echo ""
+    
+    # Show recent errors for this tool
+    # Match tool name in the tool field (which may be "tool" or "tool/script")
+    if [[ -f "$ERROR_LOG" ]] && grep -qE "\|${tool_name}(/|\|)" "$ERROR_LOG" 2>/dev/null; then
+        local err_count
+        err_count=$(grep -cE "\|${tool_name}(/|\|)" "$ERROR_LOG")
+        echo "Recent errors ($err_count total):"
+        grep -E "\|${tool_name}(/|\|)" "$ERROR_LOG" | tail -3 | while IFS='|' read -r ts cmd tool code short _full; do
+            local date_part="${ts:0:16}"
+            date_part="${date_part/T/ }"
+            printf "  %-16s %-8s %s\n" "$date_part" "$cmd" "$short"
+        done
+        echo ""
+        echo "Run 'dot logs $tool_name' for full details"
+    else
+        echo "No recent errors"
+    fi
 }
 
 cmd_edit() {
@@ -315,164 +595,6 @@ Arguments:
           Use 'gh cs list' to see available codespaces.
 EOF
 }
-
-cmd_doctor() {
-    [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]] && { show_doctor_help; return 0; }
-    
-    local dir
-    dir="$(dotfiles_dir)"
-    
-    echo "Dotfiles Doctor"
-    echo "==============="
-    echo ""
-    echo "Location: $dir"
-    echo ""
-    
-    # Check platform
-    echo -n "Platform: "
-    if is_codespaces; then
-        echo "GitHub Codespaces"
-    elif is_omarchy; then
-        echo "Omarchy (Arch Linux)"
-    elif is_macos; then
-        echo "macOS"
-    elif is_arch; then
-        echo "Arch Linux"
-    else
-        echo "Unknown"
-    fi
-    echo ""
-    
-    # Collect tool status into parallel arrays
-    local tool_names=()
-    local installed_statuses=()
-    local configured_statuses=()
-    
-    for tool_dir in "$dir"/*/; do
-        local tool_name
-        tool_name=$(basename "$tool_dir")
-        local install_script
-        install_script=$(get_install_script "$tool_dir")
-        
-        # Skip directories without install scripts
-        [[ -n "$install_script" ]] || continue
-        
-        tool_names+=("$tool_name")
-        
-        # Get the right interpreter for this script
-        local interpreter
-        interpreter=$(get_script_interpreter "$install_script")
-        
-        # Check installed and configured status
-        local statuses
-        statuses=$($interpreter -c "
-            source '$install_script'
-            
-            # Check installed
-            if declare -f check_installed &>/dev/null; then
-                if check_installed; then
-                    echo -n 'yes '
-                else
-                    echo -n 'no '
-                fi
-            else
-                echo -n 'unknown '
-            fi
-            
-            # Check configured
-            if declare -f check_configured &>/dev/null; then
-                if check_configured; then
-                    echo 'yes'
-                else
-                    echo 'no'
-                fi
-            else
-                echo 'na'  # Not applicable / no config needed
-            fi
-        " 2>/dev/null)
-        
-        local inst_status conf_status
-        read -r inst_status conf_status <<< "$statuses"
-        installed_statuses+=("$inst_status")
-        configured_statuses+=("$conf_status")
-    done
-    
-    # Calculate column widths dynamically
-    local tool_width
-    tool_width=$(max_width 4 "${tool_names[@]}")
-    local inst_width=9   # "Installed"
-    local conf_width=10  # "Configured"
-    
-    # Print table header
-    print_table_line "─" "$tool_width" "$inst_width" "$conf_width"
-    print_table_row "$tool_width" "Tool" "$inst_width" "Installed" "$conf_width" "Configured"
-    print_table_separator "$tool_width" "$inst_width" "$conf_width"
-    
-    # Print each tool's status
-    local fully_configured=0
-    local total=${#tool_names[@]}
-    local i
-    
-    for ((i=0; i<total; i++)); do
-        local tool="${tool_names[$i]}"
-        local inst="${installed_statuses[$i]}"
-        local conf="${configured_statuses[$i]}"
-        
-        # Convert to colored display indicators
-        local inst_display conf_display
-        case "$inst" in
-            yes) inst_display="${GREEN}[OK]${NC}" ;;
-            no)  inst_display="${RED}[NO]${NC}" ;;
-            *)   inst_display="${YELLOW}[??]${NC}" ;;
-        esac
-        
-        case "$conf" in
-            yes) conf_display="${GREEN}[OK]${NC}" ;;
-            no)  conf_display="${RED}[NO]${NC}" ;;
-            na) 
-                # If installed and no config needed, show OK
-                if [[ "$inst" == "yes" ]]; then
-                    conf_display="${GREEN}[OK]${NC}"
-                else
-                    conf_display="${DIM}[--]${NC}"
-                fi
-                ;;
-            *)   conf_display="${YELLOW}[??]${NC}" ;;
-        esac
-        
-        # Count fully configured (installed + configured or no config needed)
-        if [[ "$inst" == "yes" && ("$conf" == "yes" || "$conf" == "na") ]]; then
-            ((fully_configured++))
-        fi
-        
-        # Print row with proper alignment (ANSI codes don't affect printf width)
-        # [OK] is 4 chars, inst_width=9 needs 11 chars between │: 3 + 4 + 4 = 11
-        # [OK] is 4 chars, conf_width=10 needs 12 chars between │: 4 + 4 + 4 = 12
-        printf "│ %-${tool_width}s │   %b    │    %b    │\n" "$tool" "$inst_display" "$conf_display"
-    done
-    
-    print_table_bottom "$tool_width" "$inst_width" "$conf_width"
-    echo ""
-    
-    # Summary
-    echo "$fully_configured/$total tools fully configured"
-    
-    if [[ $fully_configured -lt $total ]]; then
-        echo "Run 'dot install <tool>' to install/configure missing tools"
-    fi
-    
-    # Show recent errors if any
-    local err_count
-    err_count=$(error_count)
-    if [[ "$err_count" -gt 0 ]]; then
-        echo ""
-        echo "Recent errors ($err_count total):"
-        show_recent_errors 3
-        echo ""
-        echo "Run 'dot logs' for details"
-    fi
-}
-
 cmd_logs() {
     local show_all=false
     local verbose=false
@@ -522,9 +644,10 @@ cmd_logs() {
     fi
     
     # Filter by tool if specified
+    # Match tool name in the tool field (which may be "tool" or "tool/script")
     local log_content
     if [[ -n "$filter_tool" ]]; then
-        log_content=$(grep "|$filter_tool|" "$ERROR_LOG" || true)
+        log_content=$(grep -E "\|${filter_tool}(/|\|)" "$ERROR_LOG" || true)
         if [[ -z "$log_content" ]]; then
             log_success "No errors for '$filter_tool'"
             return 0
@@ -791,13 +914,34 @@ EOF
 
 show_status_help() {
     cat <<EOF
-dot status - Show VCS status of dotfiles repo
+dot status - Show installation status of tools
 
 Usage:
-  dot status [-h|--help]
+  dot status              Show status of all tools
+  dot status <tool>       Show detailed status for a specific tool
+  dot status -h|--help    Show this help
 
-Shows uncommitted changes in your dotfiles repository using
-jj (if available) or git.
+Shows a table of all tools with their installation and configuration status:
+  - Installed: Whether the tool binary/command exists
+  - Configured: Whether the tool's config files are symlinked
+
+Status indicators:
+  ${GREEN}[OK]${NC}  Installed/Configured
+  ${RED}[NO]${NC}  Not installed/Not configured  
+  ${YELLOW}[??]${NC}  No health check defined
+  ${DIM}[--]${NC}  Not applicable (tool has no config)
+
+When a tool name is provided, shows detailed information including:
+  - Installation and configuration status
+  - Version number (when available)
+  - Recent error logs for that tool
+
+Also displays any recent errors from the log.
+
+Examples:
+  dot status              # Show all tools
+  dot status nvim         # Show detailed nvim status
+  dot status jj           # Show detailed jj status
 EOF
 }
 
@@ -853,27 +997,6 @@ $(
 EOF
 }
 
-show_doctor_help() {
-    cat <<EOF
-dot doctor - Check system health
-
-Usage:
-  dot doctor [-h|--help]
-
-Shows a table of all tools with their installation and configuration status:
-  - Installed: Whether the tool binary/command exists
-  - Configured: Whether the tool's config files are symlinked
-
-Status indicators:
-  ${GREEN}[OK]${NC}  Installed/Configured
-  ${RED}[NO]${NC}  Not installed/Not configured  
-  ${YELLOW}[??]${NC}  No health check defined
-  ${DIM}[--]${NC}  Not applicable (tool has no config)
-
-Also displays any recent errors from the log.
-EOF
-}
-
 show_logs_help() {
     cat <<EOF
 dot logs - View installation and operation logs
@@ -907,13 +1030,13 @@ Usage:
   dotfiles [options] <command> [args]
 
 Commands:
-  status            Show VCS status of dotfiles repo
+  status            Show installation status of all tools
+  status <tool>     Show detailed status for a specific tool
   pull              Pull latest changes and apply them
   edit              Open dotfiles in editor
   install           Run main install script
   install <tools>   Install specific tool(s), e.g. 'dotfiles install jj node'
   update            Update installed tools (brew, nvim plugins, etc.)
-  doctor            Check if everything is set up correctly
   logs              View installation and operation error logs
   patch create      Create patch from uncommitted changes (Codespaces)
   patch pull        Pull and apply patch from a Codespace (local)
@@ -966,10 +1089,6 @@ case "${1:-}" in
     update)
         shift
         cmd_update "$@"
-        ;;
-    doctor)
-        shift
-        cmd_doctor "$@"
         ;;
     logs)
         shift
