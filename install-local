@@ -5,18 +5,15 @@ source "$SCRIPT_DIR/lib/common.sh"
 
 FAILED_STEPS=()
 
-# Install fzf via package manager
-install_fzf() {
-    if command -v fzf &>/dev/null; then
-        echo "fzf already installed"
-        return 0
-    fi
-
-    echo "Installing fzf..."
+# Install basic tools via package manager
+# - fzf: fuzzy finder
+# - poppler: PDF utilities (provides pdftotext)
+install_basic_tools() {
+    echo "Installing basic tools..."
     if is_macos; then
-        brew install fzf
+        brew install fzf poppler
     elif is_arch; then
-        sudo pacman -S --noconfirm fzf
+        sudo pacman -S --noconfirm fzf poppler
     fi
 }
 
@@ -92,7 +89,7 @@ log_info "Phase 3: Installing package-manager tools"
 if is_macos; then
     ensure_homebrew
 fi
-run_step "fzf" install_fzf
+run_step "basic-tools" install_basic_tools
 run_step "tmux/install" bash "$SCRIPT_DIR/tmux/install"
 run_step "ghostty/install" bash "$SCRIPT_DIR/ghostty/install"
 run_step "1password/install" bash "$SCRIPT_DIR/1password/install"
