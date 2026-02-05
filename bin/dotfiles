@@ -494,12 +494,18 @@ cmd_patch_create() {
     
     local patch_file="/tmp/dotfiles.patch"
     
+    # Stage untracked files with intent-to-add so they appear in diff
+    git add -N .
+    
     if git diff --quiet HEAD; then
         log_error "No uncommitted changes to create patch from"
         exit 1
     fi
     
-    git diff HEAD > "$patch_file"
+    git diff --no-color HEAD > "$patch_file"
+    
+    # Reset intent-to-add staging (leaves working tree unchanged)
+    git reset -q HEAD
     
     log_success "Patch created: $patch_file"
     echo ""
@@ -535,7 +541,7 @@ cmd_patch_pull() {
     fi
     
     log_info "Pulling patch from Codespace..."
-    if ! gh cs cp "${gh_args[@]}" "$remote_patch" "$patch_file"; then
+    if ! gh cs cp -e "${gh_args[@]}" "$remote_patch" "$patch_file"; then
         log_error "Failed to copy patch from Codespace"
         echo ""
         echo "Make sure you've run 'dot patch create' in the Codespace first."
