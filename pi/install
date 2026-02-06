@@ -1,0 +1,61 @@
+#!/bin/bash
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PI_CONFIG_DIR="$HOME/.pi/agent"
+
+check_installed() {
+    command -v pi &>/dev/null
+}
+
+check_configured() {
+    [[ -L "$PI_CONFIG_DIR/settings.json" ]]
+}
+
+# Install pi coding agent via npm
+install() {
+    if command -v pi &>/dev/null; then
+        echo "pi already installed"
+        return 0
+    fi
+
+    # Ensure npm is available
+    if ! command -v npm &>/dev/null; then
+        echo "npm not found. Please install Node.js first (node/install)"
+        return 1
+    fi
+
+    echo "Installing pi coding agent..."
+    npm install -g @mariozechner/pi-coding-agent
+}
+
+# Symlink pi configuration
+configure() {
+    mkdir -p "$PI_CONFIG_DIR"
+
+    # Symlink settings.json
+    if [[ -f "$SCRIPT_DIR/settings.json" ]]; then
+        rm -f "$PI_CONFIG_DIR/settings.json"
+        ln -s "$SCRIPT_DIR/settings.json" "$PI_CONFIG_DIR/settings.json"
+        echo "Linked: $PI_CONFIG_DIR/settings.json"
+    fi
+
+    # Create skills directory (will be populated by skills/install)
+    mkdir -p "$PI_CONFIG_DIR/skills"
+}
+
+update() {
+    if ! command -v npm &>/dev/null; then
+        echo "npm not found, cannot update pi"
+        return 1
+    fi
+
+    echo "Updating pi coding agent..."
+    npm update -g @mariozechner/pi-coding-agent
+}
+
+# Main (only run when executed directly, not when sourced)
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    install
+    configure
+fi

@@ -93,6 +93,7 @@ log_info "Installing languages and tools"
 run_step "rust/install" bash "$SCRIPT_DIR/rust/install"
 run_step "go/install" bash "$SCRIPT_DIR/go/install"
 run_step "node/install" bash "$SCRIPT_DIR/node/install"
+run_step "pi/install" bash "$SCRIPT_DIR/pi/install"
 run_step "opencode/install" bash "$SCRIPT_DIR/opencode/install"
 
 log_info "Setting up shell"

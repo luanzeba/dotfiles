@@ -148,10 +148,12 @@ symlink_skill() {
     # Remove existing symlinks/directories
     rm -rf ~/.config/opencode/skill/"$skill_name"
     rm -rf ~/.claude/skills/"$skill_name"
+    rm -rf ~/.pi/agent/skills/"$skill_name"
 
     # Create new symlinks
     ln -s "$skill_path" ~/.config/opencode/skill/"$skill_name"
     ln -s "$skill_path" ~/.claude/skills/"$skill_name"
+    ln -s "$skill_path" ~/.pi/agent/skills/"$skill_name"
 
     echo "Linked: $skill_name"
     return 0
@@ -162,6 +164,7 @@ configure() {
     # Create global skill directories
     mkdir -p ~/.config/opencode/skill
     mkdir -p ~/.claude/skills
+    mkdir -p ~/.pi/agent/skills
 
     # Link custom skills from this repo (all directories except 'external')
     for skill_dir in "$SCRIPT_DIR"/*/; do
