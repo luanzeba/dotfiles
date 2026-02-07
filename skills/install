@@ -11,7 +11,8 @@ PRIVATE_REPO="luanzeba/private-dotfiles"
 check_installed() {
     # Check if external skills have been downloaded
     # Built-in skills are always present, but external ones need fetching
-    [[ -d "$SKILL_CREATOR_DIR" ]] && [[ -d "$PLAYWRIGHT_SKILL_DIR" ]]
+    # Note: skill-creator is now maintained locally in skills/skill-creator/
+    [[ -d "$PLAYWRIGHT_SKILL_DIR" ]]
 }
 
 check_configured() {
@@ -127,8 +128,8 @@ download_private_skills() {
 }
 
 # Download external skills (public repos, plus private if auth available)
+# Note: skill-creator is now maintained locally in skills/skill-creator/
 install() {
-    download_skill_creator || echo "Continuing without skill-creator..."
     download_playwright_skill || echo "Continuing without playwright-skill..."
     download_private_skills || echo "Continuing without private skills..."
 }
@@ -175,10 +176,10 @@ configure() {
         symlink_skill "$skill_dir" "$skill_name"
     done
 
-    # Link external skills
-    if [[ -d "$SKILL_CREATOR_DIR" ]]; then
-        symlink_skill "$SKILL_CREATOR_DIR" "skill-creator"
-    fi
+    # Link external skills (skill-creator is now local, not external)
+    # if [[ -d "$SKILL_CREATOR_DIR" ]]; then
+    #     symlink_skill "$SKILL_CREATOR_DIR" "skill-creator"
+    # fi
 
     # Link playwright-skill (nested structure from plugin format)
     if [[ -d "$PLAYWRIGHT_SKILL_DIR/skills/playwright-skill" ]]; then

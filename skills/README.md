@@ -7,11 +7,12 @@ Skills are structured prompts that provide domain-specific knowledge to AI codin
 ```
 skills/
 ├── install              # Downloads external skills, symlinks all to global locations
+├── skill-creator/       # Guide for creating new skills (forked from anthropics/skills)
 ├── dotfiles/            # Custom skill for managing this dotfiles repo
-│   ├── SKILL.md         # Main skill file (frontmatter + instructions)
-│   └── references/      # Supporting documentation
+├── obsidian-vault/      # Obsidian Personal vault management
+│   ├── SKILL.md
+│   └── references/
 └── external/            # Downloaded/cloned skills (gitignored)
-    ├── skill-creator/   # From anthropics/skills repo
     ├── playwright-skill/# From lackeyjb/playwright-skill
     └── private/         # From luanzeba/private-dotfiles repo
 ```
@@ -19,12 +20,14 @@ skills/
 ## How It Works
 
 The `install` script:
-1. Downloads `skill-creator` from [anthropics/skills](https://github.com/anthropics/skills)
-2. Downloads `playwright-skill` from [lackeyjb/playwright-skill](https://github.com/lackeyjb/playwright-skill) and runs setup
-3. Clones private skills from a private repo (if accessible)
-4. Symlinks all skills to global locations:
+1. Downloads `playwright-skill` from [lackeyjb/playwright-skill](https://github.com/lackeyjb/playwright-skill) and runs setup
+2. Clones private skills from a private repo (if accessible)
+3. Symlinks all skills to global locations:
    - `~/.config/opencode/skill/<name>` (OpenCode)
    - `~/.claude/skills/<name>` (Claude Code)
+   - `~/.pi/agent/skills/<name>` (Pi)
+
+Note: `skill-creator` was originally from [anthropics/skills](https://github.com/anthropics/skills) but is now maintained locally with dotfiles-specific additions.
 
 ## Adding a New Skill
 
