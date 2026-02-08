@@ -208,12 +208,24 @@ install_private_tools() {
     fi
 }
 
+# Install npm dependencies for skills that need them
+install_skill_dependencies() {
+    # web-browser skill needs ws (WebSocket) package for CDP communication
+    local web_browser_scripts="$SCRIPT_DIR/web-browser/scripts"
+    if [[ -f "$web_browser_scripts/package.json" ]]; then
+        echo ""
+        echo "Installing web-browser dependencies..."
+        (cd "$web_browser_scripts" && npm install) || echo "WARNING: web-browser npm install had issues"
+    fi
+}
+
 # Main (only run when executed directly, not when sourced)
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     echo "Installing skills..."
     install
     configure
     install_private_tools
+    install_skill_dependencies
     echo ""
     echo "Skills installation complete!"
     echo ""
