@@ -13,7 +13,7 @@ FAILED_STEPS=()
 install_basic_tools() {
     echo "Installing basic tools..."
     if is_macos; then
-        brew install fd ffmpeg fzf poppler
+        brew install azure-cli fd ffmpeg fzf poppler
     elif is_arch; then
         sudo pacman -S --noconfirm fd ffmpeg fzf poppler
     fi
