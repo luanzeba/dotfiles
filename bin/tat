@@ -12,6 +12,9 @@ not_in_tmux() {
   [ -z "$TMUX" ]
 }
 
+# Set Ghostty tab title to match tmux session name
+printf '\e]2;%s\e\\' "$session_name"
+
 if not_in_tmux; then
   tmux new-session -As "$session_name"
 else

@@ -1,3 +1,4 @@
 font-family = BerkeleyMono Nerd Font
 cursor-style = block
+shell-integration-features = no-title
 keybind = shift+enter=text:\x1b[13;2u
