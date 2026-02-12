@@ -74,7 +74,7 @@ install_apt_packages() {
     echo "Installing apt packages..."
     sudo apt-get update
     sudo apt -o DPkg::Lock::Timeout=600 install -y \
-        build-essential python3-venv ruby-dev fzf bat eza jq ripgrep tmux \
+        build-essential python3-venv ruby-dev fd-find fzf bat eza jq ripgrep tmux \
         libfuse2 fuse software-properties-common
 }
 
