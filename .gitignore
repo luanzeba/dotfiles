@@ -9,3 +9,6 @@ nvim/lazy-lock.json
 
 # Runtime config files (created by install scripts)
 .config/
+
+# pi agent runtime data (sessions, todos)
+.pi/

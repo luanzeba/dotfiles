@@ -42,6 +42,19 @@ configure() {
 
     # Create skills directory (will be populated by skills/install)
     mkdir -p "$PI_CONFIG_DIR/skills"
+
+    # Symlink extensions
+    if [[ -d "$SCRIPT_DIR/extensions" ]]; then
+        mkdir -p "$PI_CONFIG_DIR/extensions"
+        for ext in "$SCRIPT_DIR/extensions"/*.ts; do
+            [[ -f "$ext" ]] || continue
+            local name
+            name="$(basename "$ext")"
+            rm -f "$PI_CONFIG_DIR/extensions/$name"
+            ln -s "$ext" "$PI_CONFIG_DIR/extensions/$name"
+            echo "Linked extension: $PI_CONFIG_DIR/extensions/$name"
+        done
+    fi
 }
 
 update() {
