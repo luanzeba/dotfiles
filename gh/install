@@ -4,6 +4,7 @@ set -e
 # GitHub CLI (gh)
 # https://github.com/cli/cli
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 GH_INSTALL_DIR="$HOME/.local/gh"
 
 check_installed() {
@@ -11,8 +12,20 @@ check_installed() {
 }
 
 check_configured() {
-    # Check if gh-csd extension is installed
-    gh extension list 2>/dev/null | grep -q "gh-csd"
+    # Check if gh-csd extension is installed and gh-not config is linked
+    if ! gh extension list 2>/dev/null | grep -q "gh-csd"; then
+        return 1
+    fi
+
+    if [[ ! -L "$HOME/.config/gh-not" ]]; then
+        return 1
+    fi
+
+    if [[ "$(uname -s)" == "Darwin" ]] && [[ ! -L "$HOME/Library/LaunchAgents/gh-not-sync.plist" ]]; then
+        return 1
+    fi
+
+    return 0
 }
 
 get_latest_version() {
@@ -110,11 +123,29 @@ configure() {
     if [[ -n "$CODESPACES" ]]; then
         # Codespaces: only need gh-csd for local machine communication
         gh extension install luanzeba/gh-csd 2>/dev/null || true
+        gh extension install nobe4/gh-not 2>/dev/null || true
     else
         # Local: install all useful extensions
         gh extension install luanzeba/gh-csd 2>/dev/null || true
         gh extension install github/gh-shell 2>/dev/null || true
         gh extension install rneatherway/gh-slack 2>/dev/null || true
+        gh extension install nobe4/gh-not 2>/dev/null || true
+    fi
+
+    mkdir -p "$HOME/.config"
+    ln -sf "$SCRIPT_DIR/.config/gh-not" "$HOME/.config/gh-not"
+
+    if [[ "$(uname -s)" == "Darwin" ]]; then
+        mkdir -p "$HOME/Library/LaunchAgents"
+        local plist="$HOME/Library/LaunchAgents/gh-not-sync.plist"
+        ln -sf "$SCRIPT_DIR/launchd/gh-not-sync.plist" "$plist"
+
+        if command -v launchctl &>/dev/null; then
+            launchctl bootout "gui/$(id -u)" "$plist" 2>/dev/null || true
+            launchctl bootstrap "gui/$(id -u)" "$plist" 2>/dev/null || true
+            launchctl enable "gui/$(id -u)/luan.gh-not-sync.hourly" 2>/dev/null || true
+            launchctl kickstart -k "gui/$(id -u)/luan.gh-not-sync.hourly" 2>/dev/null || true
+        fi
     fi
 }
 

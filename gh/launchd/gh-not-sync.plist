@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+  <dict>
+    <key>EnvironmentVariables</key>
+    <dict>
+      <key>PATH</key>
+      <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:$HOME/.local/bin</string>
+    </dict>
+
+    <key>Label</key>
+    <string>luan.gh-not-sync.hourly</string>
+
+    <key>ProgramArguments</key>
+    <array>
+      <string>sh</string>
+      <string>-c</string>
+      <string>gh not sync --config=$HOME/.config/gh-not/config.yaml --verbosity=2</string>
+    </array>
+
+    <key>StandardErrorPath</key>
+    <string>/tmp/gh-not-sync.err</string>
+    <key>StandardOutPath</key>
+    <string>/tmp/gh-not-sync.out</string>
+
+    <key>StartInterval</key>
+    <integer>3600</integer>
+  </dict>
+</plist>
