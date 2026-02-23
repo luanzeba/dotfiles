@@ -1,0 +1,75 @@
+cache:
+    path: /Users/luan/.local/state/gh-not/cache.json
+    ttl_in_hours: 1
+endpoint:
+    all: true
+    max_page: 50
+    max_retry: 10
+    per_page: 100
+keymap:
+    command:
+        command accept:
+            - enter
+        command cancel:
+            - esc
+    filter:
+        filter accept:
+            - enter
+        filter cancel:
+            - esc
+    normal:
+        command mode:
+            - ':'
+        cursor down:
+            - down
+            - j
+        cursor up:
+            - up
+            - k
+        filter mode:
+            - /
+        force quit:
+            - ctrl+c
+        go to end:
+            - end
+            - G
+        go to start:
+            - home
+            - g
+        next page:
+            - right
+            - l
+        open in browser:
+            - o
+        previous page:
+            - left
+            - h
+        quit:
+            - q
+            - esc
+        select all:
+            - a
+        select none:
+            - A
+        toggle help:
+            - '?'
+        toggle selected:
+            - ' '
+rules:
+    - name: close CI notifications
+      filters:
+          - (.reason == "ci_activity") or (.subject.type == "CheckSuite") or (.subject.type == "CheckRun")
+      action: done
+    - name: mark notifications of PRs closed over a week ago as done
+      filters:
+          - .subject.state == "closed"
+          - .updated_at | fromdate < now - 604800
+      action: done
+    - name: mark pull requests merged by yourself as done
+      filters:
+          - .merged_by.login == "luanzeba"
+          - .subject.state == "closed"
+      action: done
+view:
+    height: 40
+    log_path: /Users/luan/.local/state/gh-not/debug.log

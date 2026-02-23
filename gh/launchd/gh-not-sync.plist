@@ -13,9 +13,11 @@
 
     <key>ProgramArguments</key>
     <array>
-      <string>sh</string>
-      <string>-c</string>
-      <string>gh not sync --config=$HOME/.config/gh-not/config.yaml --verbosity=2</string>
+      <string>/Users/luan/.local/bin/gh</string>
+      <string>not</string>
+      <string>sync</string>
+      <string>--config=/Users/luan/.config/gh-not/config.yaml</string>
+      <string>--verbosity=2</string>
     </array>
 
     <key>StandardErrorPath</key>
