@@ -1,0 +1,99 @@
+#!/usr/bin/env python3
+import argparse
+import os
+import pty
+import re
+import signal
+import sys
+import time
+
+ANSI_RE = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
+
+KEY_MAP = {
+    "enter": b"\r",
+    "esc": b"\x1b",
+    "up": b"\x1b[A",
+    "down": b"\x1b[B",
+    "left": b"\x1b[D",
+    "right": b"\x1b[C",
+    "ctrl+c": b"\x03",
+}
+
+
+def parse_steps(raw_steps: str):
+    steps = []
+    for step in [s.strip() for s in raw_steps.split(",") if s.strip()]:
+        if step.startswith("sleep:"):
+            steps.append(("sleep", float(step.split(":", 1)[1])))
+        else:
+            steps.append(("key", step))
+    return steps
+
+
+def strip_ansi(data: str) -> str:
+    return ANSI_RE.sub("", data)
+
+
+def run(cmd: str, steps, asserts, timeout: float, capture_path: str | None) -> int:
+    pid, fd = pty.fork()
+    if pid == 0:
+        os.execv("/bin/sh", ["/bin/sh", "-lc", cmd])
+
+    output = []
+    start = time.time()
+
+    for step_type, value in steps:
+        if step_type == "sleep":
+            time.sleep(value)
+            continue
+        payload = KEY_MAP.get(value.lower(), value.encode())
+        os.write(fd, payload)
+        time.sleep(0.15)
+
+    while True:
+        try:
+            chunk = os.read(fd, 4096)
+            if chunk:
+                output.append(chunk)
+        except OSError:
+            break
+
+        done_pid, _ = os.waitpid(pid, os.WNOHANG)
+        if done_pid == pid:
+            break
+
+        if time.time() - start > timeout:
+            os.kill(pid, signal.SIGKILL)
+            print("tui-qa: timeout", file=sys.stderr)
+            return 1
+        time.sleep(0.05)
+
+    raw = b"".join(output)
+    if capture_path:
+        with open(capture_path, "wb") as handle:
+            handle.write(raw)
+
+    text = strip_ansi(raw.decode(errors="ignore"))
+    for pattern in asserts:
+        if not re.search(pattern, text):
+            print(f"tui-qa: assertion failed: {pattern}", file=sys.stderr)
+            return 1
+
+    return 0
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Drive a TUI in a PTY and assert on output.")
+    parser.add_argument("--cmd", required=True, help="Command to execute (quoted).")
+    parser.add_argument("--keys", default="", help="Comma-separated keys (e.g. 'j,enter,q' or 'sleep:1,j,q').")
+    parser.add_argument("--assert", action="append", default=[], help="Regex to assert (repeatable).")
+    parser.add_argument("--timeout", type=float, default=10.0, help="Timeout in seconds.")
+    parser.add_argument("--capture", help="Write raw PTY output to a file.")
+    args = parser.parse_args()
+
+    steps = parse_steps(args.keys)
+    return run(args.cmd, steps, args.assert, args.timeout, args.capture)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

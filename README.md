@@ -90,6 +90,11 @@ dot logs <tool>       # Filter by tool name
 dot logs --clear      # Clear error log
 ```
 
+## Utilities
+
+- `tui-qa`: PTY-driven TUI smoke tests. Example:
+  `tui-qa --cmd "./gh-csd tui" --keys "sleep:1,j,q" --assert "codespace\(s\)"`
+
 ## Platforms
 
 | Platform | Detection | Notes |
