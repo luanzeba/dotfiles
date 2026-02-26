@@ -198,6 +198,16 @@ max_width() {
     echo "$max"
 }
 
+# Repeat a string N times (works with multi-byte UTF-8 characters unlike tr)
+# Usage: repeat_str <string> <count>
+repeat_str() {
+    local str="$1" count="$2" result=""
+    for ((i=0; i<count; i++)); do
+        result+="$str"
+    done
+    printf '%s' "$result"
+}
+
 # Print a horizontal table line
 # Usage: print_table_line <char> <width1> <width2> ...
 print_table_line() {
@@ -211,7 +221,7 @@ print_table_line() {
         else
             line+="┬"
         fi
-        line+=$(printf '%*s' "$((width + 2))" '' | tr ' ' "$char")
+        line+=$(repeat_str "$char" "$((width + 2))")
     done
     line+="┐"
     echo "$line"
@@ -227,7 +237,7 @@ print_table_separator() {
         else
             line+="┼"
         fi
-        line+=$(printf '%*s' "$((width + 2))" '' | tr ' ' '─')
+        line+=$(repeat_str "─" "$((width + 2))")
     done
     line+="┤"
     echo "$line"
@@ -243,7 +253,7 @@ print_table_bottom() {
         else
             line+="┴"
         fi
-        line+=$(printf '%*s' "$((width + 2))" '' | tr ' ' '─')
+        line+=$(repeat_str "─" "$((width + 2))")
     done
     line+="┘"
     echo "$line"

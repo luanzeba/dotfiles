@@ -111,9 +111,9 @@ cmd_status() {
         statuses=$($interpreter -c "
             source '$install_script'
             
-            # Check installed
+            # Check installed (redirect check function stdout to avoid pollution)
             if declare -f check_installed &>/dev/null; then
-                if check_installed; then
+                if check_installed &>/dev/null; then
                     echo -n 'yes '
                 else
                     echo -n 'no '
@@ -122,9 +122,9 @@ cmd_status() {
                 echo -n 'unknown '
             fi
             
-            # Check configured
+            # Check configured (redirect check function stdout to avoid pollution)
             if declare -f check_configured &>/dev/null; then
-                if check_configured; then
+                if check_configured &>/dev/null; then
                     echo 'yes'
                 else
                     echo 'no'
@@ -185,7 +185,7 @@ cmd_status() {
         
         # Count fully configured (installed + configured or no config needed)
         if [[ "$inst" == "yes" && ("$conf" == "yes" || "$conf" == "na") ]]; then
-            ((fully_configured++))
+            fully_configured=$((fully_configured + 1))
         fi
         
         # Print row with proper alignment (ANSI codes don't affect printf width)
@@ -258,7 +258,7 @@ cmd_status_tool() {
     inst_status=$($interpreter -c "
         source '$install_script'
         if declare -f check_installed &>/dev/null; then
-            if check_installed; then
+            if check_installed &>/dev/null; then
                 echo 'yes'
             else
                 echo 'no'
@@ -307,7 +307,7 @@ cmd_status_tool() {
     conf_status=$($interpreter -c "
         source '$install_script'
         if declare -f check_configured &>/dev/null; then
-            if check_configured; then
+            if check_configured &>/dev/null; then
                 echo 'yes'
             else
                 echo 'no'
