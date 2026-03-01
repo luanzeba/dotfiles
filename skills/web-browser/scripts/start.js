@@ -4,17 +4,24 @@ import { spawn, execSync } from "node:child_process";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const useProfile = process.argv[2] === "--profile";
+const args = new Set(process.argv.slice(2));
+const useProfile = args.has("--profile");
+const useHeadless = args.has("--headless");
+const validArgs = new Set(["--profile", "--headless"]);
 
-if (process.argv[2] && process.argv[2] !== "--profile") {
-  console.log("Usage: start.ts [--profile]");
+if ([...args].some(a => !validArgs.has(a))) {
+  console.log("Usage: start.ts [--profile] [--headless]");
   console.log("\nOptions:");
   console.log(
-    "  --profile  Copy your default Chrome profile (cookies, logins)",
+    "  --profile   Copy your default Chrome profile (cookies, logins)",
+  );
+  console.log(
+    "  --headless  Run Chrome in headless mode (no visible window)",
   );
   console.log("\nExamples:");
-  console.log("  start.ts            # Start with fresh profile");
-  console.log("  start.ts --profile  # Start with your Chrome profile");
+  console.log("  start.ts              # Start with fresh profile");
+  console.log("  start.ts --profile    # Start with your Chrome profile");
+  console.log("  start.ts --headless   # Start headless (no window)");
   process.exit(1);
 }
 
@@ -38,16 +45,22 @@ if (useProfile) {
 }
 
 // Start Chrome in background (detached so Node can exit)
+const chromeArgs = [
+  "--remote-debugging-port=9222",
+  `--user-data-dir=${process.env["HOME"]}/.cache/scraping`,
+  "--profile-directory=Default",
+  "--disable-search-engine-choice-screen",
+  "--no-first-run",
+  "--disable-features=ProfilePicker",
+];
+
+if (useHeadless) {
+  chromeArgs.push("--headless=new");
+}
+
 spawn(
   "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
-  [
-    "--remote-debugging-port=9222",
-    `--user-data-dir=${process.env["HOME"]}/.cache/scraping`,
-    "--profile-directory=Default",
-    "--disable-search-engine-choice-screen",
-    "--no-first-run",
-    "--disable-features=ProfilePicker",
-  ],
+  chromeArgs,
   { detached: true, stdio: "ignore" },
 ).unref();
 
@@ -76,5 +89,5 @@ const watcherPath = join(scriptDir, "watch.js");
 spawn(process.execPath, [watcherPath], { detached: true, stdio: "ignore" }).unref();
 
 console.log(
-  `✓ Chrome started on :9222${useProfile ? " with your profile" : ""}`,
+  `✓ Chrome started on :9222${useProfile ? " with your profile" : ""}${useHeadless ? " (headless)" : ""}`,
 );

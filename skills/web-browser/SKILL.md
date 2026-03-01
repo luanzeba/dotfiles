@@ -11,11 +11,12 @@ Minimal CDP tools for collaborative site exploration.
 ## Start Chrome
 
 ```bash
-./scripts/start.js              # Fresh profile
+./scripts/start.js --headless   # Headless (no visible window, won't steal focus)
+./scripts/start.js              # Fresh profile (visible window)
 ./scripts/start.js --profile    # Copy your profile (cookies, logins)
 ```
 
-Start Chrome on `:9222` with remote debugging.
+Start Chrome on `:9222` with remote debugging. Use `--headless` by default to avoid stealing window focus. Flags can be combined (e.g. `--headless --profile`).
 
 ## Navigate
 
