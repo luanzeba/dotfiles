@@ -1,0 +1,103 @@
+#!/bin/bash
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+DOTFILES_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+source "$DOTFILES_DIR/lib/common.sh"
+
+OBSIDIAN_VAULT="$HOME/Obsidian/Personal"
+LAUNCHAGENT_LABEL="luan.qmd-reindex"
+LAUNCHAGENT_PLIST="$HOME/Library/LaunchAgents/${LAUNCHAGENT_LABEL}.plist"
+QMD_REINDEX_SCRIPT="$HOME/.local/bin/qmd-reindex"
+
+check_installed() {
+    command -v qmd &>/dev/null
+}
+
+check_configured() {
+    # Check that the obsidian collection exists
+    qmd collection list 2>/dev/null | grep -q "obsidian" 2>/dev/null
+}
+
+install() {
+    if command -v qmd &>/dev/null; then
+        echo "qmd already installed"
+        return 0
+    fi
+
+    if ! command -v npm &>/dev/null; then
+        echo "npm not found. Please install Node.js first (node/install)"
+        return 1
+    fi
+
+    echo "Installing qmd..."
+    npm install -g @tobilu/qmd
+}
+
+configure() {
+    # Set up the Obsidian vault as a qmd collection
+    if [[ ! -d "$OBSIDIAN_VAULT" ]]; then
+        echo "Obsidian vault not found at $OBSIDIAN_VAULT, skipping collection setup"
+        return 0
+    fi
+
+    if qmd collection list 2>/dev/null | grep -q "obsidian"; then
+        echo "qmd collection 'obsidian' already exists"
+    else
+        echo "Adding Obsidian vault as qmd collection..."
+        qmd collection add "$OBSIDIAN_VAULT" --name obsidian
+    fi
+
+    # Add context to help qmd understand what's in the vault
+    echo "Adding context for obsidian collection..."
+    qmd context add "qmd://obsidian" "Personal knowledge base in Obsidian. Contains notes about family (kids Jack and Jahaida), house manual and home maintenance, work at GitHub, spiritist studies, projects, trips, journal entries, clippings, and reference documents." 2>/dev/null || true
+
+    # Initial index
+    echo "Running initial index..."
+    qmd update
+
+    echo "Generating embeddings (this may take a while on first run)..."
+    qmd embed
+
+    # Set up the reindex script and LaunchAgent (macOS only)
+    if is_macos; then
+        configure_launchagent
+    fi
+}
+
+configure_launchagent() {
+    # Install the reindex wrapper script
+    mkdir -p "$(dirname "$QMD_REINDEX_SCRIPT")"
+    ln -sf "$SCRIPT_DIR/qmd-reindex" "$QMD_REINDEX_SCRIPT"
+    chmod +x "$SCRIPT_DIR/qmd-reindex"
+    echo "Linked: $QMD_REINDEX_SCRIPT"
+
+    # Install LaunchAgent plist
+    mkdir -p "$HOME/Library/LaunchAgents"
+
+    # Unload existing agent if loaded
+    launchctl bootout "gui/$(id -u)/$LAUNCHAGENT_LABEL" 2>/dev/null || true
+
+    ln -sf "$SCRIPT_DIR/$LAUNCHAGENT_LABEL.plist" "$LAUNCHAGENT_PLIST"
+    echo "Linked: $LAUNCHAGENT_PLIST"
+
+    # Load the agent
+    launchctl bootstrap "gui/$(id -u)" "$LAUNCHAGENT_PLIST"
+    echo "LaunchAgent loaded: $LAUNCHAGENT_LABEL (runs every 30 minutes)"
+}
+
+update() {
+    if ! command -v npm &>/dev/null; then
+        echo "npm not found, cannot update qmd"
+        return 1
+    fi
+
+    echo "Updating qmd..."
+    npm update -g @tobilu/qmd
+}
+
+# Main (only run when executed directly, not when sourced)
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    install
+    configure
+fi

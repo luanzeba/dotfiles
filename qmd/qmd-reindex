@@ -1,0 +1,39 @@
+#!/bin/bash
+#
+# qmd-reindex: Re-index qmd collections and update embeddings.
+# Designed to be run by a LaunchAgent on a schedule.
+#
+
+set -e
+
+LOG_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/qmd"
+LOG_FILE="$LOG_DIR/reindex.log"
+mkdir -p "$LOG_DIR"
+
+# Ensure qmd is in PATH (fnm setup)
+FNM_DIR="$HOME/.local/share/fnm"
+if [[ -d "$FNM_DIR" ]]; then
+    export PATH="$FNM_DIR:$PATH"
+    eval "$("$FNM_DIR/fnm" env 2>/dev/null)" 2>/dev/null || true
+fi
+
+# Also check common paths
+export PATH="$HOME/.local/bin:$PATH"
+
+if ! command -v qmd &>/dev/null; then
+    echo "$(date -Iseconds) qmd not found in PATH" >> "$LOG_FILE"
+    exit 1
+fi
+
+{
+    echo "$(date -Iseconds) Starting reindex..."
+    qmd update 2>&1
+    echo "$(date -Iseconds) Updating embeddings..."
+    qmd embed 2>&1
+    echo "$(date -Iseconds) Reindex complete."
+} >> "$LOG_FILE" 2>&1
+
+# Keep log file from growing forever (last 500 lines)
+if [[ -f "$LOG_FILE" ]] && [[ $(wc -l < "$LOG_FILE") -gt 500 ]]; then
+    tail -200 "$LOG_FILE" > "$LOG_FILE.tmp" && mv "$LOG_FILE.tmp" "$LOG_FILE"
+fi
