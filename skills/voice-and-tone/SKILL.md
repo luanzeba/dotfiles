@@ -40,6 +40,11 @@ Write the way Luan talks. Conversational, direct, and real. Not corporate, not f
 - ✅ "Feel free to use our policy implementation here."
 - ✅ "What do you think?"
 
+**Driving toward merge:** Give a clear path to land the PR, and separate immediate asks from follow-ups.
+- ✅ "Looks good overall. If you can do X and Y, we can merge."
+- ✅ "Let's land this now, and do the schema-backed/official version in a follow-up PR."
+- ✅ "Do you mind reverting this lockfile change? It seems unrelated."
+
 **Expressing uncertainty or inviting discussion:**
 - ✅ "I'm in favor of not wrapping this in a flag, but curious what others think"
 - ✅ "Am I missing something?"
