@@ -216,6 +216,50 @@ _Total links: N_
 
 **Usage:** Browser cleanup and long-term link retention. Keep wording domain-centric (project/topic intent), not migration-centric (Arc/Chrome transition details).
 
+## List Link Archive Template
+
+For list-style bookmarks like shopping lists, movies to watch, books to read, furniture candidates, etc.
+
+```markdown
+---
+category:
+  - "[[Categories/Home|Home]]"
+type:
+  - Shopping
+  - Reference
+status: archived
+created: {{date}}
+date: {{date}}
+tags:
+  - list
+  - links
+  - archive
+  - qmd
+topics: []
+aliases: []
+source: Browser bookmarks
+---
+
+# <List topic> - Reference Links
+
+## Summary
+
+## Retrieval hints
+- Topics:
+- Alternate phrasing:
+
+## Example prompts
+- <Prompt variant 1>
+- <Prompt variant 2>
+
+## Saved links
+1. [Title](https://example.com)
+
+_Total links: N_
+```
+
+**Usage:** Intent-first capture of list-like bookmark folders so future prompts ("show my shopping list", "open all wall art links") retrieve the right note via QMD.
+
 ## Agent Skill Template
 
 For documenting AI agent skills.

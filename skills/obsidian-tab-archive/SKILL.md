@@ -37,11 +37,20 @@ Use:
 
 ## Recommended metadata
 
+### Work/project archives
 - category: `[[Categories/GitHub|GitHub]]`, `[[Categories/Projects|Projects]]`
 - type: `Reference`, `Link Archive`
 - tags: include topic tags (`growth-plan`, `settings-sdk`, `career-plan`, etc.)
+
+### List-style archives (shopping, books, movies, furniture)
+- category: usually `[[Categories/Home|Home]]`; add `[[Categories/Products|Products]]` when relevant
+- type: include list intent (`Shopping`, `Watchlist`, `Reference`)
+- tags: include list topic (`shopping`, `wall-art`, `books`, `movies`)
+
+For all archives:
 - topics: include likely query phrases
 - aliases: include alternate wording users may ask later
+- questions: include explicit future prompts users may ask verbatim
 
 ## Examples
 
@@ -82,5 +91,27 @@ Use:
   --question "Open all the links for the settings sdk in the browser" \
   --tag work \
   --tag settings-sdk \
+  --apply
+```
+
+### 3) Home shopping/list folder
+
+```bash
+~/dotfiles/skills/obsidian-tab-archive/scripts/archive_chromium_bookmark_folder.py \
+  --profile-name "Home" \
+  --folder-name "Shopping" \
+  --note-title "Home Shopping Candidates - Reference Links" \
+  --summary "Products and items we're considering buying; a shortlist to revisit later." \
+  --category "[[Categories/Home|Home]]" \
+  --category "[[Categories/Products|Products]]" \
+  --type Shopping \
+  --type Reference \
+  --topic "shopping list" \
+  --topic "things to buy" \
+  --alias "home shopping list" \
+  --question "Show me my shopping list links" \
+  --question "Open all shopping links in the browser" \
+  --tag home \
+  --tag shopping \
   --apply
 ```
