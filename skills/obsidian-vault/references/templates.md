@@ -171,6 +171,51 @@ created: {{date}}
 
 **Usage:** Web clipper saves, articles to read, reference material written by others.
 
+## Browser Link Archive Template
+
+For archiving browser tab/bookmark collections into durable Obsidian reference notes.
+
+```markdown
+---
+category:
+  - "[[Categories/GitHub|GitHub]]"
+  - "[[Categories/Projects|Projects]]"
+type:
+  - Reference
+  - Link Archive
+org:
+  - GitHub
+status: archived
+created: {{date}}
+date: {{date}}
+tags:
+  - links
+  - archive
+  - qmd
+topics: []
+aliases: []
+source: Browser bookmarks
+---
+
+# <Project or Topic> - Reference Links
+
+## Summary
+
+## Retrieval hints
+- Topics:
+- Alternate phrasing:
+
+## Example prompts
+- <How might I ask for this later?>
+
+## Saved links
+1. [Title](https://example.com)
+
+_Total links: N_
+```
+
+**Usage:** Browser cleanup and long-term link retention. Keep wording domain-centric (project/topic intent), not migration-centric (Arc/Chrome transition details).
+
 ## Agent Skill Template
 
 For documenting AI agent skills.
