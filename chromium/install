@@ -1,0 +1,203 @@
+#!/bin/bash
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+DOTFILES_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+source "$DOTFILES_DIR/lib/common.sh"
+
+# We intentionally use Chromium "external extensions" manifests instead of
+# managed policy force/recommended installs. Policy-installed extensions
+# cannot be uninstalled by users; external manifests allow uninstall and
+# Chromium will respect that user choice.
+CHROMIUM_USER_DATA_DIR="$HOME/Library/Application Support/Chromium"
+EXTERNAL_EXTENSIONS_SOURCE_DIR="$SCRIPT_DIR/external-extensions"
+EXTERNAL_EXTENSIONS_TARGET_DIR="$CHROMIUM_USER_DATA_DIR/External Extensions"
+
+chromium_app_path() {
+    if [[ -d "/Applications/Chromium.app" ]]; then
+        echo "/Applications/Chromium.app"
+        return 0
+    fi
+
+    if [[ -d "$HOME/Applications/Chromium.app" ]]; then
+        echo "$HOME/Applications/Chromium.app"
+        return 0
+    fi
+
+    return 1
+}
+
+check_installed() {
+    chromium_app_path &>/dev/null
+}
+
+check_configured() {
+    if ! is_macos; then
+        return 0
+    fi
+
+    local source_file
+    local target_file
+
+    for source_file in "$EXTERNAL_EXTENSIONS_SOURCE_DIR"/*.json; do
+        [[ -e "$source_file" ]] || continue
+
+        target_file="$EXTERNAL_EXTENSIONS_TARGET_DIR/$(basename "$source_file")"
+        [[ -L "$target_file" ]] || return 1
+        [[ "$(readlink "$target_file")" == "$source_file" ]] || return 1
+    done
+
+    return 0
+}
+
+remove_quarantine() {
+    local app_path
+    app_path="$(chromium_app_path 2>/dev/null || true)"
+
+    [[ -n "$app_path" ]] || return 0
+
+    if xattr -p com.apple.quarantine "$app_path" &>/dev/null; then
+        echo "Removing quarantine attribute from $app_path..."
+        xattr -dr com.apple.quarantine "$app_path" || {
+            echo "Warning: failed to remove quarantine attribute"
+            echo "Run manually: xattr -dr com.apple.quarantine \"$app_path\""
+        }
+    fi
+}
+
+configure_external_extensions() {
+    mkdir -p "$EXTERNAL_EXTENSIONS_TARGET_DIR"
+
+    local source_file
+    local target_file
+
+    for source_file in "$EXTERNAL_EXTENSIONS_SOURCE_DIR"/*.json; do
+        [[ -e "$source_file" ]] || continue
+
+        target_file="$EXTERNAL_EXTENSIONS_TARGET_DIR/$(basename "$source_file")"
+        ln -sf "$source_file" "$target_file"
+        echo "Linked: $target_file -> $source_file"
+    done
+
+    echo "External extension manifests configured. Restart Chromium to apply."
+}
+
+configure_vertical_tabs_preferences() {
+    local local_state="$CHROMIUM_USER_DATA_DIR/Local State"
+
+    if [[ ! -f "$local_state" ]]; then
+        echo "Chromium Local State not found, skipping vertical tabs preference sync"
+        return 0
+    fi
+
+    if pgrep -x Chromium &>/dev/null; then
+        echo "Chromium is running, skipping vertical tabs preference sync"
+        echo "Re-run 'dot install chromium' after quitting Chromium to enforce this setting"
+        return 0
+    fi
+
+    python3 - "$local_state" "$CHROMIUM_USER_DATA_DIR" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+local_state_path = Path(sys.argv[1])
+user_data_dir = Path(sys.argv[2])
+
+try:
+    local_state = json.loads(local_state_path.read_text())
+except Exception as exc:
+    print(f"Failed to read Local State: {exc}")
+    raise SystemExit(1)
+
+info_cache = local_state.get("profile", {}).get("info_cache", {})
+if not isinstance(info_cache, dict) or not info_cache:
+    print("No Chromium profiles found, skipping vertical tabs preference sync")
+    raise SystemExit(0)
+
+updated = 0
+for profile_dir in info_cache.keys():
+    pref_path = user_data_dir / profile_dir / "Preferences"
+    if not pref_path.exists():
+        continue
+
+    try:
+        prefs = json.loads(pref_path.read_text())
+    except Exception as exc:
+        print(f"Skipping {pref_path}: cannot parse JSON ({exc})")
+        continue
+
+    vertical = prefs.setdefault("vertical_tabs", {})
+    before = (vertical.get("enabled"), vertical.get("enabled_first_time"))
+
+    vertical["enabled"] = True
+    vertical["enabled_first_time"] = True
+
+    after = (vertical.get("enabled"), vertical.get("enabled_first_time"))
+    if before != after:
+        pref_path.write_text(json.dumps(prefs, separators=(",", ":")))
+        updated += 1
+
+if updated:
+    print(f"Enabled vertical tabs preference in {updated} profile(s)")
+else:
+    print("Vertical tabs preference already enabled in all detected profiles")
+PY
+}
+
+install() {
+    if ! is_macos; then
+        echo "Chromium install currently supported on macOS only, skipping"
+        return 0
+    fi
+
+    if check_installed; then
+        echo "Chromium already installed"
+        return 0
+    fi
+
+    if ! command -v brew &>/dev/null; then
+        echo "Homebrew is required for Chromium on macOS"
+        echo "Install Homebrew first, then run: brew install --cask chromium"
+        return 1
+    fi
+
+    echo "Installing Chromium..."
+    brew install --cask chromium
+    remove_quarantine
+}
+
+configure() {
+    if ! is_macos; then
+        return 0
+    fi
+
+    remove_quarantine
+    configure_external_extensions
+    configure_vertical_tabs_preferences
+}
+
+apply() {
+    if ! is_macos; then
+        return 0
+    fi
+
+    configure_external_extensions
+    configure_vertical_tabs_preferences
+}
+
+update() {
+    if is_macos && command -v brew &>/dev/null; then
+        echo "Updating Chromium via brew..."
+        brew upgrade --cask chromium 2>/dev/null || echo "Chromium already up to date"
+        remove_quarantine
+        configure_external_extensions
+        configure_vertical_tabs_preferences
+    fi
+}
+
+# Main (only run when executed directly, not when sourced)
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    install
+    configure
+fi

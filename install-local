@@ -95,6 +95,7 @@ fi
 run_step "basic-tools" install_basic_tools
 run_step "tmux/install" bash "$SCRIPT_DIR/tmux/install"
 run_step "ghostty/install" bash "$SCRIPT_DIR/ghostty/install"
+run_step "chromium/install" bash "$SCRIPT_DIR/chromium/install"
 run_step "1password/install" bash "$SCRIPT_DIR/1password/install"
 
 # Phase 4: Shell setup (after everything else)
