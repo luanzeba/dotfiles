@@ -35,6 +35,34 @@ type RemovedFolder = {
 	subfolderCount: number;
 };
 
+type TabctlTab = {
+	tabId: number;
+	windowId: number;
+	title: string;
+	url: string;
+	active: boolean;
+	pinned: boolean;
+	groupTitle?: string | null;
+	lastAccessedAt?: number | null;
+};
+
+type TabReviewAction = "archive" | "delete" | "keep" | "stop";
+
+type ArchiveDecision = {
+	noteTitle: string;
+	summary: string;
+	topics: string[];
+	aliases: string[];
+	questions: string[];
+	tags: string[];
+};
+
+type ArchiveWriteResult = {
+	notePath: string;
+	created: boolean;
+	alreadyPresent: boolean;
+};
+
 const ROOT_LABELS: Record<BookmarkRootKey, string> = {
 	bookmark_bar: "Bookmarks Bar",
 	other: "Other Bookmarks",
@@ -53,6 +81,8 @@ const DEFAULT_OBSIDIAN_NOTES_DIR = path.join(os.homedir(), "Obsidian/Personal/No
 const ARCHIVE_TIMEOUT_MS = 1000 * 60 * 10;
 const QMD_TIMEOUT_MS = 1000 * 60 * 20;
 const OPEN_LINK_TIMEOUT_MS = 1000 * 10;
+const TABCTL_TIMEOUT_MS = 1000 * 30;
+const TAB_REVIEW_QUERY_LIMIT = 500;
 
 function normalizeRoot(input?: string): BookmarkRootKey {
 	if (!input) return "bookmark_bar";
@@ -368,6 +398,519 @@ function parseNotePathFromOutput(output: string): string | undefined {
 
 function timestampSlug(): string {
 	return new Date().toISOString().replace(/[:.]/g, "-");
+}
+
+function sanitizeNoteFileName(input: string): string {
+	const cleaned = input
+		.replace(/[\\/:*?"<>|]/g, "-")
+		.replace(/\s+/g, " ")
+		.trim();
+	return cleaned || `Tab Archive ${new Date().toISOString().slice(0, 10)}`;
+}
+
+function escapeMarkdownText(input: string): string {
+	return input.replace(/\[/g, "\\[").replace(/\]/g, "\\]");
+}
+
+function splitCsvInput(input: string | undefined): string[] {
+	if (!input) return [];
+	return input
+		.split(/[\n,]/g)
+		.map((part) => normalizeWhitespace(part))
+		.filter(Boolean);
+}
+
+function normalizeTag(input: string): string {
+	return input
+		.trim()
+		.toLowerCase()
+		.replace(/\s+/g, "-")
+		.replace(/[^a-z0-9_-]/g, "");
+}
+
+function mergeUniqueCaseInsensitive(values: string[]): string[] {
+	const out: string[] = [];
+	const seen = new Set<string>();
+	for (const value of values) {
+		const normalized = normalizeWhitespace(value);
+		if (!normalized) continue;
+		const key = normalized.toLowerCase();
+		if (seen.has(key)) continue;
+		seen.add(key);
+		out.push(normalized);
+	}
+	return out;
+}
+
+function extractTabctlError(raw: any): string {
+	const errors = raw?.errors;
+	if (!Array.isArray(errors) || !errors.length) return "Unknown tabctl GraphQL error";
+	return errors
+		.map((error) => {
+			if (typeof error?.message === "string") return error.message;
+			return JSON.stringify(error);
+		})
+		.join("; ");
+}
+
+function defaultNoteTitleForTab(tab: TabctlTab): string {
+	const title = normalizeWhitespace(tab.title || "");
+	if (title) return title;
+	try {
+		const parsed = new URL(tab.url);
+		return parsed.hostname;
+	} catch {
+		return tab.url;
+	}
+}
+
+function defaultSummaryForTab(tab: TabctlTab): string {
+	const title = normalizeWhitespace(tab.title || "link");
+	return `Reference link saved from end-of-day tab review: ${title}.`;
+}
+
+function renderTabReviewPrompt(tab: TabctlTab, index: number, total: number): string {
+	const metadata = [
+		tab.pinned ? "pinned" : undefined,
+		tab.active ? "active" : undefined,
+		tab.groupTitle ? `group: ${tab.groupTitle}` : "ungrouped",
+		`window ${tab.windowId}`,
+	]
+		.filter(Boolean)
+		.join(" • ");
+
+	return [
+		`Tab ${index + 1}/${total}`,
+		normalizeWhitespace(tab.title || "(untitled tab)"),
+		tab.url,
+		metadata,
+	].join("\n");
+}
+
+async function runTabctlJson(pi: ExtensionAPI, args: string[], timeoutMs: number): Promise<any> {
+	const result = await pi.exec("tabctl", ["--json", ...args], { timeout: timeoutMs });
+	if (result.code !== 0) {
+		throw new Error(
+			`tabctl command failed: ${args.join(" ")}\n${truncateText(result.stderr || result.stdout || "Unknown error")}`,
+		);
+	}
+
+	const raw = (result.stdout || "").trim();
+	if (!raw) return {};
+	try {
+		return JSON.parse(raw);
+	} catch {
+		throw new Error(`Could not parse tabctl JSON output: ${truncateText(raw)}`);
+	}
+}
+
+async function runTabctlGraphqlQuery(
+	pi: ExtensionAPI,
+	profileName: string | undefined,
+	query: string,
+	timeoutMs = TABCTL_TIMEOUT_MS,
+): Promise<any> {
+	const args: string[] = [];
+	if (profileName?.trim()) {
+		args.push("--profile", profileName.trim());
+	}
+	args.push("query", query);
+	const response = await runTabctlJson(pi, args, timeoutMs);
+
+	if (response?.errors) {
+		throw new Error(extractTabctlError(response));
+	}
+
+	if (response?.data !== undefined) return response.data;
+	return response;
+}
+
+function mapTabctlTabs(rawItems: any[]): TabctlTab[] {
+	const tabs: TabctlTab[] = [];
+	for (const raw of rawItems) {
+		if (!raw || typeof raw !== "object") continue;
+		const tabId = Number(raw.tabId);
+		const windowId = Number(raw.windowId);
+		const url = String(raw.url ?? "").trim();
+		if (!Number.isFinite(tabId) || !Number.isFinite(windowId) || !url) continue;
+
+		tabs.push({
+			tabId,
+			windowId,
+			title: String(raw.title ?? "").trim(),
+			url,
+			active: Boolean(raw.active),
+			pinned: Boolean(raw.pinned),
+			groupTitle: raw.groupTitle == null ? null : String(raw.groupTitle),
+			lastAccessedAt: raw.lastAccessedAt == null ? null : Number(raw.lastAccessedAt),
+		});
+	}
+	return tabs;
+}
+
+async function listOpenTabsFromTabctl(pi: ExtensionAPI, profileName?: string): Promise<TabctlTab[]> {
+	const query = `
+	query OpenTabsForReview {
+	  ping {
+	    ok
+	  }
+	  tabs(orderBy: LAST_ACCESSED_DESC, limit: ${TAB_REVIEW_QUERY_LIMIT}, offset: 0) {
+	    total
+	    items {
+	      tabId
+	      windowId
+	      title
+	      url
+	      active
+	      pinned
+	      groupTitle
+	      lastAccessedAt
+	    }
+	  }
+	}
+	`;
+
+	const data = await runTabctlGraphqlQuery(pi, profileName, query, TABCTL_TIMEOUT_MS);
+	const pingOk = Boolean(data?.ping?.ok);
+	if (!pingOk) {
+		throw new Error("tabctl ping failed. Is the tabctl browser extension connected?");
+	}
+
+	const items = Array.isArray(data?.tabs?.items) ? data.tabs.items : [];
+	return mapTabctlTabs(items);
+}
+
+async function closeTabWithTabctl(pi: ExtensionAPI, profileName: string | undefined, tabId: number): Promise<string | undefined> {
+	const mutation = `
+	mutation CloseTabForReview {
+	  closeTabs(tabIds: [${tabId}], confirm: true) {
+	    txid
+	    closedTabs
+	  }
+	}
+	`;
+	const data = await runTabctlGraphqlQuery(pi, profileName, mutation, TABCTL_TIMEOUT_MS);
+	const closed = Number(data?.closeTabs?.closedTabs ?? 0);
+	if (!Number.isFinite(closed) || closed < 1) {
+		throw new Error(`tabctl could not close tab ${tabId}`);
+	}
+	const txid = data?.closeTabs?.txid;
+	return typeof txid === "string" ? txid : undefined;
+}
+
+function formatYamlList(values: string[], quote = true): string[] {
+	if (!values.length) return [];
+	return values.map((value) => {
+		if (quote) return `  - ${JSON.stringify(value)}`;
+		return `  - ${value}`;
+	});
+}
+
+function buildNewArchiveNote(decision: ArchiveDecision, tab: TabctlTab, profileName: string): string {
+	const now = new Date();
+	const date = now.toISOString().slice(0, 10);
+	const capturedAt = now.toISOString();
+	const linkTitle = escapeMarkdownText(normalizeWhitespace(tab.title || tab.url));
+	const topicValues = mergeUniqueCaseInsensitive(decision.topics);
+	const aliasValues = mergeUniqueCaseInsensitive(decision.aliases);
+	const questionValues = mergeUniqueCaseInsensitive(decision.questions);
+	const tagValues = mergeUniqueCaseInsensitive(
+		[
+			"links",
+			"archive",
+			"qmd",
+			"tabs",
+			"chromium",
+			...decision.tags.map(normalizeTag).filter(Boolean),
+		],
+	).map(normalizeTag);
+
+	const lines: string[] = [
+		"---",
+		"category:",
+		'  - "[[Categories/GitHub|GitHub]]"',
+		"type:",
+		"  - Reference",
+		"  - Link Archive",
+		"org:",
+		"  - GitHub",
+		"status: archived",
+		"source: Chromium tab review",
+		`created: ${date}`,
+		`updated: ${date}`,
+	];
+
+	if (tagValues.length) {
+		lines.push("tags:");
+		lines.push(...formatYamlList(tagValues, false));
+	}
+	if (topicValues.length) {
+		lines.push("topics:");
+		lines.push(...formatYamlList(topicValues));
+	}
+	if (aliasValues.length) {
+		lines.push("aliases:");
+		lines.push(...formatYamlList(aliasValues));
+	}
+	if (questionValues.length) {
+		lines.push("questions:");
+		lines.push(...formatYamlList(questionValues));
+	}
+
+	lines.push("---", "", `# ${decision.noteTitle}`, "", "## Summary", decision.summary, "");
+
+	if (topicValues.length || aliasValues.length || questionValues.length) {
+		lines.push("## Retrieval hints");
+		if (topicValues.length) lines.push(`- Topics: ${topicValues.join(", ")}`);
+		if (aliasValues.length) lines.push(`- Aliases: ${aliasValues.join(", ")}`);
+		if (questionValues.length) {
+			lines.push("- Example prompts:");
+			for (const question of questionValues) lines.push(`  - ${question}`);
+		}
+		lines.push("");
+	}
+
+	lines.push(
+		"## Saved links",
+		`- [${linkTitle}](${tab.url}) _(captured ${capturedAt} from ${profileName})_`,
+		"",
+	);
+
+	return `${lines.join("\n")}\n`;
+}
+
+async function upsertTabArchiveNote(
+	decision: ArchiveDecision,
+	tab: TabctlTab,
+	profileName: string,
+): Promise<ArchiveWriteResult> {
+	const notesDir = getObsidianNotesDir();
+	await fs.mkdir(notesDir, { recursive: true });
+
+	const noteFile = `${sanitizeNoteFileName(decision.noteTitle)}.md`;
+	const notePath = path.join(notesDir, noteFile);
+	const linkTitle = escapeMarkdownText(normalizeWhitespace(tab.title || tab.url));
+	const linkLine = `- [${linkTitle}](${tab.url}) _(captured ${new Date().toISOString()} from ${profileName})_`;
+
+	if (!(await fileExists(notePath))) {
+		const created = buildNewArchiveNote(decision, tab, profileName);
+		await fs.writeFile(notePath, created, "utf8");
+		return { notePath, created: true, alreadyPresent: false };
+	}
+
+	const current = await fs.readFile(notePath, "utf8");
+	if (current.includes(`(${tab.url})`)) {
+		return { notePath, created: false, alreadyPresent: true };
+	}
+
+	let updated = current;
+	if (updated.includes("## Saved links")) {
+		const totalLine = updated.match(/\n_Total links:.*$/m)?.[0];
+		if (totalLine) {
+			updated = updated.replace(totalLine, `${linkLine}\n${totalLine}`);
+		} else {
+			updated = `${updated.trimEnd()}\n${linkLine}\n`;
+		}
+	} else {
+		updated = `${updated.trimEnd()}\n\n## Saved links\n${linkLine}\n`;
+	}
+
+	await fs.writeFile(notePath, updated, "utf8");
+	return { notePath, created: false, alreadyPresent: false };
+}
+
+async function reindexQmd(pi: ExtensionAPI): Promise<{ update: string; embed: string }> {
+	const update = await pi.exec("qmd", ["update"], { timeout: QMD_TIMEOUT_MS });
+	if (update.code !== 0) {
+		throw new Error(`qmd update failed:\n${truncateText(update.stderr || update.stdout || "Unknown error")}`);
+	}
+
+	const embed = await pi.exec("qmd", ["embed"], { timeout: QMD_TIMEOUT_MS });
+	if (embed.code !== 0) {
+		throw new Error(`qmd embed failed:\n${truncateText(embed.stderr || embed.stdout || "Unknown error")}`);
+	}
+
+	return {
+		update: truncateText(update.stdout || "qmd update completed"),
+		embed: truncateText(embed.stdout || "qmd embed completed"),
+	};
+}
+
+async function promptArchiveDecision(ctx: ExtensionContext, tab: TabctlTab): Promise<ArchiveDecision | null> {
+	if (!ctx.hasUI) return null;
+
+	const suggestedTitle = defaultNoteTitleForTab(tab);
+	const noteTitleRaw = await ctx.ui.input("Archive note title", suggestedTitle);
+	if (noteTitleRaw == null) return null;
+	const noteTitle = normalizeWhitespace(noteTitleRaw) || suggestedTitle;
+
+	const suggestedSummary = defaultSummaryForTab(tab);
+	const summaryRaw = await ctx.ui.input("Short summary", suggestedSummary);
+	if (summaryRaw == null) return null;
+	const summary = normalizeWhitespace(summaryRaw) || suggestedSummary;
+
+	const topicsRaw = await ctx.ui.input("Topics (comma-separated, optional)", "");
+	if (topicsRaw == null) return null;
+	const aliasesRaw = await ctx.ui.input("Aliases (comma-separated, optional)", "");
+	if (aliasesRaw == null) return null;
+	const questionsRaw = await ctx.ui.input("Example prompts (comma-separated, optional)", "");
+	if (questionsRaw == null) return null;
+	const tagsRaw = await ctx.ui.input("Extra tags (comma-separated, optional)", "");
+	if (tagsRaw == null) return null;
+
+	return {
+		noteTitle,
+		summary,
+		topics: splitCsvInput(topicsRaw),
+		aliases: splitCsvInput(aliasesRaw),
+		questions: splitCsvInput(questionsRaw),
+		tags: splitCsvInput(tagsRaw),
+	};
+}
+
+async function promptTabAction(
+	ctx: ExtensionContext,
+	tab: TabctlTab,
+	index: number,
+	total: number,
+): Promise<TabReviewAction> {
+	if (!ctx.hasUI) return "stop";
+	const selected = await ctx.ui.select(renderTabReviewPrompt(tab, index, total), [
+		"Archive to Obsidian (and close tab)",
+		"Delete tab",
+		"Keep tab",
+		"Stop review",
+	]);
+
+	if (selected === "Archive to Obsidian (and close tab)") return "archive";
+	if (selected === "Delete tab") return "delete";
+	if (selected === "Keep tab") return "keep";
+	return "stop";
+}
+
+async function runTabReviewSession(pi: ExtensionAPI, ctx: ExtensionContext, requestedProfile?: string): Promise<void> {
+	if (!ctx.hasUI) {
+		pi.sendUserMessage("tab-archive:eod requires an interactive UI session.");
+		return;
+	}
+
+	const profileName = normalizeWhitespace(requestedProfile || "") || DEFAULT_PROFILE_NAME;
+	let tabs: TabctlTab[] = [];
+	try {
+		tabs = await listOpenTabsFromTabctl(pi, profileName);
+	} catch (error: any) {
+		const details = String(error?.message || error || "Unknown error");
+		ctx.ui.notify("Could not load tabs from tabctl", "error");
+		pi.sendUserMessage(
+			[
+				`I couldn't read open tabs from tabctl for profile \"${profileName}\".`,
+				"",
+				truncateText(details),
+				"",
+				"Setup checklist:",
+				"1. Install tabctl: https://github.com/ekroon/tabctl",
+				"2. Run: tabctl setup",
+				"3. Ensure Chromium has the tabctl extension enabled for this profile",
+				"4. Retry /tab-archive:eod Work",
+			].join("\n"),
+		);
+		return;
+	}
+
+	if (!tabs.length) {
+		ctx.ui.notify(`No open tabs found in profile ${profileName}`, "info");
+		return;
+	}
+
+	let archived = 0;
+	let deleted = 0;
+	let kept = 0;
+	let reviewed = 0;
+	let reindexNeeded = false;
+	const touchedNotes = new Set<string>();
+	const closeTxIds: string[] = [];
+
+	for (let index = 0; index < tabs.length; index += 1) {
+		const tab = tabs[index];
+		if (!tab) continue;
+
+		const action = await promptTabAction(ctx, tab, index, tabs.length);
+		if (action === "stop") break;
+
+		if (action === "keep") {
+			kept += 1;
+			reviewed += 1;
+			continue;
+		}
+
+		if (action === "archive") {
+			const decision = await promptArchiveDecision(ctx, tab);
+			if (!decision) {
+				kept += 1;
+				reviewed += 1;
+				continue;
+			}
+
+			try {
+				const note = await upsertTabArchiveNote(decision, tab, profileName);
+				touchedNotes.add(note.notePath);
+				if (!note.alreadyPresent) reindexNeeded = true;
+				archived += 1;
+				ctx.ui.notify(
+					note.alreadyPresent
+						? `Link already present in ${path.basename(note.notePath)}`
+						: `Archived to ${path.basename(note.notePath)}`,
+					"success",
+				);
+			} catch (error: any) {
+				ctx.ui.notify(`Failed to archive tab: ${String(error?.message || error)}`, "error");
+				reviewed += 1;
+				continue;
+			}
+		}
+
+		try {
+			const txid = await closeTabWithTabctl(pi, profileName, tab.tabId);
+			if (txid) closeTxIds.push(txid);
+			if (action === "delete") deleted += 1;
+		} catch (error: any) {
+			ctx.ui.notify(`Failed to close tab ${tab.tabId}: ${String(error?.message || error)}`, "error");
+			if (action === "delete") {
+				kept += 1;
+			}
+		}
+
+		reviewed += 1;
+	}
+
+	let qmdSummary: string | undefined;
+	if (reindexNeeded) {
+		try {
+			const qmd = await reindexQmd(pi);
+			qmdSummary = "qmd update + embed complete";
+			ctx.ui.notify("QMD index updated", "success");
+			void qmd;
+		} catch (error: any) {
+			qmdSummary = `qmd indexing failed: ${String(error?.message || error)}`;
+			ctx.ui.notify("QMD indexing failed", "error");
+		}
+	}
+
+	const summary = [
+		`Tab review complete for profile \"${profileName}\".`,
+		`Reviewed: ${reviewed}/${tabs.length}`,
+		`Archived: ${archived}`,
+		`Deleted: ${deleted}`,
+		`Kept: ${kept}`,
+		touchedNotes.size ? `Notes touched: ${Array.from(touchedNotes).join(", ")}` : undefined,
+		closeTxIds.length ? `Undo txids: ${closeTxIds.join(", ")}` : undefined,
+		qmdSummary,
+	]
+		.filter(Boolean)
+		.join("\n");
+
+	pi.sendUserMessage(summary, { deliverAs: "followUp" });
+	ctx.ui.notify(`Reviewed ${reviewed} tab(s): ${archived} archived, ${deleted} deleted, ${kept} kept`, "info");
 }
 
 export default function tabArchiveExtension(pi: ExtensionAPI) {
@@ -732,27 +1275,16 @@ export default function tabArchiveExtension(pi: ExtensionAPI) {
 	});
 
 	pi.registerCommand("tab-archive:eod", {
-		description: "Kick off end-of-day bookmark archival workflow",
+		description: "Review open Chromium tabs one-by-one (archive/delete/keep) using tabctl",
 		handler: async (args, ctx) => {
-			const profile = normalizeWhitespace(args || "") || DEFAULT_PROFILE_NAME;
-			const prompt = [
-				`Let's run end-of-day link archival for Chromium profile "${profile}".`,
-				"Use list_chromium_bookmark_folders first (root: bookmark_bar) and show me candidate folders.",
-				"Ask which folders I want to archive.",
-				"For each selected folder, call archive_chromium_bookmark_folders_to_obsidian with intent-first note title/summary/topics/aliases/questions.",
-				"After each successful archive, ask if I want to delete the original bookmark folder, then call delete_chromium_bookmark_folders only if I confirm.",
-				"Finish by confirming qmd indexing was updated.",
-			].join("\n");
+			await runTabReviewSession(pi, ctx, args);
+		},
+	});
 
-			if (ctx.hasPendingMessages()) {
-				pi.sendUserMessage(prompt, { deliverAs: "followUp" });
-			} else {
-				pi.sendUserMessage(prompt);
-			}
-
-			if (ctx.hasUI) {
-				ctx.ui.notify(`Queued end-of-day archive workflow for ${profile}`, "info");
-			}
+	pi.registerCommand("tab-archive:review-tabs", {
+		description: "Alias for /tab-archive:eod",
+		handler: async (args, ctx) => {
+			await runTabReviewSession(pi, ctx, args);
 		},
 	});
 }
