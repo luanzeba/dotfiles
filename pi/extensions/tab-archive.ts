@@ -487,21 +487,75 @@ function renderTabReviewPrompt(tab: TabctlTab, index: number, total: number): st
 	].join("\n");
 }
 
+function tryParseJson(text: string | undefined): any | null {
+	if (!text) return null;
+	try {
+		return JSON.parse(text);
+	} catch {
+		return null;
+	}
+}
+
+function extractTabctlFailureText(result: { stdout?: string; stderr?: string }): string {
+	const stdout = (result.stdout || "").trim();
+	const stderr = (result.stderr || "").trim();
+	const parsedStdout = tryParseJson(stdout);
+	const parsedStderr = tryParseJson(stderr);
+	const parsed = parsedStdout ?? parsedStderr;
+	if (parsed) {
+		if (typeof parsed?.error?.message === "string") return parsed.error.message;
+		if (Array.isArray(parsed?.errors) && parsed.errors.length) return extractTabctlError(parsed);
+	}
+	return stderr || stdout;
+}
+
 async function runTabctlJson(pi: ExtensionAPI, args: string[], timeoutMs: number): Promise<any> {
 	const result = await pi.exec("tabctl", ["--json", ...args], { timeout: timeoutMs });
+	const rawStdout = (result.stdout || "").trim();
+
 	if (result.code !== 0) {
-		throw new Error(
-			`tabctl command failed: ${args.join(" ")}\n${truncateText(result.stderr || result.stdout || "Unknown error")}`,
-		);
+		const failureText = extractTabctlFailureText(result);
+		if (!failureText) {
+			throw new Error(
+				`tabctl command failed: ${args.join(" ")}\n` +
+					"No output returned. tabctl may be missing from PATH or not configured.",
+			);
+		}
+
+		throw new Error(`tabctl command failed: ${args.join(" ")}\n${truncateText(failureText)}`);
 	}
 
-	const raw = (result.stdout || "").trim();
-	if (!raw) return {};
-	try {
-		return JSON.parse(raw);
-	} catch {
-		throw new Error(`Could not parse tabctl JSON output: ${truncateText(raw)}`);
+	if (!rawStdout) return {};
+	const parsed = tryParseJson(rawStdout);
+	if (parsed == null) {
+		throw new Error(`Could not parse tabctl JSON output: ${truncateText(rawStdout)}`);
 	}
+	return parsed;
+}
+
+async function listTabctlProfileNames(pi: ExtensionAPI): Promise<string[]> {
+	try {
+		const profileList = await runTabctlJson(pi, ["profile-list"], TABCTL_TIMEOUT_MS);
+		const profiles = Array.isArray(profileList?.profiles) ? profileList.profiles : [];
+		return profiles
+			.map((profile: any) => String(profile?.name ?? "").trim())
+			.filter(Boolean);
+	} catch {
+		return [];
+	}
+}
+
+function resolveRequestedTabctlProfile(requestedProfile: string | undefined, availableProfiles: string[]): string | undefined {
+	const requested = normalizeWhitespace(requestedProfile || "");
+	if (!requested || !availableProfiles.length) return undefined;
+
+	const exact = availableProfiles.find((name) => name.toLowerCase() === requested.toLowerCase());
+	if (exact) return exact;
+
+	const partial = availableProfiles.find((name) => name.toLowerCase().includes(requested.toLowerCase()));
+	if (partial) return partial;
+
+	return undefined;
 }
 
 async function runTabctlGraphqlQuery(
@@ -790,20 +844,31 @@ async function promptTabAction(
 
 async function runTabReviewSession(pi: ExtensionAPI, ctx: ExtensionContext, requestedProfile?: string): Promise<void> {
 	if (!ctx.hasUI) {
-		pi.sendUserMessage("tab-archive:eod requires an interactive UI session.");
+		pi.sendUserMessage("tab-archive:review-tabs requires an interactive UI session.");
 		return;
 	}
 
-	const profileName = normalizeWhitespace(requestedProfile || "") || DEFAULT_PROFILE_NAME;
+	const requestedProfileName = normalizeWhitespace(requestedProfile || "") || DEFAULT_PROFILE_NAME;
+	const availableTabctlProfiles = await listTabctlProfileNames(pi);
+	const matchedProfile = resolveRequestedTabctlProfile(requestedProfileName, availableTabctlProfiles);
+	const tabctlProfile = matchedProfile ?? (availableTabctlProfiles.length === 1 ? availableTabctlProfiles[0] : undefined);
+
+	if (requestedProfileName && availableTabctlProfiles.length && !matchedProfile) {
+		ctx.ui.notify(
+			`No tabctl profile named '${requestedProfileName}'. Using tabctl default profile.`,
+			"warning",
+		);
+	}
+
 	let tabs: TabctlTab[] = [];
 	try {
-		tabs = await listOpenTabsFromTabctl(pi, profileName);
+		tabs = await listOpenTabsFromTabctl(pi, tabctlProfile);
 	} catch (error: any) {
 		const details = String(error?.message || error || "Unknown error");
 		ctx.ui.notify("Could not load tabs from tabctl", "error");
 		pi.sendUserMessage(
 			[
-				`I couldn't read open tabs from tabctl for profile \"${profileName}\".`,
+				`I couldn't read open tabs from tabctl for profile \"${requestedProfileName}\".`,
 				"",
 				truncateText(details),
 				"",
@@ -811,14 +876,14 @@ async function runTabReviewSession(pi: ExtensionAPI, ctx: ExtensionContext, requ
 				"1. Install tabctl: https://github.com/ekroon/tabctl",
 				"2. Run: tabctl setup",
 				"3. Ensure Chromium has the tabctl extension enabled for this profile",
-				"4. Retry /tab-archive:eod Work",
+				"4. Retry /tab-archive:review-tabs Work",
 			].join("\n"),
 		);
 		return;
 	}
 
 	if (!tabs.length) {
-		ctx.ui.notify(`No open tabs found in profile ${profileName}`, "info");
+		ctx.ui.notify(`No open tabs found in profile ${requestedProfileName}`, "info");
 		return;
 	}
 
@@ -852,7 +917,7 @@ async function runTabReviewSession(pi: ExtensionAPI, ctx: ExtensionContext, requ
 			}
 
 			try {
-				const note = await upsertTabArchiveNote(decision, tab, profileName);
+				const note = await upsertTabArchiveNote(decision, tab, requestedProfileName);
 				touchedNotes.add(note.notePath);
 				if (!note.alreadyPresent) reindexNeeded = true;
 				archived += 1;
@@ -870,7 +935,7 @@ async function runTabReviewSession(pi: ExtensionAPI, ctx: ExtensionContext, requ
 		}
 
 		try {
-			const txid = await closeTabWithTabctl(pi, profileName, tab.tabId);
+			const txid = await closeTabWithTabctl(pi, tabctlProfile, tab.tabId);
 			if (txid) closeTxIds.push(txid);
 			if (action === "delete") deleted += 1;
 		} catch (error: any) {
@@ -897,7 +962,7 @@ async function runTabReviewSession(pi: ExtensionAPI, ctx: ExtensionContext, requ
 	}
 
 	const summary = [
-		`Tab review complete for profile \"${profileName}\".`,
+		`Tab review complete for profile \"${requestedProfileName}\".`,
 		`Reviewed: ${reviewed}/${tabs.length}`,
 		`Archived: ${archived}`,
 		`Deleted: ${deleted}`,
@@ -1275,14 +1340,32 @@ export default function tabArchiveExtension(pi: ExtensionAPI) {
 	});
 
 	pi.registerCommand("tab-archive:eod", {
-		description: "Review open Chromium tabs one-by-one (archive/delete/keep) using tabctl",
+		description: "Kick off end-of-day bookmark archival workflow",
 		handler: async (args, ctx) => {
-			await runTabReviewSession(pi, ctx, args);
+			const profile = normalizeWhitespace(args || "") || DEFAULT_PROFILE_NAME;
+			const prompt = [
+				`Let's run end-of-day link archival for Chromium profile "${profile}".`,
+				"Use list_chromium_bookmark_folders first (root: bookmark_bar) and show me candidate folders.",
+				"Ask which folders I want to archive.",
+				"For each selected folder, call archive_chromium_bookmark_folders_to_obsidian with intent-first note title/summary/topics/aliases/questions.",
+				"After each successful archive, ask if I want to delete the original bookmark folder, then call delete_chromium_bookmark_folders only if I confirm.",
+				"Finish by confirming qmd indexing was updated.",
+			].join("\n");
+
+			if (ctx.hasPendingMessages()) {
+				pi.sendUserMessage(prompt, { deliverAs: "followUp" });
+			} else {
+				pi.sendUserMessage(prompt);
+			}
+
+			if (ctx.hasUI) {
+				ctx.ui.notify(`Queued end-of-day archive workflow for ${profile}`, "info");
+			}
 		},
 	});
 
 	pi.registerCommand("tab-archive:review-tabs", {
-		description: "Alias for /tab-archive:eod",
+		description: "Review open Chromium tabs one-by-one (archive/delete/keep) using tabctl",
 		handler: async (args, ctx) => {
 			await runTabReviewSession(pi, ctx, args);
 		},
