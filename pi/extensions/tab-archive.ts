@@ -1,39 +1,7 @@
-import { StringEnum } from "@mariozechner/pi-ai";
 import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
-import { Type } from "@sinclair/typebox";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
-
-type BookmarkRootKey = "bookmark_bar" | "other" | "synced";
-
-type BookmarkNode = {
-	type?: string;
-	name?: string;
-	url?: string;
-	children?: BookmarkNode[];
-};
-
-type ProfileResolution = {
-	profileDir: string;
-	profileName: string;
-	userDataDir: string;
-};
-
-type FolderStats = {
-	path: string;
-	root: BookmarkRootKey;
-	depth: number;
-	directUrlCount: number;
-	totalUrlCount: number;
-	subfolderCount: number;
-};
-
-type RemovedFolder = {
-	path: string;
-	totalUrlCount: number;
-	subfolderCount: number;
-};
 
 type TabctlTab = {
 	tabId: number;
@@ -63,87 +31,27 @@ type ArchiveWriteResult = {
 	alreadyPresent: boolean;
 };
 
-const ROOT_LABELS: Record<BookmarkRootKey, string> = {
-	bookmark_bar: "Bookmarks Bar",
-	other: "Other Bookmarks",
-	synced: "Mobile Bookmarks",
+type CloseTabResult = {
+	txid?: string;
+};
+
+type TabBackend = {
+	name: string;
+	listTabs: (signal?: AbortSignal) => Promise<TabctlTab[]>;
+	closeTab: (tabId: number, signal?: AbortSignal) => Promise<CloseTabResult>;
 };
 
 const DEFAULT_PROFILE_NAME = "Work";
-const ARCHIVE_SCRIPT_CANDIDATES = [
-	process.env.TAB_ARCHIVE_SCRIPT,
-	path.join(os.homedir(), "dotfiles/skills/obsidian-tab-archive/scripts/archive_chromium_bookmark_folder.py"),
-	path.join(os.homedir(), ".pi/agent/skills/obsidian-tab-archive/scripts/archive_chromium_bookmark_folder.py"),
-].filter(Boolean) as string[];
-
-const DEFAULT_CHROMIUM_DIR = path.join(os.homedir(), "Library/Application Support/Chromium");
+const DEFAULT_CHROMIUM_USER_DATA_DIR = path.join(os.homedir(), "Library/Application Support/Chromium");
 const DEFAULT_OBSIDIAN_NOTES_DIR = path.join(os.homedir(), "Obsidian/Personal/Notes");
-const ARCHIVE_TIMEOUT_MS = 1000 * 60 * 10;
-const QMD_TIMEOUT_MS = 1000 * 60 * 20;
-const OPEN_LINK_TIMEOUT_MS = 1000 * 10;
-const TABCTL_TIMEOUT_MS = 1000 * 30;
-const TAB_REVIEW_QUERY_LIMIT = 500;
+const DEFAULT_TABCTL_EXTENSION_DIR = path.join(os.homedir(), ".local/state/tabctl/extension");
 
-function normalizeRoot(input?: string): BookmarkRootKey {
-	if (!input) return "bookmark_bar";
-	if (input === "other") return "other";
-	if (input === "synced") return "synced";
-	return "bookmark_bar";
-}
+const TABCTL_TIMEOUT_MS = 1000 * 30;
+const QMD_TIMEOUT_MS = 1000 * 60 * 20;
+const TAB_REVIEW_QUERY_LIMIT = 500;
 
 function normalizeWhitespace(value: string): string {
 	return value.trim().replace(/\s+/g, " ");
-}
-
-function normalizeSegments(rawPath: string): string[] {
-	const parts = rawPath
-		.split("/")
-		.map((part) => normalizeWhitespace(part))
-		.filter(Boolean);
-
-	if (!parts.length) return [];
-
-	const first = parts[0]?.toLowerCase();
-	if (first === "bookmarks bar" || first === "other bookmarks" || first === "mobile bookmarks") {
-		return parts.slice(1);
-	}
-
-	return parts;
-}
-
-function sameName(a: string | undefined, b: string | undefined): boolean {
-	if (!a || !b) return false;
-	return normalizeWhitespace(a).toLowerCase() === normalizeWhitespace(b).toLowerCase();
-}
-
-function ensureFolderChildren(node: BookmarkNode): BookmarkNode[] {
-	if (!Array.isArray(node.children)) node.children = [];
-	return node.children;
-}
-
-function countDirectUrls(node: BookmarkNode): number {
-	const children = node.children ?? [];
-	return children.filter((child) => child?.type === "url" && typeof child.url === "string").length;
-}
-
-function countTotalUrls(node: BookmarkNode): number {
-	if (node.type === "url" && typeof node.url === "string") return 1;
-	const children = node.children ?? [];
-	let count = 0;
-	for (const child of children) count += countTotalUrls(child);
-	return count;
-}
-
-function countSubfolders(node: BookmarkNode): number {
-	const children = node.children ?? [];
-	let count = 0;
-	for (const child of children) {
-		if (child?.type === "folder") {
-			count += 1;
-			count += countSubfolders(child);
-		}
-	}
-	return count;
 }
 
 function truncateText(text: string, maxChars = 12_000, maxLines = 300): string {
@@ -172,14 +80,9 @@ async function fileExists(filePath: string): Promise<boolean> {
 	}
 }
 
-async function readJson<T = any>(filePath: string): Promise<T> {
-	const raw = await fs.readFile(filePath, "utf8");
-	return JSON.parse(raw) as T;
-}
-
 function getChromiumUserDataDir(): string {
 	const override = process.env.TAB_ARCHIVE_CHROMIUM_DIR?.trim();
-	return override ? path.resolve(override) : DEFAULT_CHROMIUM_DIR;
+	return override ? path.resolve(override) : DEFAULT_CHROMIUM_USER_DATA_DIR;
 }
 
 function getObsidianNotesDir(): string {
@@ -187,217 +90,9 @@ function getObsidianNotesDir(): string {
 	return override ? path.resolve(override) : DEFAULT_OBSIDIAN_NOTES_DIR;
 }
 
-function extractHttpLinks(markdown: string): string[] {
-	const links: string[] = [];
-	const seen = new Set<string>();
-	const pattern = /\[[^\]]+\]\((https?:\/\/[^)\s]+)\)/g;
-	let match: RegExpExecArray | null;
-	while ((match = pattern.exec(markdown)) !== null) {
-		const url = match[1]?.trim();
-		if (!url || seen.has(url)) continue;
-		seen.add(url);
-		links.push(url);
-	}
-	return links;
-}
-
-async function resolveNotePath(noteTitle: string, notePathInput?: string): Promise<string> {
-	const notesDir = getObsidianNotesDir();
-
-	if (notePathInput?.trim()) {
-		const resolved = notePathInput.trim().startsWith("/")
-			? path.resolve(notePathInput.trim())
-			: path.resolve(notesDir, notePathInput.trim());
-		if (!(await fileExists(resolved))) {
-			throw new Error(`Note file not found: ${resolved}`);
-		}
-		return resolved;
-	}
-
-	const exactPath = path.join(notesDir, `${noteTitle}.md`);
-	if (await fileExists(exactPath)) return exactPath;
-
-	const entries = await fs.readdir(notesDir);
-	const target = noteTitle.trim().toLowerCase();
-	const found = entries.find((entry) => {
-		if (!entry.toLowerCase().endsWith(".md")) return false;
-		const base = entry.slice(0, -3).toLowerCase();
-		return base === target;
-	});
-	if (found) return path.join(notesDir, found);
-
-	const partial = entries.find((entry) => {
-		if (!entry.toLowerCase().endsWith(".md")) return false;
-		return entry.toLowerCase().includes(target);
-	});
-	if (partial) return path.join(notesDir, partial);
-
-	throw new Error(`Could not find note '${noteTitle}' in ${notesDir}`);
-}
-
-async function resolveProfile(
-	profileNameInput?: string,
-	profileDirInput?: string,
-): Promise<ProfileResolution> {
-	const userDataDir = getChromiumUserDataDir();
-	if (!(await fileExists(userDataDir))) {
-		throw new Error(`Chromium user data dir not found: ${userDataDir}`);
-	}
-
-	const localStatePath = path.join(userDataDir, "Local State");
-	if (!(await fileExists(localStatePath))) {
-		throw new Error(`Chromium Local State not found: ${localStatePath}`);
-	}
-
-	const localState = await readJson<any>(localStatePath);
-	const infoCache = (localState?.profile?.info_cache ?? {}) as Record<string, any>;
-
-	if (profileDirInput?.trim()) {
-		const profileDir = profileDirInput.trim();
-		const profileName = infoCache?.[profileDir]?.name || profileDir;
-		return { profileDir, profileName, userDataDir };
-	}
-
-	const requestedName = (profileNameInput?.trim() || DEFAULT_PROFILE_NAME).toLowerCase();
-	for (const [profileDir, metadata] of Object.entries(infoCache)) {
-		const name = String((metadata as any)?.name ?? "");
-		if (name.toLowerCase() === requestedName) {
-			return { profileDir, profileName: name || profileDir, userDataDir };
-		}
-	}
-
-	if (!profileNameInput?.trim()) {
-		const fallbackDir = String(localState?.profile?.last_used ?? "").trim();
-		if (fallbackDir && infoCache[fallbackDir]) {
-			return {
-				profileDir: fallbackDir,
-				profileName: String(infoCache[fallbackDir]?.name || fallbackDir),
-				userDataDir,
-			};
-		}
-	}
-
-	throw new Error(
-		`Could not resolve Chromium profile '${profileNameInput || DEFAULT_PROFILE_NAME}'. ` +
-			`Available profiles: ${Object.values(infoCache)
-				.map((meta: any) => String(meta?.name || ""))
-				.filter(Boolean)
-				.join(", ")}`,
-	);
-}
-
-async function loadBookmarks(profile: ProfileResolution): Promise<{ bookmarksPath: string; bookmarks: any }> {
-	const bookmarksPath = path.join(profile.userDataDir, profile.profileDir, "Bookmarks");
-	if (!(await fileExists(bookmarksPath))) {
-		throw new Error(`Bookmarks file not found: ${bookmarksPath}`);
-	}
-
-	const bookmarks = await readJson<any>(bookmarksPath);
-	return { bookmarksPath, bookmarks };
-}
-
-function getRootNode(bookmarks: any, rootKey: BookmarkRootKey): BookmarkNode {
-	const root = bookmarks?.roots?.[rootKey] as BookmarkNode | undefined;
-	if (!root || root.type !== "folder") {
-		throw new Error(`Bookmarks root '${rootKey}' not found`);
-	}
-	return root;
-}
-
-function collectFolders(
-	rootKey: BookmarkRootKey,
-	node: BookmarkNode,
-	segments: string[],
-	maxDepth: number,
-): FolderStats[] {
-	const depth = segments.length;
-	if (depth > maxDepth) return [];
-
-	const pathText = segments.join("/");
-	const stats: FolderStats[] = [
-		{
-			path: pathText,
-			root: rootKey,
-			depth,
-			directUrlCount: countDirectUrls(node),
-			totalUrlCount: countTotalUrls(node),
-			subfolderCount: countSubfolders(node),
-		},
-	];
-
-	const children = node.children ?? [];
-	for (const child of children) {
-		if (child?.type !== "folder") continue;
-		const childName = normalizeWhitespace(child.name || "Untitled folder");
-		stats.push(...collectFolders(rootKey, child, [...segments, childName], maxDepth));
-	}
-
-	return stats;
-}
-
-function listFolderStats(bookmarks: any, rootKey: BookmarkRootKey, maxDepth: number): FolderStats[] {
-	const rootNode = getRootNode(bookmarks, rootKey);
-	const children = rootNode.children ?? [];
-	const all: FolderStats[] = [];
-
-	for (const child of children) {
-		if (child?.type !== "folder") continue;
-		const name = normalizeWhitespace(child.name || "Untitled folder");
-		all.push(...collectFolders(rootKey, child, [name], maxDepth));
-	}
-
-	return all.sort((a, b) => {
-		if (a.depth !== b.depth) return a.depth - b.depth;
-		return a.path.localeCompare(b.path);
-	});
-}
-
-function removeFolderPath(rootNode: BookmarkNode, folderPath: string): BookmarkNode | null {
-	const segments = normalizeSegments(folderPath);
-	if (!segments.length) return null;
-
-	let children = ensureFolderChildren(rootNode);
-	for (let i = 0; i < segments.length; i += 1) {
-		const segment = segments[i];
-		const idx = children.findIndex((child) => child?.type === "folder" && sameName(child.name, segment));
-		if (idx === -1) return null;
-
-		if (i === segments.length - 1) {
-			const [removed] = children.splice(idx, 1);
-			return removed ?? null;
-		}
-
-		const next = children[idx];
-		if (!next) return null;
-		children = ensureFolderChildren(next);
-	}
-
-	return null;
-}
-
-async function findArchiveScriptPath(): Promise<string> {
-	for (const candidate of ARCHIVE_SCRIPT_CANDIDATES) {
-		if (!candidate) continue;
-		const resolved = path.resolve(candidate);
-		if (await fileExists(resolved)) return resolved;
-	}
-	throw new Error(
-		"Could not find archive_chromium_bookmark_folder.py. " +
-			"Expected at ~/dotfiles/skills/obsidian-tab-archive/scripts/ or ~/.pi/agent/skills/obsidian-tab-archive/scripts/",
-	);
-}
-
-function parseNotePathFromOutput(output: string): string | undefined {
-	const lines = output.split("\n");
-	for (const line of lines) {
-		const match = line.match(/^Wrote:\s+(.+)$/);
-		if (match?.[1]) return match[1].trim();
-	}
-	return undefined;
-}
-
-function timestampSlug(): string {
-	return new Date().toISOString().replace(/[:.]/g, "-");
+function getTabctlExtensionDir(): string {
+	const override = process.env.TABCTL_EXTENSION_DIR?.trim();
+	return override ? path.resolve(override) : DEFAULT_TABCTL_EXTENSION_DIR;
 }
 
 function sanitizeNoteFileName(input: string): string {
@@ -442,6 +137,15 @@ function mergeUniqueCaseInsensitive(values: string[]): string[] {
 	return out;
 }
 
+function tryParseJson(text: string | undefined): any | null {
+	if (!text) return null;
+	try {
+		return JSON.parse(text);
+	} catch {
+		return null;
+	}
+}
+
 function extractTabctlError(raw: any): string {
 	const errors = raw?.errors;
 	if (!Array.isArray(errors) || !errors.length) return "Unknown tabctl GraphQL error";
@@ -451,6 +155,347 @@ function extractTabctlError(raw: any): string {
 			return JSON.stringify(error);
 		})
 		.join("; ");
+}
+
+function extractTabctlFailureText(result: { stdout?: string; stderr?: string }): string {
+	const stdout = (result.stdout || "").trim();
+	const stderr = (result.stderr || "").trim();
+	const parsedStdout = tryParseJson(stdout);
+	const parsedStderr = tryParseJson(stderr);
+	const parsed = parsedStdout ?? parsedStderr;
+	if (parsed) {
+		if (typeof parsed?.error?.message === "string") return parsed.error.message;
+		if (Array.isArray(parsed?.errors) && parsed.errors.length) return extractTabctlError(parsed);
+	}
+	return stderr || stdout;
+}
+
+const TABCTL_BIN_CANDIDATES = [
+	process.env.TABCTL_BIN,
+	"tabctl",
+	path.join(os.homedir(), ".local/bin/tabctl"),
+	path.join(os.homedir(), ".cargo/bin/tabctl"),
+].filter(Boolean) as string[];
+
+let resolvedTabctlBin: string | undefined;
+
+function looksLikeCommandNotFound(result: { code: number; stdout?: string; stderr?: string }): boolean {
+	if (result.code === 127) return true;
+	const text = `${result.stderr || ""}\n${result.stdout || ""}`.toLowerCase();
+	return text.includes("command not found") || text.includes("no such file") || text.includes("not recognized");
+}
+
+async function resolveTabctlBinary(pi: ExtensionAPI): Promise<string> {
+	if (resolvedTabctlBin) return resolvedTabctlBin;
+
+	let lastFailure = "";
+	for (const candidate of TABCTL_BIN_CANDIDATES) {
+		if (!candidate) continue;
+		const result = await pi.exec(candidate, ["--version"], { timeout: TABCTL_TIMEOUT_MS });
+		if (result.code === 0) {
+			resolvedTabctlBin = candidate;
+			return candidate;
+		}
+		if (!looksLikeCommandNotFound(result)) {
+			lastFailure = extractTabctlFailureText(result) || `exit code ${result.code}`;
+		}
+	}
+
+	throw new Error(
+		[
+			"tabctl binary not found or not executable.",
+			"Install it with one of:",
+			"- mise use -g github:ekroon/tabctl",
+			"- or download a release binary to ~/.local/bin/tabctl",
+			lastFailure ? `Last error: ${truncateText(lastFailure)}` : undefined,
+		]
+			.filter(Boolean)
+			.join("\n"),
+	);
+}
+
+async function runTabctlJson(
+	pi: ExtensionAPI,
+	args: string[],
+	timeoutMs: number,
+	signal?: AbortSignal,
+): Promise<any> {
+	const tabctlBin = await resolveTabctlBinary(pi);
+	const result = await pi.exec(tabctlBin, ["--json", ...args], { timeout: timeoutMs, signal });
+	const rawStdout = (result.stdout || "").trim();
+
+	if (result.code !== 0) {
+		const failureText = extractTabctlFailureText(result);
+		if (!failureText) {
+			throw new Error(
+				`tabctl command failed: ${args.join(" ")}\n` +
+					"No output returned. tabctl may be missing from PATH or not configured.",
+			);
+		}
+		throw new Error(`tabctl command failed: ${args.join(" ")}\n${truncateText(failureText)}`);
+	}
+
+	if (!rawStdout) return {};
+	const parsed = tryParseJson(rawStdout);
+	if (parsed == null) {
+		throw new Error(`Could not parse tabctl JSON output: ${truncateText(rawStdout)}`);
+	}
+	return parsed;
+}
+
+async function listTabctlProfiles(pi: ExtensionAPI, signal?: AbortSignal): Promise<string[]> {
+	const profileList = await runTabctlJson(pi, ["profile-list"], TABCTL_TIMEOUT_MS, signal);
+	const profiles = Array.isArray(profileList?.profiles) ? profileList.profiles : [];
+	return profiles.map((profile: any) => String(profile?.name ?? "").trim()).filter(Boolean);
+}
+
+function resolveRequestedTabctlProfile(requestedProfile: string | undefined, availableProfiles: string[]): string | undefined {
+	const requested = normalizeWhitespace(requestedProfile || "");
+	if (!requested || !availableProfiles.length) return undefined;
+
+	const exact = availableProfiles.find((name) => name.toLowerCase() === requested.toLowerCase());
+	if (exact) return exact;
+
+	const partial = availableProfiles.find((name) => name.toLowerCase().includes(requested.toLowerCase()));
+	if (partial) return partial;
+
+	return undefined;
+}
+
+function withOptionalProfile(profileName: string | undefined, args: string[]): string[] {
+	if (!profileName?.trim()) return args;
+	return ["--profile", profileName.trim(), ...args];
+}
+
+async function pingTabctl(
+	pi: ExtensionAPI,
+	profileName: string | undefined,
+	signal?: AbortSignal,
+): Promise<any> {
+	return runTabctlJson(pi, withOptionalProfile(profileName, ["ping"]), TABCTL_TIMEOUT_MS, signal);
+}
+
+async function runAppleScriptJson(pi: ExtensionAPI, script: string, signal?: AbortSignal): Promise<any> {
+	if (process.platform !== "darwin") {
+		throw new Error("AppleScript fallback is only supported on macOS.");
+	}
+
+	const result = await pi.exec("osascript", ["-l", "JavaScript", "-e", script], {
+		timeout: TABCTL_TIMEOUT_MS,
+		signal,
+	});
+
+	if (result.code !== 0) {
+		throw new Error(`AppleScript failed: ${truncateText(result.stderr || result.stdout || "Unknown error")}`);
+	}
+
+	const parsed = tryParseJson((result.stdout || "").trim());
+	if (!parsed) {
+		throw new Error(`AppleScript produced invalid JSON: ${truncateText(result.stdout || "")}`);
+	}
+	if (parsed.ok === false) {
+		throw new Error(String(parsed.error || "AppleScript returned an error."));
+	}
+	return parsed;
+}
+
+async function listOpenTabsViaAppleScript(pi: ExtensionAPI, signal?: AbortSignal): Promise<TabctlTab[]> {
+	const script = `(() => {
+  try {
+    const app = Application("Chromium");
+    const windows = app.windows();
+    const tabs = [];
+    for (let wi = 0; wi < windows.length; wi++) {
+      const w = windows[wi];
+      let activeId = null;
+      try { activeId = Number(w.activeTab().id()); } catch (_e) {}
+      const windowTabs = w.tabs();
+      for (let ti = 0; ti < windowTabs.length; ti++) {
+        const tab = windowTabs[ti];
+        const tabId = Number(tab.id());
+        const url = String(tab.url() || "").trim();
+        if (!Number.isFinite(tabId) || !url) continue;
+        tabs.push({
+          tabId,
+          windowId: wi + 1,
+          title: String(tab.title() || ""),
+          url,
+          active: activeId != null && tabId === activeId,
+          pinned: false,
+          groupTitle: null,
+          lastAccessedAt: null,
+        });
+      }
+    }
+    return JSON.stringify({ ok: true, tabs });
+  } catch (error) {
+    return JSON.stringify({ ok: false, error: String(error) });
+  }
+})();`;
+
+	const parsed = await runAppleScriptJson(pi, script, signal);
+	const tabs = Array.isArray(parsed?.tabs) ? parsed.tabs : [];
+	return mapTabctlTabs(tabs);
+}
+
+async function closeTabViaAppleScript(pi: ExtensionAPI, tabId: number, signal?: AbortSignal): Promise<void> {
+	const script = `(() => {
+  try {
+    const targetId = Number(${JSON.stringify(tabId)});
+    const app = Application("Chromium");
+    const windows = app.windows();
+    for (let wi = 0; wi < windows.length; wi++) {
+      const windowTabs = windows[wi].tabs();
+      for (let ti = 0; ti < windowTabs.length; ti++) {
+        const tab = windowTabs[ti];
+        if (Number(tab.id()) === targetId) {
+          tab.close();
+          return JSON.stringify({ ok: true, closed: true });
+        }
+      }
+    }
+    return JSON.stringify({ ok: true, closed: false });
+  } catch (error) {
+    return JSON.stringify({ ok: false, error: String(error) });
+  }
+})();`;
+
+	const parsed = await runAppleScriptJson(pi, script, signal);
+	if (parsed?.closed !== true) {
+		throw new Error(`Could not close Chromium tab ${tabId}.`);
+	}
+}
+
+function createTabctlBackend(pi: ExtensionAPI, profileName: string | undefined): TabBackend {
+	return {
+		name: profileName ? `tabctl (${profileName})` : "tabctl",
+		listTabs: (signal) => listOpenTabsFromTabctl(pi, profileName, signal),
+		closeTab: async (tabId, signal) => ({ txid: await closeTabWithTabctl(pi, profileName, tabId, signal) }),
+	};
+}
+
+function createAppleScriptBackend(pi: ExtensionAPI): TabBackend {
+	return {
+		name: "AppleScript (Chromium)",
+		listTabs: (signal) => listOpenTabsViaAppleScript(pi, signal),
+		closeTab: async (tabId, signal) => {
+			await closeTabViaAppleScript(pi, tabId, signal);
+			return {};
+		},
+	};
+}
+
+async function chooseTabBackend(
+	pi: ExtensionAPI,
+	requestedProfileName: string,
+	onWarning: (message: string) => void,
+): Promise<TabBackend> {
+	try {
+		const availableProfiles = await listTabctlProfiles(pi);
+		const matchedProfile = resolveRequestedTabctlProfile(requestedProfileName, availableProfiles);
+		const tabctlProfile = matchedProfile ?? (availableProfiles.length === 1 ? availableProfiles[0] : undefined);
+
+		if (requestedProfileName && availableProfiles.length && !matchedProfile) {
+			onWarning(`No exact tabctl profile for '${requestedProfileName}'. Using tabctl default profile.`);
+		}
+
+		await pingTabctl(pi, tabctlProfile);
+		return createTabctlBackend(pi, tabctlProfile);
+	} catch (error: any) {
+		onWarning(`tabctl unavailable (${String(error?.message || error)}). Falling back to AppleScript.`);
+		return createAppleScriptBackend(pi);
+	}
+}
+
+async function runTabctlGraphqlQuery(
+	pi: ExtensionAPI,
+	profileName: string | undefined,
+	query: string,
+	timeoutMs = TABCTL_TIMEOUT_MS,
+	signal?: AbortSignal,
+): Promise<any> {
+	const response = await runTabctlJson(pi, withOptionalProfile(profileName, ["query", query]), timeoutMs, signal);
+
+	if (response?.errors) {
+		throw new Error(extractTabctlError(response));
+	}
+
+	if (response?.data !== undefined) return response.data;
+	return response;
+}
+
+function mapTabctlTabs(rawItems: any[]): TabctlTab[] {
+	const tabs: TabctlTab[] = [];
+	for (const raw of rawItems) {
+		if (!raw || typeof raw !== "object") continue;
+		const tabId = Number(raw.tabId);
+		const windowId = Number(raw.windowId);
+		const url = String(raw.url ?? "").trim();
+		if (!Number.isFinite(tabId) || !Number.isFinite(windowId) || !url) continue;
+
+		tabs.push({
+			tabId,
+			windowId,
+			title: String(raw.title ?? "").trim(),
+			url,
+			active: Boolean(raw.active),
+			pinned: Boolean(raw.pinned),
+			groupTitle: raw.groupTitle == null ? null : String(raw.groupTitle),
+			lastAccessedAt: raw.lastAccessedAt == null ? null : Number(raw.lastAccessedAt),
+		});
+	}
+	return tabs;
+}
+
+async function listOpenTabsFromTabctl(
+	pi: ExtensionAPI,
+	profileName?: string,
+	signal?: AbortSignal,
+): Promise<TabctlTab[]> {
+	const query = `
+	query OpenTabsForReview {
+	  tabs(orderBy: LAST_ACCESSED_DESC, limit: ${TAB_REVIEW_QUERY_LIMIT}, offset: 0) {
+	    total
+	    items {
+	      tabId
+	      windowId
+	      title
+	      url
+	      active
+	      pinned
+	      groupTitle
+	      lastAccessedAt
+	    }
+	  }
+	}
+	`;
+
+	const data = await runTabctlGraphqlQuery(pi, profileName, query, TABCTL_TIMEOUT_MS, signal);
+	const items = Array.isArray(data?.tabs?.items) ? data.tabs.items : [];
+	return mapTabctlTabs(items);
+}
+
+async function closeTabWithTabctl(
+	pi: ExtensionAPI,
+	profileName: string | undefined,
+	tabId: number,
+	signal?: AbortSignal,
+): Promise<string | undefined> {
+	const mutation = `
+	mutation CloseTabForReview {
+	  closeTabs(tabIds: [${tabId}], confirm: true) {
+	    txid
+	    closedTabs
+	  }
+	}
+	`;
+	const data = await runTabctlGraphqlQuery(pi, profileName, mutation, TABCTL_TIMEOUT_MS, signal);
+	const closed = Number(data?.closeTabs?.closedTabs ?? 0);
+	if (!Number.isFinite(closed) || closed < 1) {
+		throw new Error(`tabctl could not close tab ${tabId}`);
+	}
+	const txid = data?.closeTabs?.txid;
+	return typeof txid === "string" ? txid : undefined;
 }
 
 function defaultNoteTitleForTab(tab: TabctlTab): string {
@@ -485,171 +530,6 @@ function renderTabReviewPrompt(tab: TabctlTab, index: number, total: number): st
 		tab.url,
 		metadata,
 	].join("\n");
-}
-
-function tryParseJson(text: string | undefined): any | null {
-	if (!text) return null;
-	try {
-		return JSON.parse(text);
-	} catch {
-		return null;
-	}
-}
-
-function extractTabctlFailureText(result: { stdout?: string; stderr?: string }): string {
-	const stdout = (result.stdout || "").trim();
-	const stderr = (result.stderr || "").trim();
-	const parsedStdout = tryParseJson(stdout);
-	const parsedStderr = tryParseJson(stderr);
-	const parsed = parsedStdout ?? parsedStderr;
-	if (parsed) {
-		if (typeof parsed?.error?.message === "string") return parsed.error.message;
-		if (Array.isArray(parsed?.errors) && parsed.errors.length) return extractTabctlError(parsed);
-	}
-	return stderr || stdout;
-}
-
-async function runTabctlJson(pi: ExtensionAPI, args: string[], timeoutMs: number): Promise<any> {
-	const result = await pi.exec("tabctl", ["--json", ...args], { timeout: timeoutMs });
-	const rawStdout = (result.stdout || "").trim();
-
-	if (result.code !== 0) {
-		const failureText = extractTabctlFailureText(result);
-		if (!failureText) {
-			throw new Error(
-				`tabctl command failed: ${args.join(" ")}\n` +
-					"No output returned. tabctl may be missing from PATH or not configured.",
-			);
-		}
-
-		throw new Error(`tabctl command failed: ${args.join(" ")}\n${truncateText(failureText)}`);
-	}
-
-	if (!rawStdout) return {};
-	const parsed = tryParseJson(rawStdout);
-	if (parsed == null) {
-		throw new Error(`Could not parse tabctl JSON output: ${truncateText(rawStdout)}`);
-	}
-	return parsed;
-}
-
-async function listTabctlProfileNames(pi: ExtensionAPI): Promise<string[]> {
-	try {
-		const profileList = await runTabctlJson(pi, ["profile-list"], TABCTL_TIMEOUT_MS);
-		const profiles = Array.isArray(profileList?.profiles) ? profileList.profiles : [];
-		return profiles
-			.map((profile: any) => String(profile?.name ?? "").trim())
-			.filter(Boolean);
-	} catch {
-		return [];
-	}
-}
-
-function resolveRequestedTabctlProfile(requestedProfile: string | undefined, availableProfiles: string[]): string | undefined {
-	const requested = normalizeWhitespace(requestedProfile || "");
-	if (!requested || !availableProfiles.length) return undefined;
-
-	const exact = availableProfiles.find((name) => name.toLowerCase() === requested.toLowerCase());
-	if (exact) return exact;
-
-	const partial = availableProfiles.find((name) => name.toLowerCase().includes(requested.toLowerCase()));
-	if (partial) return partial;
-
-	return undefined;
-}
-
-async function runTabctlGraphqlQuery(
-	pi: ExtensionAPI,
-	profileName: string | undefined,
-	query: string,
-	timeoutMs = TABCTL_TIMEOUT_MS,
-): Promise<any> {
-	const args: string[] = [];
-	if (profileName?.trim()) {
-		args.push("--profile", profileName.trim());
-	}
-	args.push("query", query);
-	const response = await runTabctlJson(pi, args, timeoutMs);
-
-	if (response?.errors) {
-		throw new Error(extractTabctlError(response));
-	}
-
-	if (response?.data !== undefined) return response.data;
-	return response;
-}
-
-function mapTabctlTabs(rawItems: any[]): TabctlTab[] {
-	const tabs: TabctlTab[] = [];
-	for (const raw of rawItems) {
-		if (!raw || typeof raw !== "object") continue;
-		const tabId = Number(raw.tabId);
-		const windowId = Number(raw.windowId);
-		const url = String(raw.url ?? "").trim();
-		if (!Number.isFinite(tabId) || !Number.isFinite(windowId) || !url) continue;
-
-		tabs.push({
-			tabId,
-			windowId,
-			title: String(raw.title ?? "").trim(),
-			url,
-			active: Boolean(raw.active),
-			pinned: Boolean(raw.pinned),
-			groupTitle: raw.groupTitle == null ? null : String(raw.groupTitle),
-			lastAccessedAt: raw.lastAccessedAt == null ? null : Number(raw.lastAccessedAt),
-		});
-	}
-	return tabs;
-}
-
-async function listOpenTabsFromTabctl(pi: ExtensionAPI, profileName?: string): Promise<TabctlTab[]> {
-	const query = `
-	query OpenTabsForReview {
-	  ping {
-	    ok
-	  }
-	  tabs(orderBy: LAST_ACCESSED_DESC, limit: ${TAB_REVIEW_QUERY_LIMIT}, offset: 0) {
-	    total
-	    items {
-	      tabId
-	      windowId
-	      title
-	      url
-	      active
-	      pinned
-	      groupTitle
-	      lastAccessedAt
-	    }
-	  }
-	}
-	`;
-
-	const data = await runTabctlGraphqlQuery(pi, profileName, query, TABCTL_TIMEOUT_MS);
-	const pingOk = Boolean(data?.ping?.ok);
-	if (!pingOk) {
-		throw new Error("tabctl ping failed. Is the tabctl browser extension connected?");
-	}
-
-	const items = Array.isArray(data?.tabs?.items) ? data.tabs.items : [];
-	return mapTabctlTabs(items);
-}
-
-async function closeTabWithTabctl(pi: ExtensionAPI, profileName: string | undefined, tabId: number): Promise<string | undefined> {
-	const mutation = `
-	mutation CloseTabForReview {
-	  closeTabs(tabIds: [${tabId}], confirm: true) {
-	    txid
-	    closedTabs
-	  }
-	}
-	`;
-	const data = await runTabctlGraphqlQuery(pi, profileName, mutation, TABCTL_TIMEOUT_MS);
-	const closed = Number(data?.closeTabs?.closedTabs ?? 0);
-	if (!Number.isFinite(closed) || closed < 1) {
-		throw new Error(`tabctl could not close tab ${tabId}`);
-	}
-	const txid = data?.closeTabs?.txid;
-	return typeof txid === "string" ? txid : undefined;
 }
 
 function formatYamlList(values: string[], quote = true): string[] {
@@ -759,12 +639,7 @@ async function upsertTabArchiveNote(
 
 	let updated = current;
 	if (updated.includes("## Saved links")) {
-		const totalLine = updated.match(/\n_Total links:.*$/m)?.[0];
-		if (totalLine) {
-			updated = updated.replace(totalLine, `${linkLine}\n${totalLine}`);
-		} else {
-			updated = `${updated.trimEnd()}\n${linkLine}\n`;
-		}
+		updated = `${updated.trimEnd()}\n${linkLine}\n`;
 	} else {
 		updated = `${updated.trimEnd()}\n\n## Saved links\n${linkLine}\n`;
 	}
@@ -773,21 +648,16 @@ async function upsertTabArchiveNote(
 	return { notePath, created: false, alreadyPresent: false };
 }
 
-async function reindexQmd(pi: ExtensionAPI): Promise<{ update: string; embed: string }> {
-	const update = await pi.exec("qmd", ["update"], { timeout: QMD_TIMEOUT_MS });
+async function reindexQmd(pi: ExtensionAPI, signal?: AbortSignal): Promise<void> {
+	const update = await pi.exec("qmd", ["update"], { timeout: QMD_TIMEOUT_MS, signal });
 	if (update.code !== 0) {
 		throw new Error(`qmd update failed:\n${truncateText(update.stderr || update.stdout || "Unknown error")}`);
 	}
 
-	const embed = await pi.exec("qmd", ["embed"], { timeout: QMD_TIMEOUT_MS });
+	const embed = await pi.exec("qmd", ["embed"], { timeout: QMD_TIMEOUT_MS, signal });
 	if (embed.code !== 0) {
 		throw new Error(`qmd embed failed:\n${truncateText(embed.stderr || embed.stdout || "Unknown error")}`);
 	}
-
-	return {
-		update: truncateText(update.stdout || "qmd update completed"),
-		embed: truncateText(embed.stdout || "qmd embed completed"),
-	};
 }
 
 async function promptArchiveDecision(ctx: ExtensionContext, tab: TabctlTab): Promise<ArchiveDecision | null> {
@@ -849,36 +719,24 @@ async function runTabReviewSession(pi: ExtensionAPI, ctx: ExtensionContext, requ
 	}
 
 	const requestedProfileName = normalizeWhitespace(requestedProfile || "") || DEFAULT_PROFILE_NAME;
-	const availableTabctlProfiles = await listTabctlProfileNames(pi);
-	const matchedProfile = resolveRequestedTabctlProfile(requestedProfileName, availableTabctlProfiles);
-	const tabctlProfile = matchedProfile ?? (availableTabctlProfiles.length === 1 ? availableTabctlProfiles[0] : undefined);
 
-	if (requestedProfileName && availableTabctlProfiles.length && !matchedProfile) {
-		ctx.ui.notify(
-			`No tabctl profile named '${requestedProfileName}'. Using tabctl default profile.`,
-			"warning",
-		);
+	let backend: TabBackend;
+	try {
+		backend = await chooseTabBackend(pi, requestedProfileName, (message) => ctx.ui.notify(message, "warning"));
+	} catch (error: any) {
+		const details = String(error?.message || error || "Unknown error");
+		ctx.ui.notify("Could not initialize tab backend", "error");
+		pi.sendUserMessage(truncateText(details));
+		return;
 	}
 
 	let tabs: TabctlTab[] = [];
 	try {
-		tabs = await listOpenTabsFromTabctl(pi, tabctlProfile);
+		tabs = await backend.listTabs();
 	} catch (error: any) {
 		const details = String(error?.message || error || "Unknown error");
-		ctx.ui.notify("Could not load tabs from tabctl", "error");
-		pi.sendUserMessage(
-			[
-				`I couldn't read open tabs from tabctl for profile \"${requestedProfileName}\".`,
-				"",
-				truncateText(details),
-				"",
-				"Setup checklist:",
-				"1. Install tabctl: https://github.com/ekroon/tabctl",
-				"2. Run: tabctl setup",
-				"3. Ensure Chromium has the tabctl extension enabled for this profile",
-				"4. Retry /tab-archive:review-tabs Work",
-			].join("\n"),
-		);
+		ctx.ui.notify("Could not query open tabs", "error");
+		pi.sendUserMessage(`Tab query failed (${backend.name}):\n${truncateText(details)}`);
 		return;
 	}
 
@@ -935,8 +793,8 @@ async function runTabReviewSession(pi: ExtensionAPI, ctx: ExtensionContext, requ
 		}
 
 		try {
-			const txid = await closeTabWithTabctl(pi, tabctlProfile, tab.tabId);
-			if (txid) closeTxIds.push(txid);
+			const closeResult = await backend.closeTab(tab.tabId);
+			if (closeResult.txid) closeTxIds.push(closeResult.txid);
 			if (action === "delete") deleted += 1;
 		} catch (error: any) {
 			ctx.ui.notify(`Failed to close tab ${tab.tabId}: ${String(error?.message || error)}`, "error");
@@ -951,10 +809,9 @@ async function runTabReviewSession(pi: ExtensionAPI, ctx: ExtensionContext, requ
 	let qmdSummary: string | undefined;
 	if (reindexNeeded) {
 		try {
-			const qmd = await reindexQmd(pi);
+			await reindexQmd(pi);
 			qmdSummary = "qmd update + embed complete";
 			ctx.ui.notify("QMD index updated", "success");
-			void qmd;
 		} catch (error: any) {
 			qmdSummary = `qmd indexing failed: ${String(error?.message || error)}`;
 			ctx.ui.notify("QMD indexing failed", "error");
@@ -962,7 +819,8 @@ async function runTabReviewSession(pi: ExtensionAPI, ctx: ExtensionContext, requ
 	}
 
 	const summary = [
-		`Tab review complete for profile \"${requestedProfileName}\".`,
+		`Tab review complete for profile "${requestedProfileName}".`,
+		`Backend: ${backend.name}`,
 		`Reviewed: ${reviewed}/${tabs.length}`,
 		`Archived: ${archived}`,
 		`Deleted: ${deleted}`,
@@ -978,396 +836,65 @@ async function runTabReviewSession(pi: ExtensionAPI, ctx: ExtensionContext, requ
 	ctx.ui.notify(`Reviewed ${reviewed} tab(s): ${archived} archived, ${deleted} deleted, ${kept} kept`, "info");
 }
 
+async function runTabArchiveDoctor(pi: ExtensionAPI, ctx: ExtensionContext, requestedProfile?: string): Promise<void> {
+	const requestedProfileName = normalizeWhitespace(requestedProfile || "") || DEFAULT_PROFILE_NAME;
+	const diagnostics: string[] = [];
+
+	try {
+		const tabctlBin = await resolveTabctlBinary(pi);
+		diagnostics.push(`tabctl binary: ${tabctlBin}`);
+	} catch (error: any) {
+		diagnostics.push(`tabctl binary: ERROR - ${String(error?.message || error)}`);
+	}
+
+	try {
+		const profiles = await listTabctlProfiles(pi);
+		diagnostics.push(`tabctl profiles: ${profiles.length ? profiles.join(", ") : "(none)"}`);
+	} catch (error: any) {
+		diagnostics.push(`tabctl profiles: ERROR - ${String(error?.message || error)}`);
+	}
+
+	try {
+		await pingTabctl(pi, requestedProfileName);
+		diagnostics.push(`tabctl ping (${requestedProfileName}): ok`);
+	} catch (error: any) {
+		diagnostics.push(`tabctl ping (${requestedProfileName}): ERROR - ${String(error?.message || error)}`);
+	}
+
+	try {
+		const tabs = await listOpenTabsViaAppleScript(pi);
+		diagnostics.push(`appleScript tabs: ok (${tabs.length} tab(s) visible)`);
+	} catch (error: any) {
+		diagnostics.push(`appleScript tabs: ERROR - ${String(error?.message || error)}`);
+	}
+
+	diagnostics.push(`chromium user data dir: ${getChromiumUserDataDir()}`);
+	diagnostics.push(`tabctl extension dir: ${getTabctlExtensionDir()}`);
+	diagnostics.push(`obsidian notes dir: ${getObsidianNotesDir()}`);
+
+	pi.sendUserMessage(diagnostics.join("\n"), { deliverAs: "followUp" });
+	if (ctx.hasUI) ctx.ui.notify("tab-archive diagnostics complete", "info");
+}
+
 export default function tabArchiveExtension(pi: ExtensionAPI) {
-	pi.registerTool({
-		name: "list_chromium_bookmark_folders",
-		label: "List Chromium Bookmark Folders",
-		description: "List bookmark folders for a Chromium profile with URL/folder counts to plan archival.",
-		promptSnippet: "Inspect Chromium bookmark folders before archival",
-		promptGuidelines: [
-			"Use this tool first in end-of-day archival workflows to identify candidate folders.",
-		],
-		parameters: Type.Object({
-			profileName: Type.Optional(Type.String({ description: "Chromium profile display name (for example: Work)" })),
-			profileDir: Type.Optional(Type.String({ description: "Chromium profile directory basename (for example: Default)" })),
-			root: Type.Optional(StringEnum(["bookmark_bar", "other", "synced"] as const)),
-			maxDepth: Type.Optional(Type.Number({ description: "Max folder depth to include", minimum: 1, maximum: 8 })),
-		}),
-		async execute(_toolCallId, params) {
-			const profile = await resolveProfile(params.profileName, params.profileDir);
-			const { bookmarksPath, bookmarks } = await loadBookmarks(profile);
-			const root = normalizeRoot(params.root);
-			const maxDepth = Math.max(1, Math.min(8, Math.floor(params.maxDepth ?? 4)));
-
-			const folders = listFolderStats(bookmarks, root, maxDepth).map((folder) => ({
-				...folder,
-				path: `${ROOT_LABELS[folder.root]}/${folder.path}`,
-			}));
-
-			return {
-				content: [
-					{
-						type: "text",
-						text: JSON.stringify(
-							{
-								profileName: profile.profileName,
-								profileDir: profile.profileDir,
-								root,
-								bookmarksPath,
-								folders,
-							},
-							null,
-							2,
-						),
-					},
-				],
-				details: {
-					profile,
-					root,
-					folders,
-				},
-			};
-		},
-	});
-
-	pi.registerTool({
-		name: "archive_chromium_bookmark_folders_to_obsidian",
-		label: "Archive Chromium Bookmark Folders",
-		description: "Archive Chromium bookmark folders into an Obsidian note using intent-first metadata for future retrieval.",
-		promptSnippet: "Archive selected Chromium bookmark folders into an Obsidian reference note",
-		promptGuidelines: [
-			"Use intent-first note titles and summaries (project/topic focus) rather than migration history.",
-			"Include topics, aliases, and example prompts so QMD retrieval matches future user phrasing.",
-		],
-		parameters: Type.Object({
-			profileName: Type.Optional(Type.String({ description: "Chromium profile display name (for example: Work)" })),
-			profileDir: Type.Optional(Type.String({ description: "Chromium profile directory basename (for example: Default)" })),
-			folderPaths: Type.Array(Type.String({ description: "Bookmark folder path (supports paths with or without root prefix)" })),
-			noteTitle: Type.String({ description: "Obsidian note title" }),
-			summary: Type.String({ description: "Short summary for the note" }),
-			topics: Type.Optional(Type.Array(Type.String({ description: "Topic keyword for retrieval" }))),
-			aliases: Type.Optional(Type.Array(Type.String({ description: "Alternate phrasing users may ask" }))),
-			questions: Type.Optional(Type.Array(Type.String({ description: "Example prompts this note should answer" }))),
-			tags: Type.Optional(Type.Array(Type.String({ description: "Additional tags" }))),
-			categories: Type.Optional(Type.Array(Type.String({ description: "Frontmatter category wikilink" }))),
-			noteTypes: Type.Optional(Type.Array(Type.String({ description: "Frontmatter type value" }))),
-			orgs: Type.Optional(Type.Array(Type.String({ description: "Frontmatter org value" }))),
-			status: Type.Optional(Type.String({ description: "Frontmatter status" })),
-			source: Type.Optional(Type.String({ description: "Frontmatter source" })),
-			apply: Type.Optional(Type.Boolean({ description: "Write note to disk (default true)" })),
-			reindexQmd: Type.Optional(Type.Boolean({ description: "Run qmd update/embed after writing (default true)" })),
-		}),
-		async execute(_toolCallId, params, signal) {
-			if (!params.folderPaths.length) {
-				throw new Error("folderPaths cannot be empty");
-			}
-
-			const profile = await resolveProfile(params.profileName, params.profileDir);
-			const archiveScript = await findArchiveScriptPath();
-			const apply = params.apply !== false;
-			const reindexQmd = params.reindexQmd !== false;
-
-			const scriptArgs = [
-				archiveScript,
-				"--chromium-user-data-dir",
-				profile.userDataDir,
-				"--profile-dir",
-				profile.profileDir,
-				"--note-title",
-				params.noteTitle,
-				"--summary",
-				params.summary,
-			];
-
-			for (const folderPath of params.folderPaths) {
-				scriptArgs.push("--folder-path", folderPath);
-			}
-			for (const topic of params.topics ?? []) scriptArgs.push("--topic", topic);
-			for (const alias of params.aliases ?? []) scriptArgs.push("--alias", alias);
-			for (const question of params.questions ?? []) scriptArgs.push("--question", question);
-			for (const tag of params.tags ?? []) scriptArgs.push("--tag", tag);
-			for (const category of params.categories ?? []) scriptArgs.push("--category", category);
-			for (const typeValue of params.noteTypes ?? []) scriptArgs.push("--type", typeValue);
-			for (const org of params.orgs ?? []) scriptArgs.push("--org", org);
-			if (params.status) scriptArgs.push("--status", params.status);
-			if (params.source) scriptArgs.push("--source", params.source);
-			if (apply) scriptArgs.push("--apply");
-
-			const archiveResult = await pi.exec("python3", scriptArgs, {
-				timeout: ARCHIVE_TIMEOUT_MS,
-				signal,
-			});
-
-			if (archiveResult.code !== 0) {
-				throw new Error(`Archive script failed:\n${truncateText(archiveResult.stderr || archiveResult.stdout || "Unknown error")}`);
-			}
-
-			let qmdUpdateResult: string | undefined;
-			let qmdEmbedResult: string | undefined;
-			if (apply && reindexQmd) {
-				const update = await pi.exec("qmd", ["update"], {
-					timeout: QMD_TIMEOUT_MS,
-					signal,
-				});
-				if (update.code !== 0) {
-					throw new Error(`qmd update failed:\n${truncateText(update.stderr || update.stdout || "Unknown error")}`);
-				}
-				qmdUpdateResult = truncateText(update.stdout || "qmd update completed");
-
-				const embed = await pi.exec("qmd", ["embed"], {
-					timeout: QMD_TIMEOUT_MS,
-					signal,
-				});
-				if (embed.code !== 0) {
-					throw new Error(`qmd embed failed:\n${truncateText(embed.stderr || embed.stdout || "Unknown error")}`);
-				}
-				qmdEmbedResult = truncateText(embed.stdout || "qmd embed completed");
-			}
-
-			const archiveOutput = truncateText(archiveResult.stdout || "Archive completed");
-			const notePath = parseNotePathFromOutput(archiveResult.stdout || "");
-
-			const summaryLines = [
-				`Archived ${params.folderPaths.length} folder(s) from Chromium profile '${profile.profileName}'.`,
-				notePath ? `Note: ${notePath}` : undefined,
-				apply ? "Mode: apply" : "Mode: dry-run",
-				apply && reindexQmd ? "qmd: update + embed complete" : undefined,
-			]
-				.filter(Boolean)
-				.join("\n");
-
-			return {
-				content: [{ type: "text", text: summaryLines }],
-				details: {
-					profile,
-					folderPaths: params.folderPaths,
-					noteTitle: params.noteTitle,
-					notePath,
-					archiveOutput,
-					qmdUpdateResult,
-					qmdEmbedResult,
-				},
-			};
-		},
-	});
-
-	pi.registerTool({
-		name: "delete_chromium_bookmark_folders",
-		label: "Delete Chromium Bookmark Folders",
-		description: "Delete bookmark folders from Chromium after archival, with backup and optional confirmation.",
-		promptSnippet: "Delete archived Chromium bookmark folders",
-		promptGuidelines: [
-			"Only delete folders after the user confirms archival succeeded.",
-			"Keep backups enabled unless the user explicitly asks otherwise.",
-		],
-		parameters: Type.Object({
-			profileName: Type.Optional(Type.String({ description: "Chromium profile display name (for example: Work)" })),
-			profileDir: Type.Optional(Type.String({ description: "Chromium profile directory basename (for example: Default)" })),
-			root: Type.Optional(StringEnum(["bookmark_bar", "other", "synced"] as const)),
-			folderPaths: Type.Array(Type.String({ description: "Bookmark folder paths to delete" })),
-			createBackup: Type.Optional(Type.Boolean({ description: "Create Bookmarks backup before deletion (default true)" })),
-			requireConfirm: Type.Optional(Type.Boolean({ description: "Ask for confirmation in interactive mode (default true)" })),
-		}),
-		async execute(_toolCallId, params, signal, _onUpdate, ctx) {
-			if (!params.folderPaths.length) {
-				throw new Error("folderPaths cannot be empty");
-			}
-
-			const profile = await resolveProfile(params.profileName, params.profileDir);
-			const { bookmarksPath, bookmarks } = await loadBookmarks(profile);
-			const root = normalizeRoot(params.root);
-			const rootNode = getRootNode(bookmarks, root);
-			const createBackup = params.createBackup !== false;
-			const requireConfirm = params.requireConfirm !== false;
-
-			if (requireConfirm) {
-				if (!ctx.hasUI) {
-					throw new Error("Confirmation required but UI is not available. Set requireConfirm=false to continue.");
-				}
-				const ok = await ctx.ui.confirm(
-					"Delete bookmark folders?",
-					`Delete ${params.folderPaths.length} folder(s) from ${profile.profileName}/${ROOT_LABELS[root]}?`,
-				);
-				if (!ok) {
-					return {
-						content: [{ type: "text", text: "Deletion cancelled by user." }],
-						details: {
-							cancelled: true,
-							profile,
-							root,
-						},
-					};
-				}
-			}
-
-			let backupPath: string | undefined;
-			if (createBackup) {
-				backupPath = `${bookmarksPath}.bak-${timestampSlug()}`;
-				await fs.copyFile(bookmarksPath, backupPath);
-			}
-
-			const removed: RemovedFolder[] = [];
-			const missing: string[] = [];
-			for (const folderPath of params.folderPaths) {
-				if (signal?.aborted) throw new Error("Operation cancelled");
-				const removedNode = removeFolderPath(rootNode, folderPath);
-				if (!removedNode) {
-					missing.push(folderPath);
-					continue;
-				}
-				removed.push({
-					path: folderPath,
-					totalUrlCount: countTotalUrls(removedNode),
-					subfolderCount: countSubfolders(removedNode),
-				});
-			}
-
-			if (!removed.length) {
-				return {
-					content: [{ type: "text", text: "No folders were deleted (none matched the provided paths)." }],
-					details: {
-						profile,
-						root,
-						removed,
-						missing,
-						backupPath,
-					},
-				};
-			}
-
-			await fs.writeFile(bookmarksPath, JSON.stringify(bookmarks), "utf8");
-
-			const summary = [
-				`Deleted ${removed.length} folder(s) from ${profile.profileName}/${ROOT_LABELS[root]}.`,
-				backupPath ? `Backup: ${backupPath}` : undefined,
-				missing.length ? `Missing: ${missing.join(", ")}` : undefined,
-			]
-				.filter(Boolean)
-				.join("\n");
-
-			return {
-				content: [{ type: "text", text: summary }],
-				details: {
-					profile,
-					root,
-					removed,
-					missing,
-					backupPath,
-				},
-			};
-		},
-	});
-
-	pi.registerTool({
-		name: "open_obsidian_note_links_in_browser",
-		label: "Open Obsidian Note Links",
-		description: "Open HTTP links from an Obsidian note in the default browser (with optional confirmation and dry-run).",
-		promptSnippet: "Open archived links from an Obsidian note",
-		promptGuidelines: [
-			"Use this when the user asks to open all links from an archived project note.",
-			"Run with dryRun=true first if the note might contain many links.",
-		],
-		parameters: Type.Object({
-			noteTitle: Type.String({ description: "Obsidian note title (without .md)" }),
-			notePath: Type.Optional(Type.String({ description: "Optional absolute or Notes-relative note path" })),
-			maxLinks: Type.Optional(Type.Number({ description: "Maximum links to open", minimum: 1, maximum: 100 })),
-			dryRun: Type.Optional(Type.Boolean({ description: "If true, only list links without opening them" })),
-			requireConfirm: Type.Optional(Type.Boolean({ description: "Ask before opening links in interactive mode (default true)" })),
-		}),
-		async execute(_toolCallId, params, signal, _onUpdate, ctx) {
-			const notePath = await resolveNotePath(params.noteTitle, params.notePath);
-			const markdown = await fs.readFile(notePath, "utf8");
-			const links = extractHttpLinks(markdown);
-			if (!links.length) {
-				return {
-					content: [{ type: "text", text: `No HTTP links found in ${notePath}.` }],
-					details: { notePath, links: [] },
-				};
-			}
-
-			const maxLinks = Math.max(1, Math.min(100, Math.floor(params.maxLinks ?? links.length)));
-			const selected = links.slice(0, maxLinks);
-			const dryRun = params.dryRun === true;
-			const requireConfirm = params.requireConfirm !== false;
-
-			if (!dryRun && requireConfirm) {
-				if (!ctx.hasUI) {
-					throw new Error("Confirmation required but UI is not available. Set requireConfirm=false to continue.");
-				}
-				const ok = await ctx.ui.confirm(
-					"Open links in browser?",
-					`Open ${selected.length} link(s) from '${params.noteTitle}'?`,
-				);
-				if (!ok) {
-					return {
-						content: [{ type: "text", text: "Open links cancelled by user." }],
-						details: { cancelled: true, notePath, links: selected },
-					};
-				}
-			}
-
-			if (!dryRun) {
-				const opener = process.platform === "darwin" ? "open" : "xdg-open";
-				for (const link of selected) {
-					if (signal?.aborted) throw new Error("Operation cancelled");
-					const result = await pi.exec(opener, [link], {
-						timeout: OPEN_LINK_TIMEOUT_MS,
-						signal,
-					});
-					if (result.code !== 0) {
-						throw new Error(`Failed to open link '${link}': ${truncateText(result.stderr || result.stdout || "Unknown error")}`);
-					}
-				}
-			}
-
-			const summary = [
-				dryRun ? `Dry-run: found ${selected.length} link(s).` : `Opened ${selected.length} link(s) in browser.`,
-				`Note: ${notePath}`,
-				selected.length < links.length ? `Skipped ${links.length - selected.length} link(s) due to maxLinks.` : undefined,
-			].filter(Boolean).join("\n");
-
-			return {
-				content: [{ type: "text", text: summary }],
-				details: {
-					notePath,
-					opened: dryRun ? 0 : selected.length,
-					links: selected,
-					totalLinksInNote: links.length,
-					dryRun,
-				},
-			};
+	pi.registerCommand("tab-archive:review-tabs", {
+		description: "Review open Chromium tabs one-by-one (archive/delete/keep) using tabctl with AppleScript fallback",
+		handler: async (args, ctx) => {
+			await runTabReviewSession(pi, ctx, args);
 		},
 	});
 
 	pi.registerCommand("tab-archive:eod", {
-		description: "Kick off end-of-day bookmark archival workflow",
+		description: "Alias for /tab-archive:review-tabs",
 		handler: async (args, ctx) => {
-			const profile = normalizeWhitespace(args || "") || DEFAULT_PROFILE_NAME;
-			const prompt = [
-				`Let's run end-of-day link archival for Chromium profile "${profile}".`,
-				"Use list_chromium_bookmark_folders first (root: bookmark_bar) and show me candidate folders.",
-				"Ask which folders I want to archive.",
-				"For each selected folder, call archive_chromium_bookmark_folders_to_obsidian with intent-first note title/summary/topics/aliases/questions.",
-				"After each successful archive, ask if I want to delete the original bookmark folder, then call delete_chromium_bookmark_folders only if I confirm.",
-				"Finish by confirming qmd indexing was updated.",
-			].join("\n");
-
-			if (ctx.hasPendingMessages()) {
-				pi.sendUserMessage(prompt, { deliverAs: "followUp" });
-			} else {
-				pi.sendUserMessage(prompt);
-			}
-
-			if (ctx.hasUI) {
-				ctx.ui.notify(`Queued end-of-day archive workflow for ${profile}`, "info");
-			}
+			await runTabReviewSession(pi, ctx, args);
 		},
 	});
 
-	pi.registerCommand("tab-archive:review-tabs", {
-		description: "Review open Chromium tabs one-by-one (archive/delete/keep) using tabctl",
+	pi.registerCommand("tab-archive:doctor", {
+		description: "Diagnose tabctl + Chromium tab-archive setup",
 		handler: async (args, ctx) => {
-			await runTabReviewSession(pi, ctx, args);
+			await runTabArchiveDoctor(pi, ctx, args);
 		},
 	});
 }
