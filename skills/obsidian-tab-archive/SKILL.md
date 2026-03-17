@@ -21,7 +21,7 @@ Focus note titles, summaries, topics, and aliases on the **domain intent**, not 
 Use:
 
 ```bash
-~/dotfiles/skills/obsidian-tab-archive/scripts/archive_chromium_bookmark_folder.py
+~/dotfiles/skills/obsidian-tab-archive/scripts/archive_chrome_bookmark_folder.py
 ```
 
 ## Workflow
@@ -57,7 +57,7 @@ For all archives:
 ### 1) Growth/Career links
 
 ```bash
-~/dotfiles/skills/obsidian-tab-archive/scripts/archive_chromium_bookmark_folder.py \
+~/dotfiles/skills/obsidian-tab-archive/scripts/archive_chrome_bookmark_folder.py \
   --profile-name "Work" \
   --folder-name "Growth plans" \
   --note-title "GitHub Growth and Career Plan - Reference Links" \
@@ -77,7 +77,7 @@ For all archives:
 ### 2) Settings SDK / rules engine links
 
 ```bash
-~/dotfiles/skills/obsidian-tab-archive/scripts/archive_chromium_bookmark_folder.py \
+~/dotfiles/skills/obsidian-tab-archive/scripts/archive_chrome_bookmark_folder.py \
   --profile-name "Work" \
   --folder-name "🐙 Project Tentacle" \
   --note-title "GitHub Settings SDK and Rules Engine - Reference Links" \
@@ -97,7 +97,7 @@ For all archives:
 ### 3) Home shopping/list folder
 
 ```bash
-~/dotfiles/skills/obsidian-tab-archive/scripts/archive_chromium_bookmark_folder.py \
+~/dotfiles/skills/obsidian-tab-archive/scripts/archive_chrome_bookmark_folder.py \
   --profile-name "Home" \
   --folder-name "Shopping" \
   --note-title "Home Shopping Candidates - Reference Links" \
