@@ -41,8 +41,20 @@ type TabBackend = {
 	closeTab: (tabId: number, signal?: AbortSignal) => Promise<CloseTabResult>;
 };
 
+type TabctlProfileSnapshot = {
+	profileName: string;
+	tabs: TabctlTab[];
+	windowCount: number;
+};
+
+type ResolvedReviewTarget = {
+	backend: TabBackend;
+	tabs: TabctlTab[];
+	effectiveProfileName: string;
+};
+
 const DEFAULT_PROFILE_NAME = "Work";
-const DEFAULT_CHROMIUM_USER_DATA_DIR = path.join(os.homedir(), "Library/Application Support/Chromium");
+const DEFAULT_CHROME_USER_DATA_DIR = path.join(os.homedir(), "Library/Application Support/Google/Chrome");
 const DEFAULT_OBSIDIAN_NOTES_DIR = path.join(os.homedir(), "Obsidian/Personal/Notes");
 const DEFAULT_TABCTL_EXTENSION_DIR = path.join(os.homedir(), ".local/state/tabctl/extension");
 
@@ -80,9 +92,9 @@ async function fileExists(filePath: string): Promise<boolean> {
 	}
 }
 
-function getChromiumUserDataDir(): string {
-	const override = process.env.TAB_ARCHIVE_CHROMIUM_DIR?.trim();
-	return override ? path.resolve(override) : DEFAULT_CHROMIUM_USER_DATA_DIR;
+function getChromeUserDataDir(): string {
+	const override = process.env.TAB_ARCHIVE_CHROME_DIR?.trim() || process.env.TAB_ARCHIVE_CHROMIUM_DIR?.trim();
+	return override ? path.resolve(override) : DEFAULT_CHROME_USER_DATA_DIR;
 }
 
 function getObsidianNotesDir(): string {
@@ -302,7 +314,7 @@ async function runAppleScriptJson(pi: ExtensionAPI, script: string, signal?: Abo
 async function listOpenTabsViaAppleScript(pi: ExtensionAPI, signal?: AbortSignal): Promise<TabctlTab[]> {
 	const script = `(() => {
   try {
-    const app = Application("Chromium");
+    const app = Application("Google Chrome");
     const windows = app.windows();
     const tabs = [];
     for (let wi = 0; wi < windows.length; wi++) {
@@ -342,7 +354,7 @@ async function closeTabViaAppleScript(pi: ExtensionAPI, tabId: number, signal?: 
 	const script = `(() => {
   try {
     const targetId = Number(${JSON.stringify(tabId)});
-    const app = Application("Chromium");
+    const app = Application("Google Chrome");
     const windows = app.windows();
     for (let wi = 0; wi < windows.length; wi++) {
       const windowTabs = windows[wi].tabs();
@@ -362,7 +374,7 @@ async function closeTabViaAppleScript(pi: ExtensionAPI, tabId: number, signal?: 
 
 	const parsed = await runAppleScriptJson(pi, script, signal);
 	if (parsed?.closed !== true) {
-		throw new Error(`Could not close Chromium tab ${tabId}.`);
+		throw new Error(`Could not close Google Chrome tab ${tabId}.`);
 	}
 }
 
@@ -376,7 +388,7 @@ function createTabctlBackend(pi: ExtensionAPI, profileName: string | undefined):
 
 function createAppleScriptBackend(pi: ExtensionAPI): TabBackend {
 	return {
-		name: "AppleScript (Chromium)",
+		name: "AppleScript (Google Chrome)",
 		listTabs: (signal) => listOpenTabsViaAppleScript(pi, signal),
 		closeTab: async (tabId, signal) => {
 			await closeTabViaAppleScript(pi, tabId, signal);
@@ -385,25 +397,198 @@ function createAppleScriptBackend(pi: ExtensionAPI): TabBackend {
 	};
 }
 
+function pluralize(count: number, singular: string, plural = `${singular}s`): string {
+	return count === 1 ? singular : plural;
+}
+
+function countDistinctWindowIds(tabs: TabctlTab[]): number {
+	return new Set(tabs.map((tab) => tab.windowId)).size;
+}
+
+async function listOpenTabctlProfileSnapshots(
+	pi: ExtensionAPI,
+	availableProfiles: string[],
+	signal?: AbortSignal,
+): Promise<TabctlProfileSnapshot[]> {
+	const snapshots: TabctlProfileSnapshot[] = [];
+
+	for (const profileName of availableProfiles) {
+		try {
+			const tabs = await listOpenTabsFromTabctl(pi, profileName, signal);
+			if (!tabs.length) continue;
+			snapshots.push({
+				profileName,
+				tabs,
+				windowCount: countDistinctWindowIds(tabs),
+			});
+		} catch {
+			// Ignore profiles that cannot be queried right now.
+		}
+	}
+
+	return snapshots;
+}
+
+async function promptProfileNameSelection(
+	ctx: ExtensionContext,
+	profileNames: string[],
+	prompt: string,
+): Promise<string | null> {
+	if (!profileNames.length) return null;
+	if (!ctx.hasUI) return profileNames[0] || null;
+
+	const selected = await ctx.ui.select(prompt, [...profileNames, "Cancel review"]);
+	if (!selected || selected === "Cancel review") return null;
+	return profileNames.find((profileName) => profileName === selected) || null;
+}
+
+async function promptTabctlProfileSelection(
+	ctx: ExtensionContext,
+	snapshots: TabctlProfileSnapshot[],
+): Promise<TabctlProfileSnapshot | null> {
+	if (!snapshots.length) return null;
+
+	const details = snapshots
+		.map(
+			(snapshot) =>
+				`- ${snapshot.profileName}: ${snapshot.windowCount} ${pluralize(snapshot.windowCount, "window")}, ${snapshot.tabs.length} ${pluralize(snapshot.tabs.length, "tab")}`,
+		)
+		.join("\n");
+
+	const selectedProfileName = await promptProfileNameSelection(
+		ctx,
+		snapshots.map((snapshot) => snapshot.profileName),
+		`Multiple Google Chrome profiles have open windows/tabs:\n${details}\n\nChoose a profile to review:`,
+	);
+
+	if (!selectedProfileName) return null;
+	return snapshots.find((snapshot) => snapshot.profileName === selectedProfileName) || null;
+}
+
+async function getChromeProfileDirectoryMap(): Promise<Map<string, string>> {
+	const profileMap = new Map<string, string>();
+	const localStatePath = path.join(getChromeUserDataDir(), "Local State");
+
+	try {
+		const rawLocalState = await fs.readFile(localStatePath, "utf8");
+		const parsedLocalState = tryParseJson(rawLocalState);
+		const infoCache = parsedLocalState?.profile?.info_cache;
+		if (infoCache && typeof infoCache === "object") {
+			for (const [profileDir, metadata] of Object.entries(infoCache)) {
+				const profileName = normalizeWhitespace(String((metadata as any)?.name ?? ""));
+				if (!profileName) continue;
+				profileMap.set(profileDir, profileName);
+			}
+		}
+	} catch {
+		// Ignore Local State read/parse errors; fallback to profile directory ids.
+	}
+
+	return profileMap;
+}
+
+async function detectOpenChromeProfileNamesFromProcesses(pi: ExtensionAPI): Promise<string[]> {
+	const result = await pi.exec("ps", ["-ax", "-o", "command"], { timeout: TABCTL_TIMEOUT_MS });
+	if (result.code !== 0) return [];
+
+	const profileMap = await getChromeProfileDirectoryMap();
+	const profileNames = new Set<string>();
+
+	for (const line of (result.stdout || "").split("\n")) {
+		if (!line.includes("Google Chrome")) continue;
+
+		for (const match of line.matchAll(/--profile-directory=(?:"([^"]+)"|([^\s]+))/g)) {
+			const profileDir = normalizeWhitespace((match[1] || match[2] || "").replace(/^['"]|['"]$/g, ""));
+			if (!profileDir) continue;
+			profileNames.add(profileMap.get(profileDir) || profileDir);
+		}
+	}
+
+	return Array.from(profileNames).sort((a, b) => a.localeCompare(b));
+}
+
 async function chooseTabBackend(
 	pi: ExtensionAPI,
+	ctx: ExtensionContext,
 	requestedProfileName: string,
-	onWarning: (message: string) => void,
-): Promise<TabBackend> {
+): Promise<ResolvedReviewTarget | null> {
 	try {
 		const availableProfiles = await listTabctlProfiles(pi);
-		const matchedProfile = resolveRequestedTabctlProfile(requestedProfileName, availableProfiles);
-		const tabctlProfile = matchedProfile ?? (availableProfiles.length === 1 ? availableProfiles[0] : undefined);
+		const openSnapshots = await listOpenTabctlProfileSnapshots(pi, availableProfiles);
 
-		if (requestedProfileName && availableProfiles.length && !matchedProfile) {
-			onWarning(`No exact tabctl profile for '${requestedProfileName}'. Using tabctl default profile.`);
+		let selectedProfileName: string | undefined;
+		let selectedTabs: TabctlTab[] | undefined;
+
+		if (openSnapshots.length > 1) {
+			const selectedSnapshot = await promptTabctlProfileSelection(ctx, openSnapshots);
+			if (!selectedSnapshot) {
+				ctx.ui.notify("Tab review canceled.", "info");
+				return null;
+			}
+			selectedProfileName = selectedSnapshot.profileName;
+			selectedTabs = selectedSnapshot.tabs;
+		} else if (openSnapshots.length === 1) {
+			selectedProfileName = openSnapshots[0]?.profileName;
+			selectedTabs = openSnapshots[0]?.tabs;
+		} else {
+			const matchedProfile = resolveRequestedTabctlProfile(requestedProfileName, availableProfiles);
+			selectedProfileName = matchedProfile ?? (availableProfiles.length === 1 ? availableProfiles[0] : undefined);
+
+			if (!selectedProfileName && availableProfiles.length > 1) {
+				const selectedProfile = await promptProfileNameSelection(
+					ctx,
+					availableProfiles,
+					[
+						"Multiple Google Chrome profiles are available, but no open tab snapshots were detected.",
+						"Choose a profile to review:",
+					].join("\n"),
+				);
+				if (!selectedProfile) {
+					ctx.ui.notify("Tab review canceled.", "info");
+					return null;
+				}
+				selectedProfileName = selectedProfile;
+			}
 		}
 
-		await pingTabctl(pi, tabctlProfile);
-		return createTabctlBackend(pi, tabctlProfile);
+		await pingTabctl(pi, selectedProfileName);
+		const backend = createTabctlBackend(pi, selectedProfileName);
+		const tabs = selectedTabs ?? (await backend.listTabs());
+		const effectiveProfileName = selectedProfileName || requestedProfileName;
+		return { backend, tabs, effectiveProfileName };
 	} catch (error: any) {
-		onWarning(`tabctl unavailable (${String(error?.message || error)}). Falling back to AppleScript.`);
-		return createAppleScriptBackend(pi);
+		ctx.ui.notify(`tabctl unavailable (${String(error?.message || error)}). Falling back to AppleScript.`, "warning");
+
+		const openProfiles = await detectOpenChromeProfileNamesFromProcesses(pi);
+		if (openProfiles.length > 1) {
+			const selectedProfile = await promptProfileNameSelection(
+				ctx,
+				openProfiles,
+				[
+					"Multiple Google Chrome profiles appear to be open.",
+					"Choose a target profile:",
+				].join("\n"),
+			);
+			if (!selectedProfile) {
+				ctx.ui.notify("Tab review canceled.", "info");
+				return null;
+			}
+
+			pi.sendUserMessage(
+				[
+					`Selected profile: "${selectedProfile}".`,
+					"tabctl is unavailable, so profile-specific tab review is not possible with AppleScript fallback.",
+					"Please install tabctl or close other profile windows, then run /tab-archive:review-tabs again.",
+				].join("\n"),
+				{ deliverAs: "followUp" },
+			);
+			return null;
+		}
+
+		const backend = createAppleScriptBackend(pi);
+		const tabs = await backend.listTabs();
+		const effectiveProfileName = openProfiles[0] || requestedProfileName;
+		return { backend, tabs, effectiveProfileName };
 	}
 }
 
@@ -554,7 +739,7 @@ function buildNewArchiveNote(decision: ArchiveDecision, tab: TabctlTab, profileN
 			"archive",
 			"qmd",
 			"tabs",
-			"chromium",
+			"chrome",
 			...decision.tags.map(normalizeTag).filter(Boolean),
 		],
 	).map(normalizeTag);
@@ -569,7 +754,7 @@ function buildNewArchiveNote(decision: ArchiveDecision, tab: TabctlTab, profileN
 		"org:",
 		"  - GitHub",
 		"status: archived",
-		"source: Chromium tab review",
+		"source: Google Chrome tab review",
 		`created: ${date}`,
 		`updated: ${date}`,
 	];
@@ -720,9 +905,9 @@ async function runTabReviewSession(pi: ExtensionAPI, ctx: ExtensionContext, requ
 
 	const requestedProfileName = normalizeWhitespace(requestedProfile || "") || DEFAULT_PROFILE_NAME;
 
-	let backend: TabBackend;
+	let resolvedTarget: ResolvedReviewTarget | null;
 	try {
-		backend = await chooseTabBackend(pi, requestedProfileName, (message) => ctx.ui.notify(message, "warning"));
+		resolvedTarget = await chooseTabBackend(pi, ctx, requestedProfileName);
 	} catch (error: any) {
 		const details = String(error?.message || error || "Unknown error");
 		ctx.ui.notify("Could not initialize tab backend", "error");
@@ -730,18 +915,15 @@ async function runTabReviewSession(pi: ExtensionAPI, ctx: ExtensionContext, requ
 		return;
 	}
 
-	let tabs: TabctlTab[] = [];
-	try {
-		tabs = await backend.listTabs();
-	} catch (error: any) {
-		const details = String(error?.message || error || "Unknown error");
-		ctx.ui.notify("Could not query open tabs", "error");
-		pi.sendUserMessage(`Tab query failed (${backend.name}):\n${truncateText(details)}`);
-		return;
-	}
+	if (!resolvedTarget) return;
+
+	const { backend, tabs, effectiveProfileName } = resolvedTarget;
 
 	if (!tabs.length) {
-		ctx.ui.notify(`No open tabs found in profile ${requestedProfileName}`, "info");
+		const scope = backend.name.startsWith("tabctl")
+			? `profile ${effectiveProfileName}`
+			: "open Google Chrome windows";
+		ctx.ui.notify(`No open tabs found in ${scope}`, "info");
 		return;
 	}
 
@@ -775,7 +957,7 @@ async function runTabReviewSession(pi: ExtensionAPI, ctx: ExtensionContext, requ
 			}
 
 			try {
-				const note = await upsertTabArchiveNote(decision, tab, requestedProfileName);
+				const note = await upsertTabArchiveNote(decision, tab, effectiveProfileName);
 				touchedNotes.add(note.notePath);
 				if (!note.alreadyPresent) reindexNeeded = true;
 				archived += 1;
@@ -819,7 +1001,7 @@ async function runTabReviewSession(pi: ExtensionAPI, ctx: ExtensionContext, requ
 	}
 
 	const summary = [
-		`Tab review complete for profile "${requestedProfileName}".`,
+		`Tab review complete for profile "${effectiveProfileName}".`,
 		`Backend: ${backend.name}`,
 		`Reviewed: ${reviewed}/${tabs.length}`,
 		`Archived: ${archived}`,
@@ -839,6 +1021,7 @@ async function runTabReviewSession(pi: ExtensionAPI, ctx: ExtensionContext, requ
 async function runTabArchiveDoctor(pi: ExtensionAPI, ctx: ExtensionContext, requestedProfile?: string): Promise<void> {
 	const requestedProfileName = normalizeWhitespace(requestedProfile || "") || DEFAULT_PROFILE_NAME;
 	const diagnostics: string[] = [];
+	let tabctlProfiles: string[] = [];
 
 	try {
 		const tabctlBin = await resolveTabctlBinary(pi);
@@ -848,10 +1031,29 @@ async function runTabArchiveDoctor(pi: ExtensionAPI, ctx: ExtensionContext, requ
 	}
 
 	try {
-		const profiles = await listTabctlProfiles(pi);
-		diagnostics.push(`tabctl profiles: ${profiles.length ? profiles.join(", ") : "(none)"}`);
+		tabctlProfiles = await listTabctlProfiles(pi);
+		diagnostics.push(`tabctl profiles: ${tabctlProfiles.length ? tabctlProfiles.join(", ") : "(none)"}`);
 	} catch (error: any) {
 		diagnostics.push(`tabctl profiles: ERROR - ${String(error?.message || error)}`);
+	}
+
+	if (tabctlProfiles.length) {
+		try {
+			const snapshots = await listOpenTabctlProfileSnapshots(pi, tabctlProfiles);
+			if (snapshots.length) {
+				const rendered = snapshots
+					.map(
+						(snapshot) =>
+							`${snapshot.profileName} (${snapshot.windowCount} ${pluralize(snapshot.windowCount, "window")}, ${snapshot.tabs.length} ${pluralize(snapshot.tabs.length, "tab")})`,
+					)
+					.join("; ");
+				diagnostics.push(`tabctl open profiles: ${rendered}`);
+			} else {
+				diagnostics.push("tabctl open profiles: none with open tabs");
+			}
+		} catch (error: any) {
+			diagnostics.push(`tabctl open profiles: ERROR - ${String(error?.message || error)}`);
+		}
 	}
 
 	try {
@@ -868,7 +1070,16 @@ async function runTabArchiveDoctor(pi: ExtensionAPI, ctx: ExtensionContext, requ
 		diagnostics.push(`appleScript tabs: ERROR - ${String(error?.message || error)}`);
 	}
 
-	diagnostics.push(`chromium user data dir: ${getChromiumUserDataDir()}`);
+	try {
+		const openProfiles = await detectOpenChromeProfileNamesFromProcesses(pi);
+		diagnostics.push(
+			`process-detected open profiles: ${openProfiles.length ? openProfiles.join(", ") : "(none detected)"}`,
+		);
+	} catch (error: any) {
+		diagnostics.push(`process-detected open profiles: ERROR - ${String(error?.message || error)}`);
+	}
+
+	diagnostics.push(`chrome user data dir: ${getChromeUserDataDir()}`);
 	diagnostics.push(`tabctl extension dir: ${getTabctlExtensionDir()}`);
 	diagnostics.push(`obsidian notes dir: ${getObsidianNotesDir()}`);
 
@@ -878,7 +1089,7 @@ async function runTabArchiveDoctor(pi: ExtensionAPI, ctx: ExtensionContext, requ
 
 export default function tabArchiveExtension(pi: ExtensionAPI) {
 	pi.registerCommand("tab-archive:review-tabs", {
-		description: "Review open Chromium tabs one-by-one (archive/delete/keep) using tabctl with AppleScript fallback",
+		description: "Review open Google Chrome tabs one-by-one (prompts for profile when multiple are open)",
 		handler: async (args, ctx) => {
 			await runTabReviewSession(pi, ctx, args);
 		},
@@ -892,7 +1103,7 @@ export default function tabArchiveExtension(pi: ExtensionAPI) {
 	});
 
 	pi.registerCommand("tab-archive:doctor", {
-		description: "Diagnose tabctl + Chromium tab-archive setup",
+		description: "Diagnose tabctl + Google Chrome tab-archive setup",
 		handler: async (args, ctx) => {
 			await runTabArchiveDoctor(pi, ctx, args);
 		},
