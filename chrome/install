@@ -5,22 +5,22 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DOTFILES_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 source "$DOTFILES_DIR/lib/common.sh"
 
-# We intentionally use Chromium "external extensions" manifests instead of
+# We intentionally use Google Chrome "external extensions" manifests instead of
 # managed policy force/recommended installs. Policy-installed extensions
 # cannot be uninstalled by users; external manifests allow uninstall and
-# Chromium will respect that user choice.
-CHROMIUM_USER_DATA_DIR="$HOME/Library/Application Support/Chromium"
+# Chrome will respect that user choice.
+CHROME_USER_DATA_DIR="$HOME/Library/Application Support/Google/Chrome"
 EXTERNAL_EXTENSIONS_SOURCE_DIR="$SCRIPT_DIR/external-extensions"
-EXTERNAL_EXTENSIONS_TARGET_DIR="$CHROMIUM_USER_DATA_DIR/External Extensions"
+EXTERNAL_EXTENSIONS_TARGET_DIR="$CHROME_USER_DATA_DIR/External Extensions"
 
-chromium_app_path() {
-    if [[ -d "/Applications/Chromium.app" ]]; then
-        echo "/Applications/Chromium.app"
+chrome_app_path() {
+    if [[ -d "/Applications/Google Chrome.app" ]]; then
+        echo "/Applications/Google Chrome.app"
         return 0
     fi
 
-    if [[ -d "$HOME/Applications/Chromium.app" ]]; then
-        echo "$HOME/Applications/Chromium.app"
+    if [[ -d "$HOME/Applications/Google Chrome.app" ]]; then
+        echo "$HOME/Applications/Google Chrome.app"
         return 0
     fi
 
@@ -28,7 +28,7 @@ chromium_app_path() {
 }
 
 check_installed() {
-    chromium_app_path &>/dev/null
+    chrome_app_path &>/dev/null
 }
 
 check_configured() {
@@ -52,7 +52,7 @@ check_configured() {
 
 remove_quarantine() {
     local app_path
-    app_path="$(chromium_app_path 2>/dev/null || true)"
+    app_path="$(chrome_app_path 2>/dev/null || true)"
 
     [[ -n "$app_path" ]] || return 0
 
@@ -79,24 +79,24 @@ configure_external_extensions() {
         echo "Linked: $target_file -> $source_file"
     done
 
-    echo "External extension manifests configured. Restart Chromium to apply."
+    echo "External extension manifests configured. Restart Google Chrome to apply."
 }
 
 configure_vertical_tabs_preferences() {
-    local local_state="$CHROMIUM_USER_DATA_DIR/Local State"
+    local local_state="$CHROME_USER_DATA_DIR/Local State"
 
     if [[ ! -f "$local_state" ]]; then
-        echo "Chromium Local State not found, skipping vertical tabs preference sync"
+        echo "Google Chrome Local State not found, skipping vertical tabs preference sync"
         return 0
     fi
 
-    if pgrep -x Chromium &>/dev/null; then
-        echo "Chromium is running, skipping vertical tabs preference sync"
-        echo "Re-run 'dot install chromium' after quitting Chromium to enforce this setting"
+    if pgrep -x "Google Chrome" &>/dev/null; then
+        echo "Google Chrome is running, skipping vertical tabs preference sync"
+        echo "Re-run 'dot install chrome' after quitting Google Chrome to enforce this setting"
         return 0
     fi
 
-    python3 - "$local_state" "$CHROMIUM_USER_DATA_DIR" <<'PY'
+    python3 - "$local_state" "$CHROME_USER_DATA_DIR" <<'PY'
 import json
 import sys
 from pathlib import Path
@@ -112,7 +112,7 @@ except Exception as exc:
 
 info_cache = local_state.get("profile", {}).get("info_cache", {})
 if not isinstance(info_cache, dict) or not info_cache:
-    print("No Chromium profiles found, skipping vertical tabs preference sync")
+    print("No Google Chrome profiles found, skipping vertical tabs preference sync")
     raise SystemExit(0)
 
 updated = 0
@@ -147,23 +147,23 @@ PY
 
 install() {
     if ! is_macos; then
-        echo "Chromium install currently supported on macOS only, skipping"
+        echo "Google Chrome install currently supported on macOS only, skipping"
         return 0
     fi
 
     if check_installed; then
-        echo "Chromium already installed"
+        echo "Google Chrome already installed"
         return 0
     fi
 
     if ! command -v brew &>/dev/null; then
-        echo "Homebrew is required for Chromium on macOS"
-        echo "Install Homebrew first, then run: brew install --cask chromium"
+        echo "Homebrew is required for Google Chrome on macOS"
+        echo "Install Homebrew first, then run: brew install --cask google-chrome"
         return 1
     fi
 
-    echo "Installing Chromium..."
-    brew install --cask chromium
+    echo "Installing Google Chrome..."
+    brew install --cask google-chrome
     remove_quarantine
 }
 
@@ -188,8 +188,8 @@ apply() {
 
 update() {
     if is_macos && command -v brew &>/dev/null; then
-        echo "Updating Chromium via brew..."
-        brew upgrade --cask chromium 2>/dev/null || echo "Chromium already up to date"
+        echo "Updating Google Chrome via brew..."
+        brew upgrade --cask google-chrome 2>/dev/null || echo "Google Chrome already up to date"
         remove_quarantine
         configure_external_extensions
         configure_vertical_tabs_preferences
