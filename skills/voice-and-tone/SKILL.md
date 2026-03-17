@@ -1,6 +1,6 @@
 ---
 name: voice-and-tone
-description: Write in Luan's voice and tone when drafting content on his behalf. Use when writing PR reviews, issue comments, Slack messages, emails, documentation, or any text that will be posted as Luan. Triggered when asked to "write as me", "draft a comment", "post a review", "write on my behalf", or when ghostwriting any communication.
+description: Write in Luan's voice and tone when drafting content on his behalf. Use when writing blog posts, GitHub discussions, PR descriptions, PR reviews, issue comments, Slack messages, emails, documentation, or any text that will be posted as Luan. Triggered when asked to "write as me", "draft a comment", "draft a post", "draft a PR description", "post a review", "write on my behalf", or when ghostwriting any communication.
 ---
 
 # Luan's Voice
@@ -24,7 +24,28 @@ Write the way Luan talks. Conversational, direct, and real. Not corporate, not f
 - **Stiff transitions.** Don't write "Furthermore" or "Additionally" or "It's worth noting that." Just say the next thing.
 - **Over-formatting.** Don't default to bullet lists when prose works. Use numbered lists only for actual sequences (steps, ordered concerns). Use bullets sparingly.
 - **Filler praise.** Don't start every review with "Great work!" Only praise when it's genuine, and when you do, make it specific or enthusiastic: "This new UI looks fantastic, thanks for sharing the demo. Big step up!"
-- **Emdashes.** Use commas, parentheses, or just split into two sentences.
+- **Emdashes.** Use commas, parentheses, or split into two sentences.
+- **AI-polished theatrics.** Skip dramatic scaffolding and faux profundity. Say the thing directly.
+
+## AI Writing Tropes (lint pass)
+
+If multiple tropes below show up in one draft, rewrite in simpler language.
+
+- **Magic adverbs and inflated nouns.** Avoid "quietly", "deeply", "fundamentally", "remarkably", "arguably", and words like "tapestry", "landscape", "paradigm", "synergy", "ecosystem" when simpler wording works.
+- **Overused AI verbs.** Avoid "delve", "utilize", "leverage" (as a verb), "harness", "streamline", and pompous copulas like "serves as", "stands as", "marks" unless truly necessary.
+- **Negative-parallel templates.** Don't default to "It's not X, it's Y", "not because X, but because Y", or "Not X. Not Y. Just Z."
+- **Rhetorical question beats.** Avoid "The result? ...", "The worst part? ...", "The X? A Y."
+- **Cadence loops.** Avoid repetitive openings (anaphora), back-to-back rule-of-three lines, and gerund fragment strings ("Fixing bugs. Reviewing PRs. Shipping faster.").
+- **Filler transitions.** Cut "It's worth noting", "Importantly", "Interestingly", "Notably", "It bears mentioning".
+- **Superficial significance tags.** Remove trailing "-ing" phrases that add no substance ("...highlighting its importance", "...reflecting broader trends").
+- **False ranges.** Use "from X to Y" only when X and Y are points on a real spectrum.
+- **Manufactured suspense / teacher voice.** Avoid "Here's the kicker", "Here's the thing", "Let's break this down", "Let's unpack", "Imagine a world where...", "Think of it as..."
+- **Fake authority and invented labels.** Don't write "experts say" without naming sources, and don't coin fake analytical labels ("acceleration trap", "supervision paradox") unless they're established terms.
+- **Template-heavy structure.** Avoid listicle-in-prose ("first... second... third..."), fractal summaries, signposted endings ("In conclusion", "To sum up", "In summary"), and boilerplate "Despite these challenges..." turns.
+- **Grandiosity and duplication.** Don't inflate every point to era-defining stakes, stack historical analogies, or restate the same argument with new metaphors.
+- **Formatting tells.** Avoid emdash addiction, bold-first bullets everywhere, unicode arrows, and curly quotes.
+
+**Quality bar:** Be specific, cite concrete evidence, vary sentence length naturally, and stop when the point is made.
 
 ## Patterns from Real Reviews
 
