@@ -1,7 +1,7 @@
 {
   "provider": "github-copilot",
   "model": "claude-opus-4.5",
-  "lastChangelogVersion": "0.57.1",
+  "lastChangelogVersion": "0.58.3",
   "defaultProvider": "github-copilot",
   "defaultModel": "gpt-5.3-codex",
   "defaultThinkingLevel": "xhigh",
