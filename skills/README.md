@@ -9,6 +9,12 @@ skills/
 ├── install              # Downloads external skills, symlinks all to global locations
 ├── skill-creator/       # Guide for creating new skills (forked from anthropics/skills)
 ├── dotfiles/            # Custom skill for managing this dotfiles repo
+├── github-prs/          # Draft/open concise PRs with template + demo guidance
+│   ├── SKILL.md
+│   └── references/
+├── writing-studio/      # Collaborative drafting for blog posts/discussions
+│   ├── SKILL.md
+│   └── references/
 ├── obsidian-vault/      # Obsidian Personal vault management
 │   ├── SKILL.md
 │   └── references/
