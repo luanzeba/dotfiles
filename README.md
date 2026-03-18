@@ -102,3 +102,35 @@ dot logs --clear      # Clear error log
 | macOS | `uname == Darwin` | Primary dev machine |
 | Omarchy | `~/.local/share/omarchy` | Arch + Hyprland, uses its own configs |
 | GitHub Codespaces | `$CODESPACES` | Auto-installed on codespace creation |
+
+## Codespaces: Pi auth bootstrap (safe)
+
+`pi/install` can bootstrap `~/.pi/agent/auth.json` from environment secrets so you don't need to run `/login` in every new codespace.
+
+Supported variables (first match wins):
+- `PI_AUTH_JSON_B64` — base64-encoded full `auth.json`
+- `PI_AUTH_JSON` — raw `auth.json` JSON string
+- `PI_GITHUB_COPILOT_REFRESH_TOKEN` — Copilot refresh token only (installer creates minimal OAuth entry)
+
+Behavior:
+- Runs in Codespaces only (unless `PI_AUTH_BOOTSTRAP_ALLOW_LOCAL=1`)
+- Does **not** overwrite existing auth by default (set `PI_AUTH_BOOTSTRAP_FORCE=1` to force)
+- Writes `~/.pi/agent/auth.json` with `0600` permissions
+
+Example: set a user-level Codespaces secret with your Copilot refresh token:
+
+```bash
+REFRESH="$(jq -r '."github-copilot".refresh' ~/.pi/agent/auth.json)"
+gh secret set PI_GITHUB_COPILOT_REFRESH_TOKEN --user --app codespaces --body "$REFRESH"
+unset REFRESH
+```
+
+Alternative: store full auth file (base64) as a secret:
+
+```bash
+AUTH_B64="$(base64 < ~/.pi/agent/auth.json | tr -d '\n')"
+gh secret set PI_AUTH_JSON_B64 --user --app codespaces --body "$AUTH_B64"
+unset AUTH_B64
+```
+
+Never commit `~/.pi/agent/auth.json` or tokens to git.

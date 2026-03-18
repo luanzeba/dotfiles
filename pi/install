@@ -12,6 +12,121 @@ check_configured() {
     [[ -L "$PI_CONFIG_DIR/settings.json" ]]
 }
 
+warn() {
+    echo "Warning: $*" >&2
+}
+
+validate_json_file() {
+    local file="$1"
+
+    if command -v python3 &>/dev/null; then
+        python3 - "$file" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], "r", encoding="utf-8") as f:
+    json.load(f)
+PY
+        return $?
+    fi
+
+    if command -v jq &>/dev/null; then
+        jq -e . "$file" >/dev/null
+        return $?
+    fi
+
+    # No validator available; best effort.
+    return 0
+}
+
+write_copilot_refresh_auth_json() {
+    local output_path="$1"
+    local refresh_token="$2"
+
+    if ! command -v python3 &>/dev/null; then
+        return 1
+    fi
+
+    python3 - "$output_path" "$refresh_token" <<'PY'
+import json
+import sys
+
+path, refresh = sys.argv[1], sys.argv[2]
+payload = {
+    "github-copilot": {
+        "type": "oauth",
+        "refresh": refresh,
+        "access": "",
+        "expires": 0,
+    }
+}
+
+with open(path, "w", encoding="utf-8") as f:
+    json.dump(payload, f, indent=2)
+    f.write("\n")
+PY
+}
+
+bootstrap_auth_from_env() {
+    # Intended for ephemeral machines such as Codespaces.
+    if [[ -z "${CODESPACES:-}" && "${PI_AUTH_BOOTSTRAP_ALLOW_LOCAL:-0}" != "1" ]]; then
+        return 0
+    fi
+
+    local auth_path="$PI_CONFIG_DIR/auth.json"
+    local force="${PI_AUTH_BOOTSTRAP_FORCE:-0}"
+
+    # Avoid clobbering an existing auth file by default.
+    if [[ -f "$auth_path" && "$force" != "1" ]]; then
+        return 0
+    fi
+
+    local tmp
+    tmp="$(mktemp)"
+    local wrote=0
+
+    if [[ -n "${PI_AUTH_JSON_B64:-}" ]]; then
+        if printf '%s' "$PI_AUTH_JSON_B64" | base64 --decode >"$tmp" 2>/dev/null; then
+            wrote=1
+        elif printf '%s' "$PI_AUTH_JSON_B64" | base64 -d >"$tmp" 2>/dev/null; then
+            wrote=1
+        elif printf '%s' "$PI_AUTH_JSON_B64" | base64 -D >"$tmp" 2>/dev/null; then
+            wrote=1
+        else
+            warn "PI_AUTH_JSON_B64 is set but could not be decoded; skipping Pi auth bootstrap."
+            rm -f "$tmp"
+            return 0
+        fi
+    elif [[ -n "${PI_AUTH_JSON:-}" ]]; then
+        printf '%s' "$PI_AUTH_JSON" >"$tmp"
+        wrote=1
+    elif [[ -n "${PI_GITHUB_COPILOT_REFRESH_TOKEN:-}" ]]; then
+        if write_copilot_refresh_auth_json "$tmp" "$PI_GITHUB_COPILOT_REFRESH_TOKEN"; then
+            wrote=1
+        else
+            warn "python3 is required to build auth.json from PI_GITHUB_COPILOT_REFRESH_TOKEN; skipping."
+            rm -f "$tmp"
+            return 0
+        fi
+    fi
+
+    if [[ "$wrote" != "1" ]]; then
+        rm -f "$tmp"
+        return 0
+    fi
+
+    if ! validate_json_file "$tmp"; then
+        warn "Pi auth bootstrap payload is invalid JSON; skipping."
+        rm -f "$tmp"
+        return 0
+    fi
+
+    mkdir -p "$PI_CONFIG_DIR"
+    mv "$tmp" "$auth_path"
+    chmod 600 "$auth_path"
+    echo "Bootstrapped: $auth_path from environment secret"
+}
+
 # Install pi coding agent via npm
 install() {
     if command -v pi &>/dev/null; then
@@ -55,6 +170,8 @@ configure() {
             echo "Linked extension: $PI_CONFIG_DIR/extensions/$name"
         done
     fi
+
+    bootstrap_auth_from_env
 }
 
 update() {
