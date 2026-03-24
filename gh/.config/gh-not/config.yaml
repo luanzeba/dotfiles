@@ -2,7 +2,7 @@ cache:
     path: /Users/luan/.local/state/gh-not/cache.json
     ttl_in_hours: 1
 endpoint:
-    all: true
+    all: false
     max_page: 50
     max_retry: 10
     per_page: 100

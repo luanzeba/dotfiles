@@ -133,7 +133,11 @@ configure() {
     fi
 
     mkdir -p "$HOME/.config"
-    ln -sf "$SCRIPT_DIR/.config/gh-not" "$HOME/.config/gh-not"
+    local gh_not_config="$HOME/.config/gh-not"
+    if [[ -e "$gh_not_config" && ! -L "$gh_not_config" ]]; then
+        mv "$gh_not_config" "$gh_not_config.backup.$(date +%Y%m%d%H%M%S)"
+    fi
+    ln -sfn "$SCRIPT_DIR/.config/gh-not" "$gh_not_config"
 
     if [[ "$(uname -s)" == "Darwin" ]]; then
         mkdir -p "$HOME/Library/LaunchAgents"

@@ -4,8 +4,16 @@
   <dict>
     <key>EnvironmentVariables</key>
     <dict>
+      <key>HOME</key>
+      <string>/Users/luan</string>
       <key>PATH</key>
-      <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:$HOME/.local/bin</string>
+      <string>/Users/luan/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+      <key>GH_CONFIG_DIR</key>
+      <string>/Users/luan/.config/gh</string>
+      <key>XDG_CONFIG_HOME</key>
+      <string>/Users/luan/.config</string>
+      <key>XDG_STATE_HOME</key>
+      <string>/Users/luan/.local/state</string>
     </dict>
 
     <key>Label</key>
