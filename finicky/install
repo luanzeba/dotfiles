@@ -1,0 +1,98 @@
+#!/bin/bash
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+DOTFILES_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+source "$DOTFILES_DIR/lib/common.sh"
+
+FINICKY_CONFIG_SOURCE="$SCRIPT_DIR/config.js"
+FINICKY_CONFIG_TARGET="$HOME/.finicky.js"
+
+finicky_app_path() {
+    if [[ -d "/Applications/Finicky.app" ]]; then
+        echo "/Applications/Finicky.app"
+        return 0
+    fi
+
+    if [[ -d "$HOME/Applications/Finicky.app" ]]; then
+        echo "$HOME/Applications/Finicky.app"
+        return 0
+    fi
+
+    return 1
+}
+
+check_installed() {
+    finicky_app_path &>/dev/null
+}
+
+check_configured() {
+    if ! is_macos; then
+        return 0
+    fi
+
+    [[ -L "$FINICKY_CONFIG_TARGET" ]] || return 1
+    [[ "$(readlink "$FINICKY_CONFIG_TARGET")" == "$FINICKY_CONFIG_SOURCE" ]] || return 1
+
+    return 0
+}
+
+install() {
+    if is_codespaces; then
+        echo "Skipping Finicky install in Codespaces"
+        return 0
+    fi
+
+    if ! is_macos; then
+        echo "Finicky install currently supported on macOS only, skipping"
+        return 0
+    fi
+
+    if check_installed; then
+        echo "Finicky already installed"
+        return 0
+    fi
+
+    if ! command -v brew &>/dev/null; then
+        echo "Homebrew is required to install Finicky"
+        echo "Install Homebrew first, then run: brew install --cask finicky"
+        return 1
+    fi
+
+    echo "Installing Finicky..."
+    brew install --cask finicky
+}
+
+configure() {
+    if is_codespaces; then
+        return 0
+    fi
+
+    if ! is_macos; then
+        return 0
+    fi
+
+    ln -sf "$FINICKY_CONFIG_SOURCE" "$FINICKY_CONFIG_TARGET"
+    echo "Linked: $FINICKY_CONFIG_TARGET -> $FINICKY_CONFIG_SOURCE"
+}
+
+apply() {
+    configure
+}
+
+update() {
+    if is_codespaces || ! is_macos; then
+        return 0
+    fi
+
+    if command -v brew &>/dev/null; then
+        echo "Updating Finicky via brew..."
+        brew upgrade --cask finicky 2>/dev/null || echo "Finicky already up to date"
+    fi
+}
+
+# Main (only run when executed directly, not when sourced)
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    install
+    configure
+fi
