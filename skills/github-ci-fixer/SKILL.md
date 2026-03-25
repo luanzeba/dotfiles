@@ -1,166 +1,127 @@
 ---
 name: github-ci-fixer
-description: Diagnose and fix CI failures on GitHub PRs using the gh CLI. Use when CI checks fail, tests are failing in CI, builds break, linting errors occur, or when asked to investigate PR status. Handles workflow runs, job logs, reproducing failures locally, and making fixes.
+description: Triage and fix GitHub CI failures using gh CLI. Use when PR checks fail, workflows break, or CI-only failures need local reproduction. Focuses on run/log collection and repro setup; pair with systematic-debugging for root-cause analysis.
 ---
 
 # GitHub CI Fixer
 
-Fix CI failures by: fetching status → reading logs → reproducing locally → diagnosing → fixing.
+Scope:
+1. Collect CI failure evidence from GitHub Actions.
+2. Reproduce the failure locally in the closest matching environment.
+3. Verify and re-run checks after the fix.
+
+For deep diagnosis and fix strategy, use `systematic-debugging` after reproduction is ready.
 
 ## Workflow
 
-### Step 1: Get PR CI Status
+### Step 1: Get PR status and failing runs
 
 ```bash
-# Get PR checks status
+# Check statuses on the PR
 gh pr checks <PR_NUMBER> --repo github/github
 
-# Get detailed workflow runs for PR
-gh run list --branch <BRANCH_NAME> --repo github/github --limit 5
+# List recent runs for the branch
+gh run list --branch <BRANCH_NAME> --repo github/github --limit 10
 
-# View specific run details
+# Inspect one run summary
 gh run view <RUN_ID> --repo github/github
 ```
 
-### Step 2: Get Failure Logs
+### Step 2: Pull failed job logs
 
 ```bash
-# View failed job logs
+# Failed jobs only
 gh run view <RUN_ID> --repo github/github --log-failed
 
-# Get specific job logs (if multiple jobs)
+# Specific job logs
 gh run view <RUN_ID> --repo github/github --job <JOB_ID> --log
 ```
 
-### Step 3: Identify Failure Type
+### Step 3: Classify failure type
 
-| Log Pattern | Failure Type | Next Step |
-|------------|--------------|-----------|
-| `Failure:` or `Error:` in test output | Test failure | Step 4a |
-| `rubocop` or `Style/` | Linting error | Step 4b |
-| `srb tc` or `T.let` errors | Sorbet type error | Step 4c |
-| `LoadError` or `NameError` | Missing require/dependency | Check imports |
-| Timeout | Slow test or infinite loop | Check test setup |
+| Log Pattern | Failure Type | Local Repro |
+|------------|--------------|-------------|
+| `Failure:` / `Error:` / assertion diff | Test failure | Step 4a |
+| `rubocop` / `Style/` | Linting | Step 4b |
+| `srb tc` / Sorbet errors | Type checking | Step 4c |
+| Timeout / stuck output | Flake/race/perf | Step 4a + flake loop |
+| `LoadError` / `NameError` | Missing dependency/require | Step 4a + inspect requires |
 
-### Step 4a: Reproduce Test Failures Locally
+### Step 4a: Reproduce tests locally
 
-First, identify the CI environment from the failed job name or logs. Look for `GH_CI_RUNTIME` in the logs — it shows the build pipeline name (e.g., `github-all-features`, `github-enterprise`).
+Find the CI runtime in job logs (`GH_CI_RUNTIME`) and match it locally.
 
 ```bash
-# Run specific test file
+# File
 bin/rails test <path/to/test_file.rb>
 
-# Run specific test by line number (NEVER use -n flag)
+# Specific test line (never use -n)
 bin/rails test <path/to/test_file.rb>:<LINE_NUMBER>
 
-# Run tests for changed files
+# Changed files only
 bin/rails test:changes
 ```
 
-#### Running in Specific Environments
+#### Environment mapping
 
-Match the CI environment when reproducing failures locally:
+| CI Job Pattern | Local Env |
+|---------------|-----------|
+| `github-enterprise*` | `ENTERPRISE=1` |
+| `*multi-tenant*` | `MULTI_TENANT_ENTERPRISE=1` |
+| `github-all-features*` | `TEST_ALL_FEATURES=1` |
+| `*emu*` | `TEST_WITH_ALL_EMUS=1` |
+
+Examples:
 
 ```bash
-# Run in Enterprise mode (for github-enterprise builds)
-ENTERPRISE=1 bin/rails test <path/to/test_file.rb>
-
-# Run in multi-tenancy/EMU mode (for multi-tenant builds)
-MULTI_TENANT_ENTERPRISE=1 bin/rails test <path/to/test_file.rb>
-
-# Run with all features enabled (for github-all-features builds)
-TEST_ALL_FEATURES=1 bin/rails test <path/to/test_file.rb>
-
-# Run with all EMU configurations
-TEST_WITH_ALL_EMUS=1 bin/rails test <path/to/test_file.rb>
+ENTERPRISE=1 bin/rails test <test_file>
+TEST_ALL_FEATURES=1 bin/rails test <test_file>
 ```
 
-#### Environment Variable Reference
-
-| CI Job Pattern | Environment Variable | Description |
-|---------------|---------------------|-------------|
-| `github-enterprise*` | `ENTERPRISE=1` | Enterprise mode |
-| `*multi-tenant*` | `MULTI_TENANT_ENTERPRISE=1` | Multi-tenancy/EMU mode |
-| `github-all-features*` | `TEST_ALL_FEATURES=1` | All features enabled |
-| `*emu*` | `TEST_WITH_ALL_EMUS=1` | All EMU configurations |
-
-For additional environment variables, see [test/test_helpers/test_env.rb](https://github.com/github/github/blob/master/test/test_helpers/test_env.rb).
-
-### Step 4b: Fix Linting Errors
+### Step 4b: Reproduce/fix lint failures
 
 ```bash
-# Auto-fix rubocop issues
 bin/rubocop --autocorrect <file.rb>
-
-# Check ERB linting
 bin/erb_lint <file.erb> --autocorrect
 ```
 
-### Step 4c: Fix Type Errors
+### Step 4c: Reproduce/fix type failures
 
 ```bash
-# Check specific file
 bin/srb tc <file.rb>
-
-# Regenerate RBIs if needed
 bin/tapioca dsl
 ```
 
-### Step 5: Diagnose and Fix
+### Step 5: Diagnose with systematic-debugging
 
-**For test failures:**
-1. Read the failing test to understand expected behavior
-2. Read the source code being tested
-3. Determine if test or source is wrong
-4. **NEVER delete a test just because it fails** — fix the code or update the test appropriately
+Once local repro works, apply `systematic-debugging`:
+- root-cause investigation first
+- one hypothesis at a time
+- one fix at a time
+- verify targeted + regression checks
 
-**For flaky tests:**
-1. Look for timing issues, race conditions, or state leakage
-2. Check for missing `setup`/`teardown` cleanup
-3. Use `gauntlet` to reproduce flakiness by running the test many times with database shuffling:
+For flaky tests, run repeated repro loops and isolate timing/state leaks before changing production code.
 
-```ruby
-# In your test file - wrap the flaky test with gauntlet
-# This creates 100 copies of the test with shuffled DB results
-gauntlet "my potentially flaky test", loops: 100 do
-  # your test code here
-end
-```
-
-Gauntlet options:
-- `loops:` — number of times to run (default: 100)
-- `timeshift:` — seconds to shift time between each loop (default: nil)
-- `shuffle_database_results:` — randomize DB query order to surface flakiness (default: true)
-- `debug_output:` — print DatabaseShuffler debug info (default: false)
-
-**Note:** Remove gauntlet wrappers before merging — they're for local debugging only.
-
-### Step 6: Verify Fix
+### Step 6: Verify before pushing
 
 ```bash
-# Run the specific failing tests
+# Re-run failing tests
 bin/rails test <test_file.rb>
 
-# Run linting
+# Lint/type checks for touched files
 bin/rubocop <changed_files>
-
-# Run type checking
 bin/srb tc <changed_files>
 ```
 
-## Common CI Jobs
+Then confirm CI status remotely:
 
-| Job Name | What It Checks |
-|----------|---------------|
-| `test-*` | Unit/integration tests |
-| `rubocop` | Ruby style/linting |
-| `sorbet` | Type checking |
-| `erb_lint` | ERB template linting |
-| `packwerk` | Package boundary violations |
+```bash
+gh pr checks <PR_NUMBER> --repo github/github
+```
 
-## Critical Rules
+## Critical rules
 
-1. **Never remove tests** that fail — propose removal with clear justification for approval
-2. **Always reproduce locally** before attempting fixes
-3. **Run the exact failing test** to confirm the fix works
-4. **Check if failure is flaky** — may need multiple runs to reproduce
+1. Reproduce locally before proposing fixes.
+2. Do not remove failing tests just to get green CI.
+3. If first fix fails, return to root-cause analysis (don’t stack random fixes).
+4. Keep the final fix minimal and tied to observed evidence.

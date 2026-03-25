@@ -9,6 +9,7 @@ skills/
 ├── install              # Downloads external skills, symlinks all to global locations
 ├── skill-creator/       # Guide for creating new skills (forked from anthropics/skills)
 ├── dotfiles/            # Custom skill for managing this dotfiles repo
+├── systematic-debugging/# Root-cause-first debugging workflow + references/scripts
 ├── github-prs/          # Draft/open concise PRs with template + demo guidance
 │   ├── SKILL.md
 │   └── references/
@@ -47,11 +48,7 @@ skills/my-skill/
 └── references/        # Optional: supporting docs
 ```
 
-Then add to `configure()` in `skills/install`:
-
-```bash
-symlink_skill "$SCRIPT_DIR/my-skill" "my-skill"
-```
+No install script changes are needed for repo-local skills. `skills/install` automatically symlinks every top-level directory under `skills/` (except `external/`).
 
 ### Option 2: Add to private repo
 
