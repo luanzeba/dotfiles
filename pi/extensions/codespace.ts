@@ -33,6 +33,14 @@ type LocalExecResult = {
   stderr: string;
 };
 
+type CodespaceSummary = {
+  name: string;
+  repository: string;
+  state: string;
+  branch: string;
+  lastUsedAt: string;
+};
+
 function quoteForShell(value: string): string {
   if (value.length === 0) return "''";
   return `'${value.replace(/'/g, `'"'"'`)}'`;
@@ -206,6 +214,55 @@ function parseCommandArgs(args: string): string[] {
   const trimmed = args.trim();
   if (!trimmed) return [];
   return trimmed.split(/\s+/);
+}
+
+async function getCurrentCodespaceSelection(pi: ExtensionAPI): Promise<string | undefined> {
+  const result = await runLocalCommand(pi, "gh", ["csd", "get"], { timeoutMs: 10_000 });
+  if (result.code !== 0) {
+    return undefined;
+  }
+
+  const name = result.stdout.trim();
+  return name || undefined;
+}
+
+async function listCodespaces(pi: ExtensionAPI): Promise<CodespaceSummary[]> {
+  const result = await runLocalCommand(
+    pi,
+    "gh",
+    ["cs", "list", "--json", "name,repository,state,gitStatus,lastUsedAt", "--limit", "100"],
+    { timeoutMs: 20_000 }
+  );
+
+  if (result.code !== 0) {
+    throw extractResultError("Listing codespaces", result);
+  }
+
+  const parsed = JSON.parse(result.stdout) as Array<{
+    name?: string;
+    repository?: string;
+    state?: string;
+    lastUsedAt?: string;
+    gitStatus?: { ref?: string };
+  }>;
+
+  return parsed
+    .filter((item) => item.name)
+    .map((item) => ({
+      name: item.name ?? "",
+      repository: item.repository ?? "",
+      state: item.state ?? "",
+      branch: item.gitStatus?.ref ?? "",
+      lastUsedAt: item.lastUsedAt ?? "",
+    }))
+    .sort((a, b) => {
+      if (a.state !== b.state) {
+        if (a.state === "Available") return -1;
+        if (b.state === "Available") return 1;
+      }
+
+      return b.lastUsedAt.localeCompare(a.lastUsedAt);
+    });
 }
 
 function createCodespaceReadOps(pi: ExtensionAPI, state: CodespaceState, localCwd: string): ReadOperations {
@@ -438,22 +495,126 @@ export default function codespaceExtension(pi: ExtensionAPI): void {
     }
   }
 
+  async function showStatus(ctx: ExtensionContext): Promise<void> {
+    const selected = state.codespaceName ?? (await getCurrentCodespaceSelection(pi)) ?? "(none selected)";
+    const message = state.enabled
+      ? `Codespace mode: ON\nCodespace: ${selected}\nRemote cwd: ${state.remoteCwd}`
+      : `Codespace mode: OFF\nSelected codespace: ${selected}`;
+
+    if (ctx.hasUI) {
+      ctx.ui.notify(message, "info");
+    }
+  }
+
+  async function pickExistingCodespace(ctx: ExtensionContext): Promise<void> {
+    if (!ctx.hasUI) return;
+
+    const items = await listCodespaces(pi);
+    if (items.length === 0) {
+      ctx.ui.notify("No codespaces found.", "warning");
+      return;
+    }
+
+    const labels = items.map((item) => {
+      const branch = item.branch ? ` · ${item.branch}` : "";
+      return `${item.name} · ${item.repository} · ${item.state}${branch}`;
+    });
+
+    const selectedLabel = await ctx.ui.select("Pick a codespace", labels);
+    if (!selectedLabel) return;
+
+    const index = labels.indexOf(selectedLabel);
+    if (index < 0) return;
+
+    state.codespaceName = items[index].name;
+    await enableMode(ctx, "command");
+  }
+
+  async function createCodespaceAndConnect(ctx: ExtensionContext): Promise<void> {
+    if (!ctx.hasUI) return;
+
+    const repo = await ctx.ui.input("Create codespace", "Repo alias or owner/repo (example: gh)");
+    if (!repo?.trim()) return;
+
+    ctx.ui.setStatus("codespace-create", ctx.ui.theme.fg("warning", "☁ creating codespace..."));
+    const result = await runLocalCommand(pi, "gh", ["csd", "create", repo.trim(), "--no-ssh", "--no-notify"], {
+      timeoutMs: 1000 * 60 * 20,
+    });
+    ctx.ui.setStatus("codespace-create", undefined);
+
+    if (result.code !== 0) {
+      ctx.ui.notify(extractResultError("Creating codespace", result).message, "error");
+      return;
+    }
+
+    state.codespaceName = await getCurrentCodespaceSelection(pi);
+    await enableMode(ctx, "command");
+  }
+
+  async function runInteractiveCodespaceMenu(ctx: ExtensionContext): Promise<void> {
+    if (!ctx.hasUI) {
+      await showStatus(ctx);
+      return;
+    }
+
+    const current = state.codespaceName ?? (await getCurrentCodespaceSelection(pi)) ?? "none";
+
+    const action = await ctx.ui.select("Codespace", [
+      `Connect to current (${current})`,
+      "Pick existing codespace",
+      "Create new codespace",
+      "Turn codespace mode off",
+      "Show status",
+      "Cancel",
+    ]);
+
+    if (!action || action === "Cancel") return;
+
+    if (action.startsWith("Connect to current")) {
+      state.codespaceName = undefined;
+      await enableMode(ctx, "command");
+      return;
+    }
+
+    if (action === "Pick existing codespace") {
+      await pickExistingCodespace(ctx);
+      return;
+    }
+
+    if (action === "Create new codespace") {
+      await createCodespaceAndConnect(ctx);
+      return;
+    }
+
+    if (action === "Turn codespace mode off") {
+      disableMode(ctx);
+      return;
+    }
+
+    if (action === "Show status") {
+      await showStatus(ctx);
+    }
+  }
+
   pi.registerCommand("codespace", {
-    description: "Manage codespace mode: /codespace [status|on [name] [cwd]|off|use <name>|cwd <path>]",
+    description: "Manage codespace mode. No args opens an interactive menu.",
     handler: async (args, ctx) => {
       const tokens = parseCommandArgs(args);
-      const command = tokens[0] ?? "status";
+      const command = tokens[0];
+
+      if (!command) {
+        await runInteractiveCodespaceMenu(ctx);
+        return;
+      }
 
       if (command === "status") {
-        const current = state.codespaceName ?? "(current via gh csd get)";
-        const message = state.enabled
-          ? `Codespace mode: ON\nCodespace: ${current}\nRemote cwd: ${state.remoteCwd}`
-          : "Codespace mode: OFF";
-        if (ctx.hasUI) ctx.ui.notify(message, "info");
+        await showStatus(ctx);
         return;
       }
 
       if (command === "on") {
+        state.codespaceName = undefined;
+
         if (tokens[1]) {
           if (tokens[1].startsWith("/")) {
             state.remoteCwd = normalizeRemoteCwd(tokens.slice(1).join(" "));
@@ -498,7 +659,7 @@ export default function codespaceExtension(pi: ExtensionAPI): void {
       }
 
       if (ctx.hasUI) {
-        ctx.ui.notify("Unknown subcommand. Use: status | on | off | use | cwd", "warning");
+        ctx.ui.notify("Unknown subcommand. Use: on | off | status | use | cwd", "warning");
       }
     },
   });

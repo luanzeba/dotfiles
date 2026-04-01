@@ -124,9 +124,10 @@ What switches to remote (inside Codespace):
 Everything else stays local.
 
 Useful in-session commands:
-- `/codespace status`
+- `/codespace` (interactive menu: connect current, pick existing, or create new)
 - `/codespace on [name] [cwd]`
 - `/codespace off`
+- `/codespace status`
 - `/codespace use <name>`
 - `/codespace cwd <path>`
 
