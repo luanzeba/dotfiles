@@ -19,6 +19,7 @@ skills/
 │   ├── SKILL.md
 │   └── references/
 └── external/            # Downloaded/cloned skills (gitignored)
+    ├── pi-skills/       # From badlogic/pi-skills (gccli skill)
     ├── playwright-skill/# From lackeyjb/playwright-skill
     └── private/         # From luanzeba/private-dotfiles repo
 ```
@@ -27,8 +28,9 @@ skills/
 
 The `install` script:
 1. Downloads `playwright-skill` from [lackeyjb/playwright-skill](https://github.com/lackeyjb/playwright-skill) and runs setup
-2. Clones private skills from a private repo (if accessible)
-3. Symlinks all skills to global locations:
+2. Clones [badlogic/pi-skills](https://github.com/badlogic/pi-skills) and links the `gccli` skill on local machines (skipped in Codespaces)
+3. Clones private skills from a private repo (if accessible)
+4. Symlinks all skills to global locations:
    - `~/.config/opencode/skill/<name>` (OpenCode)
    - `~/.claude/skills/<name>` (Claude Code)
    - `~/.pi/agent/skills/<name>` (Pi)
@@ -101,3 +103,5 @@ They're complementary:
 ### Codespaces Note
 
 In Codespaces, Playwright must run headless (no display available). The `HEADLESS=true` env var is automatically set in `.zshrc` when `$CODESPACES` is detected. When using the playwright-skill, Claude should use `headless: true` or the `helpers.launchBrowser()` function which respects this env var.
+
+`gccli` from badlogic/pi-skills is intentionally linked only on local machines (macOS/Arch), not in Codespaces.

@@ -1,0 +1,94 @@
+#!/bin/bash
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+DOTFILES_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+source "$DOTFILES_DIR/lib/common.sh"
+
+FNM_DIR="$HOME/.local/share/fnm"
+GCCLI_PACKAGE="@mariozechner/gccli"
+
+check_installed() {
+    if is_codespaces; then
+        return 0
+    fi
+
+    command -v gccli &>/dev/null
+}
+
+check_configured() {
+    # gccli has no dotfile symlinks; if the binary exists, it's configured.
+    check_installed
+}
+
+ensure_npm() {
+    if command -v npm &>/dev/null; then
+        return 0
+    fi
+
+    if [[ -x "$FNM_DIR/fnm" ]]; then
+        export PATH="$FNM_DIR:$PATH"
+        eval "$("$FNM_DIR/fnm" env)" 2>/dev/null || true
+    fi
+
+    command -v npm &>/dev/null
+}
+
+install() {
+    if is_codespaces; then
+        echo "Skipping gccli install in Codespaces"
+        return 0
+    fi
+
+    if ! ensure_npm; then
+        echo "npm not found. Run node/install first."
+        return 1
+    fi
+
+    if command -v gccli &>/dev/null; then
+        echo "gccli already installed"
+        return 0
+    fi
+
+    echo "Installing gccli..."
+    npm install -g "$GCCLI_PACKAGE"
+}
+
+configure() {
+    if is_codespaces; then
+        return 0
+    fi
+
+    mkdir -p "$HOME/.gccli"
+    chmod 700 "$HOME/.gccli" 2>/dev/null || true
+
+    # gccli stores OAuth secrets here; tighten file permissions when present.
+    for auth_file in credentials.json accounts.json; do
+        if [[ -f "$HOME/.gccli/$auth_file" ]]; then
+            chmod 600 "$HOME/.gccli/$auth_file" 2>/dev/null || true
+        fi
+    done
+
+    echo "gccli auth files live in ~/.gccli/ (credentials.json + accounts.json)"
+}
+
+update() {
+    if is_codespaces; then
+        echo "Skipping gccli update in Codespaces"
+        return 0
+    fi
+
+    if ! ensure_npm; then
+        echo "npm not found, cannot update gccli"
+        return 1
+    fi
+
+    echo "Updating gccli..."
+    npm update -g "$GCCLI_PACKAGE"
+}
+
+# Main (only run when executed directly, not when sourced)
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    install
+    configure
+fi

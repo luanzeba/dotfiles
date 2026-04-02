@@ -5,14 +5,20 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 EXTERNAL_DIR="$SCRIPT_DIR/external"
 SKILL_CREATOR_DIR="$EXTERNAL_DIR/skill-creator"
 PLAYWRIGHT_SKILL_DIR="$EXTERNAL_DIR/playwright-skill"
+PI_SKILLS_DIR="$EXTERNAL_DIR/pi-skills"
+PI_SKILLS_REPO="https://github.com/badlogic/pi-skills"
 PRIVATE_DIR="$EXTERNAL_DIR/private"
 PRIVATE_REPO="luanzeba/private-dotfiles"
 
 check_installed() {
-    # Check if external skills have been downloaded
-    # Built-in skills are always present, but external ones need fetching
-    # Note: skill-creator is now maintained locally in skills/skill-creator/
-    [[ -d "$PLAYWRIGHT_SKILL_DIR" ]]
+    # Check if external skills have been downloaded.
+    # Local machines require both playwright-skill and badlogic/pi-skills (gccli).
+    # Codespaces intentionally skip badlogic/pi-skills.
+    if [[ -n "${CODESPACES:-}" ]]; then
+        [[ -d "$PLAYWRIGHT_SKILL_DIR" ]]
+    else
+        [[ -d "$PLAYWRIGHT_SKILL_DIR" && -d "$PI_SKILLS_DIR/gccli" ]]
+    fi
 }
 
 check_configured() {
@@ -90,6 +96,32 @@ download_playwright_skill() {
     return 0
 }
 
+# Clone or update badlogic/pi-skills (used for gccli skill)
+# Local-only: skipped in Codespaces.
+download_pi_skills() {
+    if [[ -n "${CODESPACES:-}" ]]; then
+        echo "Skipping badlogic/pi-skills in Codespaces"
+        return 0
+    fi
+
+    echo "Fetching gccli skill from $PI_SKILLS_REPO..."
+
+    if [[ -d "$PI_SKILLS_DIR/.git" ]]; then
+        if ! git -C "$PI_SKILLS_DIR" pull --ff-only 2>/dev/null; then
+            echo "WARNING: Failed to update badlogic/pi-skills (may have local changes)"
+            return 1
+        fi
+    else
+        if ! git clone --depth 1 "$PI_SKILLS_REPO" "$PI_SKILLS_DIR" 2>/dev/null; then
+            echo "WARNING: Failed to clone badlogic/pi-skills"
+            return 1
+        fi
+    fi
+
+    echo "pi-skills fetched successfully."
+    return 0
+}
+
 # Clone or update private-dotfiles repo (contains sensitive skills like copilot-policy-queries)
 # This will fail gracefully in Codespaces due to GITHUB_TOKEN scope limitations
 download_private_skills() {
@@ -131,6 +163,7 @@ download_private_skills() {
 # Note: skill-creator is now maintained locally in skills/skill-creator/
 install() {
     download_playwright_skill || echo "Continuing without playwright-skill..."
+    download_pi_skills || echo "Continuing without gccli skill..."
     download_private_skills || echo "Continuing without private skills..."
 }
 
@@ -184,6 +217,11 @@ configure() {
     # Link playwright-skill (nested structure from plugin format)
     if [[ -d "$PLAYWRIGHT_SKILL_DIR/skills/playwright-skill" ]]; then
         symlink_skill "$PLAYWRIGHT_SKILL_DIR/skills/playwright-skill" "playwright-skill"
+    fi
+
+    # Link gccli skill from badlogic/pi-skills on local machines only
+    if [[ -z "${CODESPACES:-}" && -d "$PI_SKILLS_DIR/gccli" ]]; then
+        symlink_skill "$PI_SKILLS_DIR/gccli" "gccli"
     fi
 
     # Link private skills (each skill in private repo's skills/ directory)
