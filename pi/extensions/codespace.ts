@@ -24,6 +24,7 @@ const IMAGE_MIME_TYPES = new Set(["image/jpeg", "image/png", "image/gif", "image
 type CodespaceState = {
   enabled: boolean;
   codespaceName?: string;
+  currentCodespaceName?: string;
   remoteCwd: string;
 };
 
@@ -106,8 +107,9 @@ async function runLocalCommand(
 function buildCsdExecArgs(state: CodespaceState, options?: { cwd?: string; startTimeoutSeconds?: number }): string[] {
   const args = ["csd", "exec"];
 
-  if (state.codespaceName) {
-    args.push("-c", state.codespaceName);
+  const pinnedCodespaceName = state.codespaceName ?? state.currentCodespaceName;
+  if (pinnedCodespaceName) {
+    args.push("-c", pinnedCodespaceName);
   }
 
   if (options?.cwd) {
@@ -132,8 +134,9 @@ async function runRemoteShell(
 }
 
 async function resolveCodespaceName(pi: ExtensionAPI, state: CodespaceState): Promise<string> {
-  if (state.codespaceName) {
-    return state.codespaceName;
+  const pinnedCodespaceName = state.codespaceName ?? state.currentCodespaceName;
+  if (pinnedCodespaceName) {
+    return pinnedCodespaceName;
   }
 
   const result = await runLocalCommand(pi, "gh", ["csd", "get"], { timeoutMs: 10_000 });
@@ -146,6 +149,7 @@ async function resolveCodespaceName(pi: ExtensionAPI, state: CodespaceState): Pr
     throw new Error("No codespace selected. Use `gh csd select` or `/codespace on <name>`.");
   }
 
+  state.currentCodespaceName = name;
   return name;
 }
 
@@ -198,6 +202,10 @@ async function verifyCodespaceConnection(
   return { ok: true };
 }
 
+function getDisplayCodespaceName(state: CodespaceState): string {
+  return state.codespaceName ?? state.currentCodespaceName ?? "(current)";
+}
+
 function setStatus(ctx: ExtensionContext, state: CodespaceState): void {
   if (!ctx.hasUI) return;
 
@@ -206,7 +214,7 @@ function setStatus(ctx: ExtensionContext, state: CodespaceState): void {
     return;
   }
 
-  const name = state.codespaceName ?? "(current)";
+  const name = getDisplayCodespaceName(state);
   ctx.ui.setStatus(STATUS_KEY, ctx.ui.theme.fg("accent", `☁ ${name}:${state.remoteCwd}`));
 }
 
@@ -224,6 +232,10 @@ async function getCurrentCodespaceSelection(pi: ExtensionAPI): Promise<string | 
 
   const name = result.stdout.trim();
   return name || undefined;
+}
+
+async function refreshCurrentCodespaceName(pi: ExtensionAPI, state: CodespaceState): Promise<void> {
+  state.currentCodespaceName = await resolveCodespaceName(pi, state);
 }
 
 async function listCodespaces(pi: ExtensionAPI): Promise<CodespaceSummary[]> {
@@ -444,6 +456,7 @@ export default function codespaceExtension(pi: ExtensionAPI): void {
   const state: CodespaceState = {
     enabled: false,
     codespaceName: undefined,
+    currentCodespaceName: undefined,
     remoteCwd: DEFAULT_REMOTE_CWD,
   };
 
@@ -466,6 +479,21 @@ export default function codespaceExtension(pi: ExtensionAPI): void {
 
   async function enableMode(ctx: ExtensionContext, source: "flag" | "command"): Promise<boolean> {
     state.enabled = true;
+
+    try {
+      await refreshCurrentCodespaceName(pi, state);
+    } catch (error) {
+      state.enabled = false;
+      setStatus(ctx, state);
+
+      if (ctx.hasUI) {
+        const message = error instanceof Error ? error.message : String(error);
+        ctx.ui.notify(`Codespace mode failed (${source}): ${message}`, "error");
+      }
+
+      return false;
+    }
+
     setStatus(ctx, state);
 
     if (!ctx.hasUI) return true;
@@ -481,7 +509,7 @@ export default function codespaceExtension(pi: ExtensionAPI): void {
       return false;
     }
 
-    const label = state.codespaceName ?? "current";
+    const label = getDisplayCodespaceName(state);
     ctx.ui.notify(`Codespace mode enabled (${label})`, "info");
     setStatus(ctx, state);
     return true;
@@ -496,7 +524,9 @@ export default function codespaceExtension(pi: ExtensionAPI): void {
   }
 
   async function showStatus(ctx: ExtensionContext): Promise<void> {
-    const selected = state.codespaceName ?? (await getCurrentCodespaceSelection(pi)) ?? "(none selected)";
+    const selected = state.enabled
+      ? getDisplayCodespaceName(state)
+      : state.codespaceName ?? state.currentCodespaceName ?? (await getCurrentCodespaceSelection(pi)) ?? "(none selected)";
     const message = state.enabled
       ? `Codespace mode: ON\nCodespace: ${selected}\nRemote cwd: ${state.remoteCwd}`
       : `Codespace mode: OFF\nSelected codespace: ${selected}`;
@@ -527,6 +557,7 @@ export default function codespaceExtension(pi: ExtensionAPI): void {
     if (index < 0) return;
 
     state.codespaceName = items[index].name;
+    state.currentCodespaceName = items[index].name;
     await enableMode(ctx, "command");
   }
 
@@ -548,6 +579,7 @@ export default function codespaceExtension(pi: ExtensionAPI): void {
     }
 
     state.codespaceName = await getCurrentCodespaceSelection(pi);
+    state.currentCodespaceName = state.codespaceName;
     await enableMode(ctx, "command");
   }
 
@@ -572,6 +604,7 @@ export default function codespaceExtension(pi: ExtensionAPI): void {
 
     if (action.startsWith("Connect to current")) {
       state.codespaceName = undefined;
+      state.currentCodespaceName = undefined;
       await enableMode(ctx, "command");
       return;
     }
@@ -614,12 +647,14 @@ export default function codespaceExtension(pi: ExtensionAPI): void {
 
       if (command === "on") {
         state.codespaceName = undefined;
+        state.currentCodespaceName = undefined;
 
         if (tokens[1]) {
           if (tokens[1].startsWith("/")) {
             state.remoteCwd = normalizeRemoteCwd(tokens.slice(1).join(" "));
           } else {
             state.codespaceName = tokens[1];
+            state.currentCodespaceName = tokens[1];
             if (tokens[2]) {
               state.remoteCwd = normalizeRemoteCwd(tokens.slice(2).join(" "));
             }
@@ -641,6 +676,7 @@ export default function codespaceExtension(pi: ExtensionAPI): void {
           return;
         }
         state.codespaceName = tokens[1];
+        state.currentCodespaceName = tokens[1];
         setStatus(ctx, state);
         if (ctx.hasUI) ctx.ui.notify(`Codespace target set to ${state.codespaceName}`, "info");
         return;
@@ -704,7 +740,8 @@ export default function codespaceExtension(pi: ExtensionAPI): void {
   pi.on("before_agent_start", async (event) => {
     if (!state.enabled) return;
 
-    const codespaceLabel = state.codespaceName ? `codespace ${state.codespaceName}` : "current selected codespace";
+    const codespaceName = getDisplayCodespaceName(state);
+    const codespaceLabel = codespaceName === "(current)" ? "current selected codespace" : `codespace ${codespaceName}`;
     const replacement = `Current working directory: ${state.remoteCwd} (via ${codespaceLabel})`;
 
     if (event.systemPrompt.includes(`Current working directory: ${localCwd}`)) {

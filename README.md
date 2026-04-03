@@ -123,12 +123,18 @@ What switches to remote (inside Codespace):
 
 Everything else stays local.
 
+Session behavior (important):
+- Codespace target is **pinned per Pi session**.
+- `pi --codespace` or `/codespace on` (without a name) resolves the current `gh csd` selection once, then keeps using that codespace.
+- Changing `gh csd select` in another terminal will **not** retarget an already-running Pi session.
+- Switch intentionally with `/codespace on <name>` or `/codespace use <name>`.
+
 Useful in-session commands:
 - `/codespace` (interactive menu: connect current, pick existing, or create new)
-- `/codespace on [name] [cwd]`
+- `/codespace on [name] [cwd]` (enable and pin target; no name = pin current selection)
 - `/codespace off`
 - `/codespace status`
-- `/codespace use <name>`
+- `/codespace use <name>` (retarget current Pi session)
 - `/codespace cwd <path>`
 
 If Pi says `gh csd exec` is unavailable, update `gh-csd` first.
