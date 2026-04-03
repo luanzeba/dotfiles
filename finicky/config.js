@@ -27,5 +27,13 @@ export default {
         profile: "Home",
       },
     },
+    {
+      // TravelJoy should always open in the Home Chrome profile.
+      match: /^https:\/\/(?:www\.)?traveljoy\.com(?:[/?#]|$)/,
+      browser: {
+        name: "Google Chrome",
+        profile: "Home",
+      },
+    },
   ],
 };
