@@ -18,6 +18,7 @@ const DEFAULT_REMOTE_CWD = "/workspaces/github";
 const STATUS_KEY = "codespace-mode";
 const VERIFY_TOKEN = "__PI_CODESPACE_OK__";
 const VERIFY_START_TIMEOUT_SECONDS = 180;
+const MANUAL_REPO_OPTION_LABEL = "Enter owner/repo manually";
 
 const IMAGE_MIME_TYPES = new Set(["image/jpeg", "image/png", "image/gif", "image/webp"]);
 
@@ -39,7 +40,13 @@ type CodespaceSummary = {
   repository: string;
   state: string;
   branch: string;
+  createdAt: string;
   lastUsedAt: string;
+};
+
+type ConfiguredRepo = {
+  repo: string;
+  alias?: string;
 };
 
 function quoteForShell(value: string): string {
@@ -238,11 +245,115 @@ async function refreshCurrentCodespaceName(pi: ExtensionAPI, state: CodespaceSta
   state.currentCodespaceName = await resolveCodespaceName(pi, state);
 }
 
+function cleanYamlScalar(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+
+  const quotedWithSingle = trimmed.startsWith("'") && trimmed.endsWith("'") && trimmed.length >= 2;
+  const quotedWithDouble = trimmed.startsWith('"') && trimmed.endsWith('"') && trimmed.length >= 2;
+  if (quotedWithSingle || quotedWithDouble) {
+    return trimmed.slice(1, -1).trim();
+  }
+
+  return trimmed.replace(/\s+#.*$/, "").trim();
+}
+
+function parseConfiguredReposFromCsdConfigOutput(configOutput: string): ConfiguredRepo[] {
+  const lines = configOutput.replace(/\t/g, "  ").split(/\r?\n/);
+  const repos: ConfiguredRepo[] = [];
+
+  let inReposSection = false;
+  let currentRepo: ConfiguredRepo | undefined;
+
+  for (const line of lines) {
+    if (!inReposSection) {
+      if (/^\s*repos:\s*$/.test(line)) {
+        inReposSection = true;
+      }
+      continue;
+    }
+
+    if (/^\S/.test(line)) {
+      break;
+    }
+
+    const repoMatch = line.match(/^\s{2}(.+?):\s*$/);
+    if (repoMatch) {
+      if (currentRepo?.repo) repos.push(currentRepo);
+      const repo = cleanYamlScalar(repoMatch[1]);
+      currentRepo = repo ? { repo } : undefined;
+      continue;
+    }
+
+    const aliasMatch = line.match(/^\s{4}alias:\s*(.*?)\s*$/);
+    if (aliasMatch && currentRepo) {
+      const alias = cleanYamlScalar(aliasMatch[1]);
+      if (alias) {
+        currentRepo.alias = alias;
+      }
+    }
+  }
+
+  if (currentRepo?.repo) repos.push(currentRepo);
+
+  return repos
+    .filter((item) => item.repo.includes("/"))
+    .sort((a, b) => a.repo.localeCompare(b.repo));
+}
+
+async function listConfiguredRepos(pi: ExtensionAPI): Promise<ConfiguredRepo[]> {
+  const result = await runLocalCommand(pi, "gh", ["csd", "config"], { timeoutMs: 20_000 });
+  if (result.code !== 0) {
+    throw extractResultError("Loading gh csd config", result);
+  }
+
+  return parseConfiguredReposFromCsdConfigOutput(result.stdout);
+}
+
+function normalizeManualRepoInput(value: string): string | undefined {
+  let repo = value.trim();
+  if (!repo) return undefined;
+
+  repo = repo.replace(/^https?:\/\/github\.com\//i, "");
+  repo = repo.replace(/\.git$/i, "");
+  repo = repo.replace(/^\/+|\/+$/g, "");
+
+  const parts = repo.split("/");
+  if (parts.length !== 2 || !parts[0] || !parts[1]) {
+    return undefined;
+  }
+
+  return `${parts[0]}/${parts[1]}`;
+}
+
+function formatConfiguredRepoOption(repo: ConfiguredRepo): string {
+  if (repo.alias?.trim()) {
+    return `${repo.alias.trim()} · ${repo.repo}`;
+  }
+  return repo.repo;
+}
+
+function formatIsoDate(value: string): string {
+  if (!value) return "unknown";
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return value;
+  const year = parsed.getFullYear();
+  const month = String(parsed.getMonth() + 1).padStart(2, "0");
+  const day = String(parsed.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function formatCodespaceForMenu(item: CodespaceSummary): string {
+  const branch = item.branch || "-";
+  const createdAt = formatIsoDate(item.createdAt);
+  return `${item.name} · ${item.repository} · ${branch} · created ${createdAt}`;
+}
+
 async function listCodespaces(pi: ExtensionAPI): Promise<CodespaceSummary[]> {
   const result = await runLocalCommand(
     pi,
     "gh",
-    ["cs", "list", "--json", "name,repository,state,gitStatus,lastUsedAt", "--limit", "100"],
+    ["cs", "list", "--json", "name,repository,state,gitStatus,createdAt,lastUsedAt", "--limit", "100"],
     { timeoutMs: 20_000 }
   );
 
@@ -254,6 +365,7 @@ async function listCodespaces(pi: ExtensionAPI): Promise<CodespaceSummary[]> {
     name?: string;
     repository?: string;
     state?: string;
+    createdAt?: string;
     lastUsedAt?: string;
     gitStatus?: { ref?: string };
   }>;
@@ -265,6 +377,7 @@ async function listCodespaces(pi: ExtensionAPI): Promise<CodespaceSummary[]> {
       repository: item.repository ?? "",
       state: item.state ?? "",
       branch: item.gitStatus?.ref ?? "",
+      createdAt: item.createdAt ?? "",
       lastUsedAt: item.lastUsedAt ?? "",
     }))
     .sort((a, b) => {
@@ -564,11 +677,45 @@ export default function codespaceExtension(pi: ExtensionAPI): void {
   async function createCodespaceAndConnect(ctx: ExtensionContext): Promise<void> {
     if (!ctx.hasUI) return;
 
-    const repo = await ctx.ui.input("Create codespace", "Repo alias or owner/repo (example: gh)");
-    if (!repo?.trim()) return;
+    let configuredRepos: ConfiguredRepo[] = [];
+    try {
+      configuredRepos = await listConfiguredRepos(pi);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      ctx.ui.notify(`Could not load gh csd repo config (${message}). You can still enter owner/repo manually.`, "warning");
+    }
 
-    ctx.ui.setStatus("codespace-create", ctx.ui.theme.fg("warning", "☁ creating codespace..."));
-    const result = await runLocalCommand(pi, "gh", ["csd", "create", repo.trim(), "--no-ssh", "--no-notify"], {
+    const labels = configuredRepos.map(formatConfiguredRepoOption);
+    labels.push(MANUAL_REPO_OPTION_LABEL);
+
+    const selectedLabel = await ctx.ui.select("Create codespace", labels);
+    if (!selectedLabel) return;
+
+    let repo: string | undefined;
+
+    if (selectedLabel === MANUAL_REPO_OPTION_LABEL) {
+      while (true) {
+        const manualInput = await ctx.ui.input("Enter owner/repo", "e.g. luanzeba/dotfiles");
+        if (!manualInput?.trim()) return;
+
+        const normalized = normalizeManualRepoInput(manualInput);
+        if (normalized) {
+          repo = normalized;
+          break;
+        }
+
+        ctx.ui.notify("Invalid repository. Please enter it as owner/repo (for example: luanzeba/dotfiles).", "warning");
+      }
+    } else {
+      const index = labels.indexOf(selectedLabel);
+      if (index < 0 || index >= configuredRepos.length) return;
+      repo = configuredRepos[index].repo;
+    }
+
+    if (!repo) return;
+
+    ctx.ui.setStatus("codespace-create", ctx.ui.theme.fg("warning", `☁ creating codespace for ${repo}...`));
+    const result = await runLocalCommand(pi, "gh", ["csd", "create", repo, "--no-ssh", "--no-notify"], {
       timeoutMs: 1000 * 60 * 20,
     });
     ctx.ui.setStatus("codespace-create", undefined);
@@ -589,10 +736,26 @@ export default function codespaceExtension(pi: ExtensionAPI): void {
       return;
     }
 
-    const current = state.codespaceName ?? (await getCurrentCodespaceSelection(pi)) ?? "none";
+    const currentName = state.codespaceName ?? (await getCurrentCodespaceSelection(pi));
+    let currentLabel = "none selected";
+
+    if (currentName) {
+      currentLabel = currentName;
+      try {
+        const codespaces = await listCodespaces(pi);
+        const currentDetails = codespaces.find((item) => item.name === currentName);
+        if (currentDetails) {
+          currentLabel = formatCodespaceForMenu(currentDetails);
+        }
+      } catch {
+        // Best-effort only; keep the name fallback.
+      }
+    }
+
+    const connectCurrentOptionLabel = `Connect to current (${currentLabel})`;
 
     const action = await ctx.ui.select("Codespace", [
-      `Connect to current (${current})`,
+      connectCurrentOptionLabel,
       "Pick existing codespace",
       "Create new codespace",
       "Turn codespace mode off",
@@ -602,7 +765,7 @@ export default function codespaceExtension(pi: ExtensionAPI): void {
 
     if (!action || action === "Cancel") return;
 
-    if (action.startsWith("Connect to current")) {
+    if (action === connectCurrentOptionLabel || action.startsWith("Connect to current")) {
       state.codespaceName = undefined;
       state.currentCodespaceName = undefined;
       await enableMode(ctx, "command");
