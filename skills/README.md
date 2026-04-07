@@ -12,6 +12,9 @@ skills/
 ├── github-prs/          # Draft/open concise PRs with template + demo guidance
 │   ├── SKILL.md
 │   └── references/
+├── feature-flag-removal/# Remove fully rolled-out flag conditionals from github/github
+│   ├── SKILL.md
+│   └── references/
 ├── writing-studio/      # Collaborative drafting for blog posts/discussions
 │   ├── SKILL.md
 │   └── references/
