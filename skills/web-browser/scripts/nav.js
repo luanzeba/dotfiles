@@ -5,14 +5,30 @@ import { connect } from "./cdp.js";
 const DEBUG = process.env.DEBUG === "1";
 const log = DEBUG ? (...args) => console.error("[debug]", ...args) : () => {};
 
-const url = process.argv[2];
-const newTab = process.argv[3] === "--new";
+const args = process.argv.slice(2);
+const url = args.find((arg) => !arg.startsWith("--"));
+const flags = new Set(args.filter((arg) => arg.startsWith("--")));
+const newTab = flags.has("--new") || flags.has("--new-window");
+const newWindow = flags.has("--new-window");
+const validFlags = new Set(["--new", "--new-window"]);
+
+for (const flag of flags) {
+  if (!validFlags.has(flag)) {
+    console.log("Usage: nav.js <url> [--new] [--new-window]");
+    console.log("\nExamples:");
+    console.log("  nav.js https://example.com                    # Navigate current tab");
+    console.log("  nav.js https://example.com --new              # Open in new tab");
+    console.log("  nav.js https://example.com --new-window       # Open in isolated window");
+    process.exit(1);
+  }
+}
 
 if (!url) {
-  console.log("Usage: nav.js <url> [--new]");
+  console.log("Usage: nav.js <url> [--new] [--new-window]");
   console.log("\nExamples:");
-  console.log("  nav.js https://example.com       # Navigate current tab");
-  console.log("  nav.js https://example.com --new # Open in new tab");
+  console.log("  nav.js https://example.com                    # Navigate current tab");
+  console.log("  nav.js https://example.com --new              # Open in new tab");
+  console.log("  nav.js https://example.com --new-window       # Open in isolated window");
   process.exit(1);
 }
 
@@ -30,9 +46,10 @@ try {
   let targetId;
 
   if (newTab) {
-    log("creating new tab...");
+    log(newWindow ? "creating new window..." : "creating new tab...");
     const { targetId: newTargetId } = await cdp.send("Target.createTarget", {
       url: "about:blank",
+      ...(newWindow ? { newWindow: true } : {}),
     });
     targetId = newTargetId;
   } else {
@@ -51,7 +68,11 @@ try {
   log("navigating...");
   await cdp.navigate(sessionId, url);
 
-  console.log(newTab ? "✓ Opened:" : "✓ Navigated to:", url);
+  if (newWindow) {
+    console.log("✓ Opened in new window:", url);
+  } else {
+    console.log(newTab ? "✓ Opened:" : "✓ Navigated to:", url);
+  }
 
   log("closing...");
   cdp.close();

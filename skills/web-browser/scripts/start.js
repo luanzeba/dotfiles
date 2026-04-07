@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { spawn, execSync } from "node:child_process";
-import { readFileSync, writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync, rmSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -43,15 +43,46 @@ if (await isDebugEndpointUp()) {
 
 const scrapingDir = `${process.env["HOME"]}/.cache/scraping`;
 
+function clearSingletonLocks(userDataDir) {
+  for (const name of ["SingletonLock", "SingletonCookie", "SingletonSocket"]) {
+    try {
+      rmSync(join(userDataDir, name), { force: true });
+    } catch {
+      // Best effort only
+    }
+  }
+}
+
 // Setup profile directory
 execSync(`mkdir -p ${scrapingDir}`, { stdio: "ignore" });
 
 if (useProfile) {
-  // Sync profile with rsync (much faster on subsequent runs)
-  execSync(
-    `rsync -a --delete "${process.env["HOME"]}/Library/Application Support/Google/Chrome/" ${scrapingDir}/`,
-    { stdio: "pipe" },
-  );
+  // Sync profile with rsync (much faster on subsequent runs).
+  // Exclude highly volatile files that frequently disappear mid-copy.
+  const rsyncCmd = [
+    "rsync -a --delete",
+    "--exclude='*/Sessions/*'",
+    "--exclude='*/Session Storage/*'",
+    "--exclude='*/Code Cache/*'",
+    "--exclude='*/GPUCache/*'",
+    "--exclude='*/DawnCache/*'",
+    "--exclude='Crashpad/*'",
+    `"${process.env["HOME"]}/Library/Application Support/Google/Chrome/"`,
+    `"${scrapingDir}/"`,
+  ].join(" ");
+
+  try {
+    execSync(rsyncCmd, { stdio: "pipe" });
+  } catch (error) {
+    // rsync 23/24 are usually transient "vanished file" races from live profiles.
+    if (error?.status === 23 || error?.status === 24) {
+      console.warn(
+        `⚠ rsync exited with code ${error.status} (transient profile file changes). Continuing...`,
+      );
+    } else {
+      throw error;
+    }
+  }
 
   // Patch preferences to prevent session restore and New Tab on startup.
   // This stops the copied profile from opening tabs from the last session.
@@ -72,6 +103,9 @@ if (useProfile) {
     // If we can't patch prefs, continue anyway
   }
 }
+
+// Clean stale singleton files that can block Chrome startup with copied profiles.
+clearSingletonLocks(scrapingDir);
 
 // Build Chrome args
 const chromeArgs = [
@@ -107,7 +141,7 @@ if (useHeadless) {
 
 // Wait for Chrome to be ready by checking the debugging endpoint
 let connected = false;
-for (let i = 0; i < 30; i++) {
+for (let i = 0; i < 60; i++) {
   try {
     const response = await fetch("http://localhost:9222/json/version");
     if (response.ok) {
@@ -120,7 +154,8 @@ for (let i = 0; i < 30; i++) {
 }
 
 if (!connected) {
-  console.error("✗ Failed to connect to Chrome");
+  console.error("✗ Failed to connect to Chrome on :9222");
+  console.error("  Tip: remove stale locks in ~/.cache/scraping and retry.");
   process.exit(1);
 }
 

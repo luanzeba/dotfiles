@@ -18,14 +18,32 @@ Minimal CDP tools for collaborative site exploration.
 
 Start Chrome on `:9222` with remote debugging. Use `--headless` by default to avoid stealing window focus. Flags can be combined (e.g. `--headless --profile`).
 
+**Safety rule:** never use `pkill`/`killall` for Chrome as part of this skill. Reuse the existing debug instance instead of terminating browser processes.
+
+If `--profile` startup fails, retry once. If it still fails, clear stale locks and retry:
+```bash
+rm -f ~/.cache/scraping/SingletonLock ~/.cache/scraping/SingletonCookie ~/.cache/scraping/SingletonSocket
+```
+
 ## Navigate
 
 ```bash
 ./scripts/nav.js https://example.com
 ./scripts/nav.js https://example.com --new
+./scripts/nav.js https://example.com --new-window
 ```
 
-Navigate current tab or open new tab.
+Navigate current tab, open a new tab, or open an isolated window.
+Use `--new-window` by default to avoid touching unrelated tabs.
+
+## Close automation tabs safely
+
+```bash
+./scripts/close-tab.js        # Close current automation tab
+./scripts/close-tab.js --all  # Close all tabs in debug instance
+```
+
+Prefer closing tabs/windows over killing Chrome processes.
 
 ## Evaluate JavaScript
 
