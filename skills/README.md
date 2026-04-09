@@ -12,6 +12,8 @@ skills/
 ├── github-prs/          # Draft/open concise PRs with template + demo guidance
 │   ├── SKILL.md
 │   └── references/
+├── vernier-test-profiling/ # Profile slow github/github tests with Vernier
+│   └── SKILL.md
 ├── feature-flag-removal/# Remove fully rolled-out flag conditionals from github/github
 │   ├── SKILL.md
 │   └── references/
@@ -52,11 +54,7 @@ skills/my-skill/
 └── references/        # Optional: supporting docs
 ```
 
-Then add to `configure()` in `skills/install`:
-
-```bash
-symlink_skill "$SCRIPT_DIR/my-skill" "my-skill"
-```
+No `skills/install` change is needed for local skills. `configure()` auto-symlinks all top-level directories under `skills/` (except `external/`).
 
 ### Option 2: Add to private repo
 
