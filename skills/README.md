@@ -17,6 +17,10 @@ skills/
 ├── feature-flag-removal/# Remove fully rolled-out flag conditionals from github/github
 │   ├── SKILL.md
 │   └── references/
+├── merge-conflict-resolver/ # Resolve merge conflicts using commit + PR intent
+│   ├── SKILL.md
+│   ├── scripts/
+│   └── references/
 ├── writing-studio/      # Collaborative drafting for blog posts/discussions
 │   ├── SKILL.md
 │   └── references/
