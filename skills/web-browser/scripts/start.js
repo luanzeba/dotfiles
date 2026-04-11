@@ -123,21 +123,11 @@ if (useHeadless) {
 }
 
 // Start a separate Chrome instance in background (detached so Node can exit).
-// `open -na` avoids interfering with an already-running personal Chrome and
-// lets macOS handle window management correctly. In headless mode, spawn the
-// binary directly since there's no window to manage.
-if (useHeadless) {
-  spawn(
-    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
-    chromeArgs,
-    { detached: true, stdio: "ignore" },
-  ).unref();
-} else {
-  spawn("/usr/bin/open", ["-na", "Google Chrome", "--args", ...chromeArgs], {
-    detached: true,
-    stdio: "ignore",
-  }).unref();
-}
+// Use `open -na` to request a new Chrome app instance on macOS.
+spawn("/usr/bin/open", ["-na", "Google Chrome", "--args", ...chromeArgs], {
+  detached: true,
+  stdio: "ignore",
+}).unref();
 
 // Wait for Chrome to be ready by checking the debugging endpoint
 let connected = false;
