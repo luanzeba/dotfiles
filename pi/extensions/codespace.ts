@@ -15,10 +15,14 @@ import {
 } from "@mariozechner/pi-coding-agent";
 
 const DEFAULT_REMOTE_CWD = "/workspaces/github";
+const DEFAULT_WORKSPACES_ROOT = "/workspaces";
 const STATUS_KEY = "codespace-mode";
 const VERIFY_TOKEN = "__PI_CODESPACE_OK__";
 const VERIFY_START_TIMEOUT_SECONDS = 180;
 const MANUAL_REPO_OPTION_LABEL = "Enter owner/repo manually";
+const WORKSPACES_ROOT_ENV = "PI_CODESPACE_WORKSPACES_ROOT";
+const DEFAULT_REMOTE_CWD_ENV = "PI_CODESPACE_DEFAULT_CWD";
+const REPO_CWD_OVERRIDES_ENV = "PI_CODESPACE_REPO_CWD_OVERRIDES";
 
 const IMAGE_MIME_TYPES = new Set(["image/jpeg", "image/png", "image/gif", "image/webp"]);
 
@@ -27,6 +31,7 @@ type CodespaceState = {
   codespaceName?: string;
   currentCodespaceName?: string;
   remoteCwd: string;
+  remoteCwdOverride?: string;
 };
 
 type LocalExecResult = {
@@ -54,12 +59,115 @@ function quoteForShell(value: string): string {
   return `'${value.replace(/'/g, `'"'"'`)}'`;
 }
 
-function normalizeRemoteCwd(value: string): string {
-  const trimmed = value.trim();
-  if (!trimmed) return DEFAULT_REMOTE_CWD;
+function normalizeRemoteBaseDir(value: string | undefined, fallback = DEFAULT_WORKSPACES_ROOT): string {
+  const trimmed = (value ?? "").trim();
+  if (!trimmed) return path.posix.normalize(fallback);
+
   const withForwardSlashes = trimmed.replace(/\\/g, "/");
   if (withForwardSlashes.startsWith("/")) return path.posix.normalize(withForwardSlashes);
-  return path.posix.join(DEFAULT_REMOTE_CWD, withForwardSlashes);
+
+  return path.posix.join("/", withForwardSlashes);
+}
+
+function normalizeRemoteCwd(value: string, baseCwd = DEFAULT_REMOTE_CWD): string {
+  const normalizedBase = normalizeRemoteBaseDir(baseCwd, DEFAULT_REMOTE_CWD);
+  const trimmed = value.trim();
+  if (!trimmed) return normalizedBase;
+
+  const withForwardSlashes = trimmed.replace(/\\/g, "/");
+  if (withForwardSlashes.startsWith("/")) return path.posix.normalize(withForwardSlashes);
+
+  return path.posix.join(normalizedBase, withForwardSlashes);
+}
+
+function normalizeRepoInput(value: string): string | undefined {
+  let repo = value.trim();
+  if (!repo) return undefined;
+
+  repo = repo.replace(/^https?:\/\/github\.com\//i, "");
+  repo = repo.replace(/^git@github\.com:/i, "");
+  repo = repo.replace(/\.git$/i, "");
+  repo = repo.replace(/^\/+|\/+$/g, "");
+
+  const parts = repo.split("/");
+  if (parts.length !== 2 || !parts[0] || !parts[1]) {
+    return undefined;
+  }
+
+  return `${parts[0]}/${parts[1]}`;
+}
+
+function normalizeRepoKey(value: string): string | undefined {
+  const normalized = normalizeRepoInput(value);
+  return normalized ? normalized.toLowerCase() : undefined;
+}
+
+function parseRepoCwdOverrides(value: string | undefined, baseCwd: string): Map<string, string> {
+  const overrides = new Map<string, string>();
+  const trimmed = value?.trim();
+  if (!trimmed) return overrides;
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(trimmed);
+  } catch {
+    return overrides;
+  }
+
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    return overrides;
+  }
+
+  for (const [repo, cwd] of Object.entries(parsed as Record<string, unknown>)) {
+    if (typeof cwd !== "string" || !cwd.trim()) continue;
+
+    const normalizedRepo = normalizeRepoKey(repo) ?? repo.trim().toLowerCase();
+    if (!normalizedRepo) continue;
+
+    overrides.set(normalizedRepo, normalizeRemoteCwd(cwd, baseCwd));
+  }
+
+  return overrides;
+}
+
+function resolveDefaultRemoteCwd(configuredValue: string | undefined, workspacesRoot: string): string {
+  const trimmed = configuredValue?.trim();
+  if (trimmed) {
+    return normalizeRemoteCwd(trimmed, workspacesRoot);
+  }
+
+  return path.posix.join(workspacesRoot, "github");
+}
+
+const CONFIGURED_WORKSPACES_ROOT = normalizeRemoteBaseDir(process.env[WORKSPACES_ROOT_ENV], DEFAULT_WORKSPACES_ROOT);
+const CONFIGURED_DEFAULT_REMOTE_CWD = resolveDefaultRemoteCwd(process.env[DEFAULT_REMOTE_CWD_ENV], CONFIGURED_WORKSPACES_ROOT);
+const REPO_CWD_OVERRIDES = parseRepoCwdOverrides(process.env[REPO_CWD_OVERRIDES_ENV], CONFIGURED_WORKSPACES_ROOT);
+
+function deriveRemoteCwdForRepository(repository: string | undefined): string {
+  const normalizedRepo = repository ? normalizeRepoInput(repository) : undefined;
+  if (!normalizedRepo) return CONFIGURED_DEFAULT_REMOTE_CWD;
+
+  const normalizedRepoKey = normalizedRepo.toLowerCase();
+  const explicitOverride = REPO_CWD_OVERRIDES.get(normalizedRepoKey);
+  if (explicitOverride) return explicitOverride;
+
+  const repoName = normalizedRepo.split("/")[1];
+  const repoNameOverride = REPO_CWD_OVERRIDES.get(repoName.toLowerCase());
+  if (repoNameOverride) return repoNameOverride;
+
+  return path.posix.join(CONFIGURED_WORKSPACES_ROOT, repoName);
+}
+
+function normalizeManualCwdInput(value: string, currentRemoteCwd: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) return currentRemoteCwd;
+
+  const withForwardSlashes = trimmed.replace(/\\/g, "/");
+  if (!withForwardSlashes.startsWith("/") && !withForwardSlashes.includes("/")) {
+    return path.posix.join(CONFIGURED_WORKSPACES_ROOT, withForwardSlashes);
+  }
+
+  return normalizeRemoteCwd(withForwardSlashes, currentRemoteCwd);
 }
 
 function mapLocalPathToRemote(localPath: string, localCwd: string, remoteCwd: string): string {
@@ -245,6 +353,42 @@ async function refreshCurrentCodespaceName(pi: ExtensionAPI, state: CodespaceSta
   state.currentCodespaceName = await resolveCodespaceName(pi, state);
 }
 
+async function resolveCodespaceRepository(pi: ExtensionAPI, codespaceName: string): Promise<string | undefined> {
+  const endpoint = `/user/codespaces/${encodeURIComponent(codespaceName)}`;
+  const byApi = await runLocalCommand(pi, "gh", ["api", endpoint, "--jq", ".repository.full_name"], {
+    timeoutMs: 15_000,
+  });
+
+  if (byApi.code === 0) {
+    const normalized = normalizeRepoInput(byApi.stdout);
+    if (normalized) return normalized;
+  }
+
+  try {
+    const codespaces = await listCodespaces(pi);
+    const match = codespaces.find((item) => item.name === codespaceName);
+    if (match?.repository) {
+      const normalized = normalizeRepoInput(match.repository);
+      if (normalized) return normalized;
+    }
+  } catch {
+    // Best-effort fallback only.
+  }
+
+  return undefined;
+}
+
+async function refreshAutoRemoteCwd(pi: ExtensionAPI, state: CodespaceState): Promise<void> {
+  if (state.remoteCwdOverride) {
+    state.remoteCwd = state.remoteCwdOverride;
+    return;
+  }
+
+  const codespaceName = state.codespaceName ?? state.currentCodespaceName ?? (await resolveCodespaceName(pi, state));
+  const repository = await resolveCodespaceRepository(pi, codespaceName);
+  state.remoteCwd = deriveRemoteCwdForRepository(repository);
+}
+
 function cleanYamlScalar(value: string): string {
   const trimmed = value.trim();
   if (!trimmed) return "";
@@ -311,19 +455,7 @@ async function listConfiguredRepos(pi: ExtensionAPI): Promise<ConfiguredRepo[]> 
 }
 
 function normalizeManualRepoInput(value: string): string | undefined {
-  let repo = value.trim();
-  if (!repo) return undefined;
-
-  repo = repo.replace(/^https?:\/\/github\.com\//i, "");
-  repo = repo.replace(/\.git$/i, "");
-  repo = repo.replace(/^\/+|\/+$/g, "");
-
-  const parts = repo.split("/");
-  if (parts.length !== 2 || !parts[0] || !parts[1]) {
-    return undefined;
-  }
-
-  return `${parts[0]}/${parts[1]}`;
+  return normalizeRepoInput(value);
 }
 
 function formatConfiguredRepoOption(repo: ConfiguredRepo): string {
@@ -570,7 +702,8 @@ export default function codespaceExtension(pi: ExtensionAPI): void {
     enabled: false,
     codespaceName: undefined,
     currentCodespaceName: undefined,
-    remoteCwd: DEFAULT_REMOTE_CWD,
+    remoteCwd: CONFIGURED_DEFAULT_REMOTE_CWD,
+    remoteCwdOverride: undefined,
   };
 
   const localRead = createReadTool(localCwd);
@@ -595,6 +728,7 @@ export default function codespaceExtension(pi: ExtensionAPI): void {
 
     try {
       await refreshCurrentCodespaceName(pi, state);
+      await refreshAutoRemoteCwd(pi, state);
     } catch (error) {
       state.enabled = false;
       setStatus(ctx, state);
@@ -671,6 +805,7 @@ export default function codespaceExtension(pi: ExtensionAPI): void {
 
     state.codespaceName = items[index].name;
     state.currentCodespaceName = items[index].name;
+    state.remoteCwdOverride = undefined;
     await enableMode(ctx, "command");
   }
 
@@ -727,6 +862,7 @@ export default function codespaceExtension(pi: ExtensionAPI): void {
 
     state.codespaceName = await getCurrentCodespaceSelection(pi);
     state.currentCodespaceName = state.codespaceName;
+    state.remoteCwdOverride = undefined;
     await enableMode(ctx, "command");
   }
 
@@ -768,6 +904,7 @@ export default function codespaceExtension(pi: ExtensionAPI): void {
     if (action === connectCurrentOptionLabel || action.startsWith("Connect to current")) {
       state.codespaceName = undefined;
       state.currentCodespaceName = undefined;
+      state.remoteCwdOverride = undefined;
       await enableMode(ctx, "command");
       return;
     }
@@ -811,15 +948,20 @@ export default function codespaceExtension(pi: ExtensionAPI): void {
       if (command === "on") {
         state.codespaceName = undefined;
         state.currentCodespaceName = undefined;
+        state.remoteCwdOverride = undefined;
 
         if (tokens[1]) {
           if (tokens[1].startsWith("/")) {
-            state.remoteCwd = normalizeRemoteCwd(tokens.slice(1).join(" "));
+            const override = normalizeManualCwdInput(tokens.slice(1).join(" "), state.remoteCwd);
+            state.remoteCwdOverride = override;
+            state.remoteCwd = override;
           } else {
             state.codespaceName = tokens[1];
             state.currentCodespaceName = tokens[1];
             if (tokens[2]) {
-              state.remoteCwd = normalizeRemoteCwd(tokens.slice(2).join(" "));
+              const override = normalizeManualCwdInput(tokens.slice(2).join(" "), state.remoteCwd);
+              state.remoteCwdOverride = override;
+              state.remoteCwd = override;
             }
           }
         }
@@ -838,8 +980,14 @@ export default function codespaceExtension(pi: ExtensionAPI): void {
           if (ctx.hasUI) ctx.ui.notify("Usage: /codespace use <codespace-name>", "warning");
           return;
         }
+
         state.codespaceName = tokens[1];
         state.currentCodespaceName = tokens[1];
+
+        if (state.enabled) {
+          await refreshAutoRemoteCwd(pi, state);
+        }
+
         setStatus(ctx, state);
         if (ctx.hasUI) ctx.ui.notify(`Codespace target set to ${state.codespaceName}`, "info");
         return;
@@ -851,7 +999,9 @@ export default function codespaceExtension(pi: ExtensionAPI): void {
           return;
         }
 
-        state.remoteCwd = normalizeRemoteCwd(tokens.slice(1).join(" "));
+        const override = normalizeManualCwdInput(tokens.slice(1).join(" "), state.remoteCwd);
+        state.remoteCwdOverride = override;
+        state.remoteCwd = override;
         setStatus(ctx, state);
         if (ctx.hasUI) ctx.ui.notify(`Remote cwd set to ${state.remoteCwd}`, "info");
         return;

@@ -126,6 +126,7 @@ Everything else stays local.
 Session behavior (important):
 - Codespace target is **pinned per Pi session**.
 - `pi --codespace` or `/codespace on` (without a name) resolves the current `gh csd` selection once, then keeps using that codespace.
+- Remote cwd auto-resolves from the codespace repository (`/workspaces/<repo_name>`), with fallback to `/workspaces/github`.
 - Changing `gh csd select` in another terminal will **not** retarget an already-running Pi session.
 - Switch intentionally with `/codespace on <name>` or `/codespace use <name>`.
 
@@ -136,6 +137,11 @@ Useful in-session commands:
 - `/codespace status`
 - `/codespace use <name>` (retarget current Pi session)
 - `/codespace cwd <path>`
+
+Optional env overrides (for custom workspace layouts):
+- `PI_CODESPACE_WORKSPACES_ROOT` (default: `/workspaces`)
+- `PI_CODESPACE_DEFAULT_CWD` (fallback cwd when repo cannot be resolved)
+- `PI_CODESPACE_REPO_CWD_OVERRIDES` (JSON map, e.g. `{ "github/github": "/workspaces/github-ui" }`)
 
 If Pi says `gh csd exec` is unavailable, update `gh-csd` first.
 
