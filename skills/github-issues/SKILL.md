@@ -51,6 +51,8 @@ See [references/api-reference.md](references/api-reference.md) for more dependen
 
 Write in prose paragraphs, not bullet lists. Embed references as inline links within the text rather than listing them in a separate section. See the [evidence-based-responses](../evidence-based-responses/SKILL.md) skill for guidance on linking to evidence.
 
+Prefer plain language. Avoid internal shorthand (for example, labels like "Option B") and avoid abstract jargon unless you define it in simple terms. If a phrase would be unclear to someone outside the immediate discussion, rewrite it with concrete wording.
+
 Avoid repetition. Say things once. If context is provided in the description, don't repeat it elsewhere.
 
 Implementation details, when included, are suggestions rather than requirements. The developer who picks up the issue may implement it differently. Frame suggestions with language like "One approach would be..." or "Consider..."
@@ -73,6 +75,7 @@ Omit sections that would be empty. Never include "N/A" or "None" placeholders.
 - Prefixes like `WI-#` in issue titles
 - Implementation details presented as hard requirements
 - References listed separately instead of linked inline
+- Internal labels or jargon without plain-language explanation
 
 ## Issue Types
 
