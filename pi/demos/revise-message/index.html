@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>pi revise-message extension demo</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #0b1020;
+        --panel: #11182a;
+        --text: #dbe4ff;
+        --muted: #94a3b8;
+        --accent: #60a5fa;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+        background: radial-gradient(circle at top, #1a2440 0%, var(--bg) 55%);
+        color: var(--text);
+      }
+
+      main {
+        max-width: 1120px;
+        margin: 0 auto;
+        padding: 2.5rem 1.25rem 3rem;
+      }
+
+      h1 {
+        margin: 0 0 0.4rem;
+        font-size: clamp(1.4rem, 1rem + 1.6vw, 2.1rem);
+      }
+
+      p {
+        margin: 0;
+        color: var(--muted);
+      }
+
+      .card {
+        margin-top: 1.2rem;
+        background: color-mix(in srgb, var(--panel) 85%, black 15%);
+        border: 1px solid color-mix(in srgb, var(--accent) 35%, #334155 65%);
+        border-radius: 14px;
+        padding: 1rem;
+      }
+
+      .demo {
+        width: 100%;
+        height: auto;
+        border-radius: 10px;
+        border: 1px solid #334155;
+        background: #020617;
+        display: block;
+      }
+
+      code {
+        color: #bfdbfe;
+      }
+
+      ul {
+        margin: 0.75rem 0 0;
+        color: var(--muted);
+      }
+
+      li + li {
+        margin-top: 0.35rem;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>revise-message extension demo</h1>
+      <p>
+        Overlay workflow for editing a previous assistant message, then either copying markdown to clipboard or
+        sending it back to continue the conversation.
+      </p>
+
+      <section class="card">
+        <img
+          class="demo"
+          src="./revise-message-demo.gif"
+          alt="Demo of /revise overlay with picker, editor, clipboard copy, and continue flow"
+        />
+      </section>
+
+      <section class="card">
+        <p><strong>What this recording shows</strong></p>
+        <ul>
+          <li>Run <code>/revise</code> and pick a previous assistant message.</li>
+          <li>Edit inline markdown in the overlay editor.</li>
+          <li>Use <code>Ctrl+Y</code> to copy edited markdown to clipboard.</li>
+          <li>Run <code>/revise</code> again and use <code>Ctrl+S</code> to send edited markdown back to the assistant.</li>
+        </ul>
+      </section>
+    </main>
+  </body>
+</html>
