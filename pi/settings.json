@@ -1,12 +1,16 @@
 {
   "provider": "github-copilot",
   "model": "claude-opus-4.5",
-  "lastChangelogVersion": "0.67.2",
+  "lastChangelogVersion": "0.67.6",
   "defaultProvider": "github-copilot",
   "defaultModel": "gpt-5.3-codex",
   "defaultThinkingLevel": "xhigh",
-  "hideThinkingBlock": false,
+  "hideThinkingBlock": true,
   "packages": [
     "git:https://github.com/badlogic/pi-diff-review"
+  ],
+  "enabledModels": [
+    "github-copilot/claude-opus-4.6",
+    "github-copilot/gpt-5.3-codex"
   ]
 }
