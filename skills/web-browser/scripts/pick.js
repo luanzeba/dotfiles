@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { connect } from "./cdp.js";
+import { getPreferredOwnedTargetId, setActiveTarget } from "./session-state.js";
 
 const DEBUG = process.env.DEBUG === "1";
 const log = DEBUG ? (...args) => console.error("[debug]", ...args) : () => {};
@@ -123,15 +124,17 @@ try {
 
   log("getting pages...");
   const pages = await cdp.getPages();
-  const page = pages.at(-1);
+  const targetId = getPreferredOwnedTargetId(pages);
 
-  if (!page) {
-    console.error("✗ No active tab found");
+  if (!targetId) {
+    console.error("✗ No tracked automation tab/window found");
+    console.error("  Run: nav.js <url>   # defaults to a new automation window");
     process.exit(1);
   }
 
   log("attaching to page...");
-  const sessionId = await cdp.attachToPage(page.targetId);
+  const sessionId = await cdp.attachToPage(targetId);
+  setActiveTarget(targetId);
 
   log("waiting for user pick...");
   const expression = `(${PICK_SCRIPT})(${JSON.stringify(message)})`;
