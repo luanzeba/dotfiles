@@ -94,6 +94,7 @@ if is_macos; then
     ensure_homebrew
 fi
 run_step "basic-tools" install_basic_tools
+run_step "ruby/install" bash "$SCRIPT_DIR/ruby/install"
 run_step "tmux/install" bash "$SCRIPT_DIR/tmux/install"
 run_step "ghostty/install" bash "$SCRIPT_DIR/ghostty/install"
 run_step "chrome/install" bash "$SCRIPT_DIR/chrome/install"

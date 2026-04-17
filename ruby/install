@@ -1,0 +1,107 @@
+#!/bin/bash
+set -e
+
+check_installed() {
+    # Prefer Homebrew Ruby on macOS (keg-only)
+    if [[ "$(uname -s)" == "Darwin" ]]; then
+        local brew_ruby=""
+        if [[ -x "/opt/homebrew/opt/ruby/bin/ruby" ]]; then
+            brew_ruby="/opt/homebrew/opt/ruby/bin/ruby"
+        elif [[ -x "/usr/local/opt/ruby/bin/ruby" ]]; then
+            brew_ruby="/usr/local/opt/ruby/bin/ruby"
+        fi
+
+        if [[ -z "$brew_ruby" ]]; then
+            return 1
+        fi
+
+        local major
+        major=$($brew_ruby -e 'print RUBY_VERSION.split(".").first' 2>/dev/null || echo 0)
+        [[ "$major" -ge 3 ]]
+        return
+    fi
+
+    if ! command -v ruby &>/dev/null; then
+        return 1
+    fi
+
+    # Treat Ruby 3+ as "installed" for modern toolchains
+    local major
+    major=$(ruby -e 'print RUBY_VERSION.split(".").first' 2>/dev/null || echo 0)
+    [[ "$major" -ge 3 ]]
+}
+
+check_configured() {
+    if [[ "$(uname -s)" == "Darwin" ]]; then
+        # brew ruby is keg-only
+        [[ -x "/opt/homebrew/opt/ruby/bin/ruby" ]]
+    else
+        command -v ruby &>/dev/null
+    fi
+}
+
+get_installed_version() {
+    if [[ "$(uname -s)" == "Darwin" && -x "/opt/homebrew/opt/ruby/bin/ruby" ]]; then
+        /opt/homebrew/opt/ruby/bin/ruby -v 2>/dev/null || true
+    elif [[ "$(uname -s)" == "Darwin" && -x "/usr/local/opt/ruby/bin/ruby" ]]; then
+        /usr/local/opt/ruby/bin/ruby -v 2>/dev/null || true
+    else
+        ruby -v 2>/dev/null || true
+    fi
+}
+
+install() {
+    case "$(uname -s)" in
+        Darwin)
+            if ! command -v brew &>/dev/null; then
+                echo "Homebrew is required to install Ruby on macOS"
+                return 1
+            fi
+            brew install ruby
+            ;;
+        Linux)
+            if command -v pacman &>/dev/null; then
+                sudo pacman -S --noconfirm ruby
+            elif command -v apt-get &>/dev/null; then
+                sudo apt-get update
+                sudo apt-get install -y ruby-full
+            else
+                echo "Unsupported Linux package manager for Ruby install"
+                return 1
+            fi
+            ;;
+        *)
+            echo "Unsupported OS: $(uname -s)"
+            return 1
+            ;;
+    esac
+}
+
+configure() {
+    echo "Ruby installed."
+    if [[ "$(uname -s)" == "Darwin" ]]; then
+        echo "Make sure /opt/homebrew/opt/ruby/bin is in PATH (configured in zsh/.zshrc)."
+    fi
+}
+
+update() {
+    case "$(uname -s)" in
+        Darwin)
+            brew upgrade ruby
+            ;;
+        Linux)
+            if command -v pacman &>/dev/null; then
+                sudo pacman -S --noconfirm ruby
+            elif command -v apt-get &>/dev/null; then
+                sudo apt-get update
+                sudo apt-get install -y ruby-full
+            fi
+            ;;
+    esac
+}
+
+# Main (only run when executed directly, not when sourced)
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    install
+    configure
+fi

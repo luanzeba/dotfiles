@@ -4,6 +4,11 @@ export COLORTERM=truecolor
 # Add ~/.local/bin to PATH for user-installed binaries
 export PATH="$HOME/.local/bin:$PATH"
 
+# Prefer Homebrew Ruby over macOS system Ruby when available
+if [[ -x "/opt/homebrew/opt/ruby/bin/ruby" ]]; then
+  export PATH="/opt/homebrew/opt/ruby/bin:$PATH"
+fi
+
 # Codespaces-specific configuration
 if [[ -n "$CODESPACES" ]]; then
     # Playwright must run headless in Codespaces (no display available)
@@ -61,6 +66,11 @@ export PATH="$HOME/.opencode/bin:$PATH"
 if [[ -d "$HOME/.local/share/fnm" ]]; then
     export PATH="$HOME/.local/share/fnm:$PATH"
     eval "$(fnm env)"
+fi
+
+# GitHub token for local dotcom devcontainer startup
+if [[ -z "$GITHUB_TOKEN" ]] && command -v gh >/dev/null 2>&1; then
+  export GITHUB_TOKEN="$(gh auth token 2>/dev/null)"
 fi
 
 
