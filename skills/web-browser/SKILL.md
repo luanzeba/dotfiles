@@ -1,6 +1,6 @@
 ---
 name: web-browser
-description: "Allows to interact with web pages by performing actions such as clicking buttons, filling out forms, and navigating links. It works by remote controlling Google Chrome or Chromium browsers using the Chrome DevTools Protocol (CDP). When Claude needs to browse the web, it can use this skill to do so."
+description: "Allows to interact with web pages by performing actions such as clicking buttons, filling out forms, and navigating links. It works by remote controlling Google Chrome or Chromium browsers using the Chrome DevTools Protocol (CDP). When Claude needs to browse the web, it can use this skill."
 license: Stolen from Armin (mitsuhiko)
 ---
 
@@ -8,21 +8,36 @@ license: Stolen from Armin (mitsuhiko)
 
 Minimal CDP tools for collaborative site exploration.
 
-## Start Chrome
+## Safety Rules (must follow)
+
+- **Never run Chrome headless** for this skill.
+- **Never kill Chrome processes** (`pkill`, `killall`, `kill -9`) as part of browsing setup/cleanup.
+- **Never navigate arbitrary existing tabs.** Use tracked automation windows/tabs only.
+
+## Start Chrome (visible session only)
 
 ```bash
-./scripts/start.js --headless   # Headless (no visible window, won't steal focus)
-./scripts/start.js              # Fresh profile (visible window)
-./scripts/start.js --profile    # Copy your profile (cookies, logins)
+./scripts/start.js
 ```
 
-Start Chrome on `:9222` with remote debugging. Use `--headless` by default to avoid stealing window focus. Flags can be combined (e.g. `--headless --profile`).
+Run this before any other script in this skill.
 
-**Safety rule:** never use `pkill`/`killall` for Chrome as part of this skill. Reuse the existing debug instance instead of terminating browser processes.
-
-If `--profile` startup fails, retry once. If it still fails, clear stale locks and retry:
+On local macOS, you can also use the Raycast-friendly launcher:
 ```bash
-rm -f ~/.cache/scraping/SingletonLock ~/.cache/scraping/SingletonCookie ~/.cache/scraping/SingletonSocket
+~/dotfiles/bin/chrome-pi-debug.sh
+```
+
+Behavior:
+- Reuses an existing `:9222` debug instance when safe
+- Never uses headless mode
+- Never kills existing Chrome processes
+- Tries your regular Chrome profile first when supported
+- On modern Chrome versions (136+), CDP on the primary profile is blocked, so `start.js` skips straight to the isolated Pi profile (`~/.cache/scraping`)
+- Isolated fallback keeps automation working without touching your open browsing windows
+
+Optional profile refresh for isolated fallback mode:
+```bash
+./scripts/start.js --refresh-profile
 ```
 
 ## Navigate
@@ -30,20 +45,25 @@ rm -f ~/.cache/scraping/SingletonLock ~/.cache/scraping/SingletonCookie ~/.cache
 ```bash
 ./scripts/nav.js https://example.com
 ./scripts/nav.js https://example.com --new
-./scripts/nav.js https://example.com --new-window
+./scripts/nav.js https://example.com --current
 ```
 
-Navigate current tab, open a new tab, or open an isolated window.
-Use `--new-window` by default to avoid touching unrelated tabs.
+Default behavior opens a **new automation window**.
 
-## Close automation tabs safely
+Flags:
+- `--new` opens a new automation tab
+- `--current` navigates the currently tracked automation tab/window
+
+Prefer the default (new automation window) to avoid touching unrelated tabs.
+
+## Close automation tabs/windows safely
 
 ```bash
-./scripts/close-tab.js        # Close current automation tab
-./scripts/close-tab.js --all  # Close all tabs in debug instance
+./scripts/close-tab.js        # Close active tracked automation tab/window
+./scripts/close-tab.js --all  # Close all tracked automation tabs/windows
 ```
 
-Prefer closing tabs/windows over killing Chrome processes.
+These commands close only tracked automation targets, never arbitrary user tabs.
 
 ## Evaluate JavaScript
 
@@ -53,7 +73,7 @@ Prefer closing tabs/windows over killing Chrome processes.
 ./scripts/eval.js 'JSON.stringify(Array.from(document.querySelectorAll("a")).map(a => ({ text: a.textContent.trim(), href: a.href })).filter(link => !link.href.startsWith("https://")))'
 ```
 
-Execute JavaScript in active tab (async context).  Be careful with string escaping, best to use single quotes.
+Executes JavaScript in the active tracked automation tab/window.
 
 ## Screenshot
 
@@ -61,7 +81,7 @@ Execute JavaScript in active tab (async context).  Be careful with string escapi
 ./scripts/screenshot.js
 ```
 
-Screenshot current viewport, returns temp file path
+Screenshots the active tracked automation tab/window and returns a temp file path.
 
 ## Pick Elements
 
@@ -77,8 +97,6 @@ Interactive element picker. Click to select, Cmd/Ctrl+Click for multi-select, En
 ./scripts/dismiss-cookies.js          # Accept cookies
 ./scripts/dismiss-cookies.js --reject # Reject cookies (where possible)
 ```
-
-Automatically dismisses EU cookie consent dialogs.
 
 Run after navigating to a page:
 ```bash

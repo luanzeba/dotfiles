@@ -12,7 +12,10 @@ export async function connect(timeout = 5000) {
     const resp = await fetch("http://localhost:9222/json/version", {
       signal: controller.signal,
     });
-    const { webSocketDebuggerUrl } = await resp.json();
+    const { webSocketDebuggerUrl, Browser } = await resp.json();
+    if (typeof Browser === "string" && Browser.toLowerCase().includes("headlesschrome")) {
+      throw new Error("Refusing to connect to headless Chrome. Run ./scripts/start.js for a visible browsing session.");
+    }
     clearTimeout(timeoutId);
 
     return new Promise((resolve, reject) => {
@@ -34,7 +37,7 @@ export async function connect(timeout = 5000) {
   } catch (e) {
     clearTimeout(timeoutId);
     if (e.name === "AbortError") {
-      throw new Error("Connection timeout - is Chrome running with --remote-debugging-port=9222?");
+      throw new Error("Connection timeout - run ./scripts/start.js to launch/reuse a visible debuggable Chrome session on :9222");
     }
     throw e;
   }
