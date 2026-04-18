@@ -1,6 +1,8 @@
 #!/bin/zsh
+set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${0}")" && pwd)"
+NVIM_INSTALL_DIR="$HOME/.local/nvim"
 
 check_installed() {
     command -v nvim &>/dev/null
@@ -10,66 +12,88 @@ check_configured() {
     [[ -L "$HOME/.config/nvim" ]]
 }
 
-install() {
-    if command -v nvim &>/dev/null; then
-        echo "Neovim already installed, skipping binary install..."
-        return 0
-    fi
-
-    echo "Installing Neovim..."
+get_release_artifact() {
     local os arch
-
     os=$(uname -s)
     arch=$(uname -m)
 
-    if [[ "$os" == "Darwin" ]]; then
-        # macOS: download tarball from GitHub releases
-        local nvim_dir="$HOME/.local/nvim"
-        local url="https://github.com/neovim/neovim/releases/latest/download/nvim-macos-${arch}.tar.gz"
-
-        echo "Downloading Neovim from $url..."
-        curl -fsSL "$url" -o /tmp/nvim.tar.gz
-
-        if [[ ! -s /tmp/nvim.tar.gz ]]; then
-            echo "Error: Failed to download Neovim"
+    case "$os" in
+        Darwin)
+            case "$arch" in
+                arm64|x86_64) ;;
+                *)
+                    echo "Unsupported architecture for macOS: $arch"
+                    return 1
+                    ;;
+            esac
+            echo "nvim-macos-${arch}.tar.gz nvim-macos-${arch}"
+            ;;
+        Linux)
+            case "$arch" in
+                x86_64) arch="x86_64" ;;
+                arm64|aarch64) arch="arm64" ;;
+                *)
+                    echo "Unsupported architecture for Linux: $arch"
+                    return 1
+                    ;;
+            esac
+            echo "nvim-linux-${arch}.tar.gz nvim-linux-${arch}"
+            ;;
+        *)
+            echo "Unsupported OS: $os"
             return 1
-        fi
+            ;;
+    esac
+}
 
-        # Remove quarantine flag (macOS security)
-        xattr -c /tmp/nvim.tar.gz 2>/dev/null || true
+install_from_tarball() {
+    local archive_name="$1"
+    local extracted_dir="$2"
+    local url="https://github.com/neovim/neovim/releases/latest/download/${archive_name}"
 
-        # Clean up old installation if exists
-        [[ -d "$nvim_dir" ]] && rm -rf "$nvim_dir"
+    echo "Downloading Neovim from $url..."
+    curl -fsSL "$url" -o /tmp/nvim.tar.gz
 
-        # Extract
-        mkdir -p "$HOME/.local"
-        tar -xzf /tmp/nvim.tar.gz -C "$HOME/.local"
-        mv "$HOME/.local/nvim-macos-${arch}" "$nvim_dir"
-        rm /tmp/nvim.tar.gz
-
-        # Symlink to ~/.local/bin
-        mkdir -p "$HOME/.local/bin"
-        ln -sf "$nvim_dir/bin/nvim" "$HOME/.local/bin/nvim"
-
-        echo "Neovim installed to $nvim_dir"
-    else
-        # Linux: use appimage
-        mkdir -p ~/.local/bin
-        cd ~/.local/bin
-
-        curl -LO https://github.com/neovim/neovim/releases/latest/download/nvim.appimage
-        chmod u+x nvim.appimage
-
-        if ./nvim.appimage --version &>/dev/null; then
-            ln -sf ./nvim.appimage nvim
-        else
-            # FUSE not available, extract appimage
-            ./nvim.appimage --appimage-extract
-            sudo mv squashfs-root /
-            ln -sf /squashfs-root/AppRun ~/.local/bin/nvim
-            rm nvim.appimage
-        fi
+    if [[ ! -s /tmp/nvim.tar.gz ]]; then
+        echo "Error: Failed to download Neovim"
+        return 1
     fi
+
+    # Remove quarantine flag (macOS security)
+    xattr -c /tmp/nvim.tar.gz 2>/dev/null || true
+
+    [[ -d "$NVIM_INSTALL_DIR" ]] && rm -rf "$NVIM_INSTALL_DIR"
+    [[ -d "$HOME/.local/$extracted_dir" ]] && rm -rf "$HOME/.local/$extracted_dir"
+
+    mkdir -p "$HOME/.local"
+    tar -xzf /tmp/nvim.tar.gz -C "$HOME/.local"
+    mv "$HOME/.local/$extracted_dir" "$NVIM_INSTALL_DIR"
+    rm -f /tmp/nvim.tar.gz
+
+    mkdir -p "$HOME/.local/bin"
+    ln -sf "$NVIM_INSTALL_DIR/bin/nvim" "$HOME/.local/bin/nvim"
+
+    echo "Neovim installed: $($NVIM_INSTALL_DIR/bin/nvim --version | head -1)"
+}
+
+install() {
+    if command -v nvim &>/dev/null; then
+        if nvim --version >/dev/null 2>&1; then
+            echo "Neovim already installed, skipping binary install..."
+            return 0
+        fi
+
+        echo "Existing Neovim binary is not runnable, reinstalling..."
+    fi
+
+    echo "Installing Neovim..."
+
+    local artifact archive extracted
+    artifact=$(get_release_artifact)
+    archive="${artifact%% *}"
+    extracted="${artifact##* }"
+
+    install_from_tarball "$archive" "$extracted"
 }
 
 configure() {
@@ -90,15 +114,15 @@ configure() {
     nvim_path=$(command -v nvim)
 
     # Install plugins
-    $nvim_path --headless "+Lazy! sync" +qa
-    $nvim_path --headless +"MasonInstallAll" +qa 2>/dev/null || true
+    "$nvim_path" --headless "+Lazy! sync" +qa 2>/dev/null || true
+    "$nvim_path" --headless +"MasonInstallAll" +qa 2>/dev/null || true
 
     # Accept Copilot license
     mkdir -p ~/.config/github-copilot
     echo '{"luanzeba":{"version":"2021-10-14"}}' > ~/.config/github-copilot/terms.json
 
     # Install treesitter parsers
-    $nvim_path --headless +"TSInstall! go ruby" +qa 2>/dev/null || true
+    "$nvim_path" --headless +"TSInstall! go ruby" +qa 2>/dev/null || true
 }
 
 apply() {
@@ -112,41 +136,26 @@ apply() {
 update() {
     echo "Updating Neovim..."
 
-    local os arch
-    os=$(uname -s)
-    arch=$(uname -m)
-
-    if [[ "$os" == "Darwin" ]]; then
-        local nvim_dir="$HOME/.local/nvim"
-        local url="https://github.com/neovim/neovim/releases/latest/download/nvim-macos-${arch}.tar.gz"
-
-        # Check current version
-        local current_version=""
-        if command -v nvim &>/dev/null; then
-            current_version=$(nvim --version | head -1)
-        fi
-
-        echo "Downloading latest Neovim..."
-        curl -fsSL "$url" -o /tmp/nvim.tar.gz
-        xattr -c /tmp/nvim.tar.gz 2>/dev/null || true
-
-        [[ -d "$nvim_dir" ]] && rm -rf "$nvim_dir"
-        mkdir -p "$HOME/.local"
-        tar -xzf /tmp/nvim.tar.gz -C "$HOME/.local"
-        mv "$HOME/.local/nvim-macos-${arch}" "$nvim_dir"
-        rm /tmp/nvim.tar.gz
-
-        mkdir -p "$HOME/.local/bin"
-        ln -sf "$nvim_dir/bin/nvim" "$HOME/.local/bin/nvim"
-
-        local new_version=$(nvim --version | head -1)
-        echo "Updated: $current_version -> $new_version"
+    local current_version=""
+    if command -v nvim &>/dev/null; then
+        current_version=$(nvim --version | head -1)
     fi
+
+    local artifact archive extracted
+    artifact=$(get_release_artifact)
+    archive="${artifact%% *}"
+    extracted="${artifact##* }"
+
+    install_from_tarball "$archive" "$extracted"
+
+    local new_version
+    new_version=$(nvim --version | head -1)
+    echo "Updated: ${current_version:-not installed} -> $new_version"
 
     # Update plugins
     if command -v nvim &>/dev/null; then
         echo "Updating Neovim plugins..."
-        nvim --headless "+Lazy! update" +qa
+        nvim --headless "+Lazy! update" +qa 2>/dev/null || true
         nvim --headless "+MasonUpdate" +qa 2>/dev/null || true
         nvim --headless "+TSUpdate" +qa 2>/dev/null || true
     fi

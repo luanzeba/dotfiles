@@ -4,7 +4,7 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 check_installed() {
-    command -v opencode &>/dev/null
+    [[ -x "$HOME/.opencode/bin/opencode" ]] || command -v opencode &>/dev/null
 }
 
 check_configured() {

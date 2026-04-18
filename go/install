@@ -4,6 +4,13 @@ set -e
 # Go installation directory (managed by this script)
 GO_INSTALL_DIR="$HOME/.local/go"
 
+# Some environments (e.g. devcontainers) export GOROOT=/usr/local/go.
+# Clear it so our managed Go install can use its own bundled stdlib/toolchain.
+use_managed_go_env() {
+    unset GOROOT
+    export PATH="$GO_INSTALL_DIR/bin:$HOME/go/bin:$PATH"
+}
+
 # Get the latest Go version from go.dev
 get_latest_version() {
     curl -sL 'https://go.dev/VERSION?m=text' | head -1
@@ -12,7 +19,7 @@ get_latest_version() {
 # Get currently installed Go version (from our managed installation)
 get_installed_version() {
     if [[ -x "$GO_INSTALL_DIR/bin/go" ]]; then
-        "$GO_INSTALL_DIR/bin/go" version | awk '{print $3}'
+        env -u GOROOT "$GO_INSTALL_DIR/bin/go" version | awk '{print $3}'
     fi
 }
 
@@ -70,7 +77,7 @@ install_go() {
     
     # Verify installation
     if [[ -x "$GO_INSTALL_DIR/bin/go" ]]; then
-        echo "Go installed successfully: $("$GO_INSTALL_DIR/bin/go" version)"
+        echo "Go installed successfully: $(env -u GOROOT "$GO_INSTALL_DIR/bin/go" version)"
     else
         echo "Installation failed: $GO_INSTALL_DIR/bin/go not found"
         return 1
@@ -114,19 +121,18 @@ install() {
 }
 
 configure() {
-    # Ensure our Go is in PATH for this session
-    export PATH="$GO_INSTALL_DIR/bin:$HOME/go/bin:$PATH"
-    
+    use_managed_go_env
+
     if ! command -v go &>/dev/null; then
         echo "Go not available in PATH, skipping Go tools installation"
         return 1
     fi
-    
+
     echo "Installing Go tools..."
     go install golang.org/x/tools/gopls@latest
     go install github.com/incu6us/goimports-reviser/v3@latest
     go install mvdan.cc/gofumpt@latest
-    
+
     echo "Go tools installed successfully"
 }
 
@@ -152,8 +158,8 @@ update() {
     fi
     
     # Update Go tools
-    export PATH="$GO_INSTALL_DIR/bin:$HOME/go/bin:$PATH"
-    
+    use_managed_go_env
+
     if command -v go &>/dev/null; then
         echo "Updating Go tools..."
         go install golang.org/x/tools/gopls@latest

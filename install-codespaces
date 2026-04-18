@@ -36,6 +36,11 @@ ensure_zsh_default() {
 
 # Setup codespace friendly name for shell prompt
 setup_friendly_name() {
+    if [[ -z "${CODESPACE_NAME:-}" ]]; then
+        echo "Skipping friendly name setup (not a hosted Codespace)"
+        return 0
+    fi
+
     local friendly_name
     friendly_name=$(gh api "/user/codespaces/$CODESPACE_NAME" -q .display_name 2>/dev/null || true)
     if [[ -n "$friendly_name" && "$friendly_name" != *"Not Found"* ]]; then
@@ -45,11 +50,52 @@ setup_friendly_name() {
 
 # Install remote-development-manager for copy/paste and open support
 install_rdm() {
-    echo "Installing rdm..."
-    wget -q https://github.com/BlakeWilliams/remote-development-manager/releases/latest/download/rdm-linux-amd64 -O /tmp/rdm
-    sudo mv /tmp/rdm /usr/bin/rdm
-    sudo chmod +x /usr/bin/rdm
-    gh config set browser "rdm open"
+    if [[ -z "${CODESPACE_NAME:-}" ]]; then
+        echo "Skipping rdm install (not a hosted Codespace)"
+        return 0
+    fi
+
+    local arch
+    case "$(uname -m)" in
+        x86_64) arch="amd64" ;;
+        arm64|aarch64) arch="arm64" ;;
+        *)
+            echo "Warning: unsupported architecture for rdm: $(uname -m); skipping"
+            return 0
+            ;;
+    esac
+
+    # Some upstream latest releases may be published without binaries.
+    # Pick the newest release that actually includes rdm-linux-<arch>.
+    local url
+    url=$(curl -fsSL https://api.github.com/repos/BlakeWilliams/remote-development-manager/releases | \
+        jq -r --arg arch "$arch" '.[] | select((.assets | length) > 0) | .assets[] | select(.name == ("rdm-linux-" + $arch)) | .browser_download_url' | \
+        head -n1)
+
+    if [[ -z "$url" || "$url" == "null" ]]; then
+        echo "Warning: could not find rdm-linux-${arch} release asset; skipping"
+        return 0
+    fi
+
+    echo "Installing rdm from $url..."
+    if ! curl -fsSL "$url" -o /tmp/rdm; then
+        echo "Warning: failed to download rdm from $url; skipping"
+        return 0
+    fi
+
+    if [[ ! -s /tmp/rdm ]]; then
+        echo "Warning: downloaded rdm is empty; skipping"
+        return 0
+    fi
+
+    if ! sudo install -m 0755 /tmp/rdm /usr/bin/rdm; then
+        echo "Warning: failed to install rdm to /usr/bin/rdm; skipping"
+        rm -f /tmp/rdm
+        return 0
+    fi
+
+    rm -f /tmp/rdm
+    gh config set browser "rdm open" 2>/dev/null || true
 }
 
 # Install ruby-lsp for GitHub monolith
@@ -73,9 +119,31 @@ setup_ruby_lsp() {
 install_apt_packages() {
     echo "Installing apt packages..."
     sudo apt-get update
-    sudo apt -o DPkg::Lock::Timeout=600 install -y \
-        build-essential python3-venv ruby-dev fd-find fzf bat eza jq ripgrep tmux \
-        libfuse2 fuse software-properties-common
+
+    local packages=(
+        build-essential
+        python3-venv
+        ruby-dev
+        fd-find
+        fzf
+        bat
+        jq
+        ripgrep
+        tmux
+        libfuse2
+        fuse
+        software-properties-common
+    )
+
+    if apt-cache show eza >/dev/null 2>&1; then
+        packages+=(eza)
+    elif apt-cache show exa >/dev/null 2>&1; then
+        packages+=(exa)
+    else
+        echo "Warning: neither eza nor exa is available from apt"
+    fi
+
+    sudo apt-get -o DPkg::Lock::Timeout=600 install -y "${packages[@]}"
 }
 
 # Main execution

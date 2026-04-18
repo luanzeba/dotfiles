@@ -3,50 +3,91 @@ set -e
 
 FNM_DIR="$HOME/.local/share/fnm"
 
+get_node_arch() {
+    case "$(uname -m)" in
+        x86_64) echo "x64" ;;
+        arm64|aarch64) echo "arm64" ;;
+        *)
+            echo "Unsupported architecture: $(uname -m)"
+            return 1
+            ;;
+    esac
+}
+
+get_fnm_asset() {
+    local os arch
+
+    case "$(uname -s)" in
+        Darwin) os="macos" ;;
+        Linux) os="linux" ;;
+        *)
+            echo "Unsupported OS: $(uname -s)"
+            return 1
+            ;;
+    esac
+
+    arch=$(get_node_arch)
+
+    if [[ "$os" == "macos" ]]; then
+        echo "fnm-macos.zip"
+    elif [[ "$arch" == "arm64" ]]; then
+        echo "fnm-arm64.zip"
+    else
+        echo "fnm-linux.zip"
+    fi
+}
+
 check_installed() {
     command -v node &>/dev/null
 }
 
 check_configured() {
-    # Check if TypeScript packages are installed
+    # Check if TypeScript packages are installed in fnm-managed Node
+    [[ -x "$FNM_DIR/fnm" ]] || return 1
+
+    export PATH="$FNM_DIR:$PATH"
+    export FNM_ARCH="$(get_node_arch)"
+    eval "$("$FNM_DIR/fnm" env)" 2>/dev/null || return 1
+
     command -v typescript-language-server &>/dev/null
 }
 
 install() {
-    if command -v fnm &>/dev/null; then
-        echo "fnm already installed"
-    else
-        echo "Installing fnm..."
+    echo "Installing fnm..."
 
-        local os
-        case "$(uname -s)" in
-            Darwin) os="macos" ;;
-            Linux) os="linux" ;;
-            *) echo "Unsupported OS: $(uname -s)"; return 1 ;;
-        esac
+    local asset node_arch
+    asset=$(get_fnm_asset)
+    node_arch=$(get_node_arch)
 
-        # Download fnm binary from GitHub releases
-        local url="https://github.com/Schniz/fnm/releases/latest/download/fnm-${os}.zip"
+    # Download fnm binary from GitHub releases
+    local url="https://github.com/Schniz/fnm/releases/latest/download/${asset}"
 
-        echo "Downloading fnm from $url..."
-        mkdir -p "$FNM_DIR"
-        curl -fsSL "$url" -o /tmp/fnm.zip
+    echo "Downloading fnm from $url..."
+    mkdir -p "$FNM_DIR"
+    curl -fsSL "$url" -o /tmp/fnm.zip
 
-        if [[ ! -s /tmp/fnm.zip ]]; then
-            echo "Error: Failed to download fnm"
-            return 1
-        fi
-
-        unzip -o /tmp/fnm.zip -d "$FNM_DIR"
-        chmod +x "$FNM_DIR/fnm"
-        rm /tmp/fnm.zip
-
-        echo "fnm installed to $FNM_DIR"
+    if [[ ! -s /tmp/fnm.zip ]]; then
+        echo "Error: Failed to download fnm"
+        return 1
     fi
+
+    unzip -o /tmp/fnm.zip -d "$FNM_DIR"
+    chmod +x "$FNM_DIR/fnm"
+    rm /tmp/fnm.zip
+
+    echo "fnm installed to $FNM_DIR"
 
     # Ensure fnm is in PATH for this script
     export PATH="$FNM_DIR:$PATH"
-    eval "$(fnm env)"
+    export FNM_ARCH="$node_arch"
+    eval "$("$FNM_DIR/fnm" env)"
+
+    # If a previous installation pulled the wrong architecture (e.g. x64 on arm64),
+    # Node binaries will fail with dynamic loader errors. Reinstall versions cleanly.
+    if command -v node &>/dev/null && ! node --version >/dev/null 2>&1; then
+        echo "Detected incompatible Node binary. Reinstalling Node versions..."
+        rm -rf "$FNM_DIR/node-versions"
+    fi
 
     echo "Installing latest LTS Node.js..."
     fnm install --lts
@@ -55,6 +96,7 @@ install() {
 
 configure() {
     export PATH="$FNM_DIR:$PATH"
+    export FNM_ARCH="$(get_node_arch)"
     eval "$(fnm env)" 2>/dev/null || true
 
     if ! command -v npm &>/dev/null; then
@@ -68,18 +110,17 @@ configure() {
 
 update() {
     export PATH="$FNM_DIR:$PATH"
-    eval "$(fnm env)" 2>/dev/null || true
 
     # Update fnm itself
     echo "Updating fnm..."
-    local os
-    case "$(uname -s)" in
-        Darwin) os="macos" ;;
-        Linux) os="linux" ;;
-        *) echo "Unsupported OS"; return 1 ;;
-    esac
+    local asset node_arch
+    asset=$(get_fnm_asset)
+    node_arch=$(get_node_arch)
 
-    local url="https://github.com/Schniz/fnm/releases/latest/download/fnm-${os}.zip"
+    export FNM_ARCH="$node_arch"
+    eval "$("$FNM_DIR/fnm" env)" 2>/dev/null || true
+
+    local url="https://github.com/Schniz/fnm/releases/latest/download/${asset}"
     curl -fsSL "$url" -o /tmp/fnm.zip
     unzip -o /tmp/fnm.zip -d "$FNM_DIR"
     chmod +x "$FNM_DIR/fnm"
