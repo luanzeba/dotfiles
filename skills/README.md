@@ -29,17 +29,15 @@ skills/
 │   └── references/
 └── external/            # Downloaded/cloned skills (gitignored)
     ├── pi-skills/       # From badlogic/pi-skills (gccli skill)
-    ├── playwright-skill/# From lackeyjb/playwright-skill
     └── private/         # From luanzeba/private-dotfiles repo
 ```
 
 ## How It Works
 
 The `install` script:
-1. Downloads `playwright-skill` from [lackeyjb/playwright-skill](https://github.com/lackeyjb/playwright-skill) and runs setup
-2. Clones [badlogic/pi-skills](https://github.com/badlogic/pi-skills) and links the `gccli` skill on local machines (skipped in Codespaces)
-3. Clones private skills from a private repo (if accessible)
-4. Symlinks all skills to global locations:
+1. Clones [badlogic/pi-skills](https://github.com/badlogic/pi-skills) and links the `gccli` skill on local machines (skipped in Codespaces)
+2. Clones private skills from a private repo (if accessible)
+3. Symlinks all skills to global locations:
    - `~/.config/opencode/skill/<name>` (OpenCode)
    - `~/.claude/skills/<name>` (Claude Code)
    - `~/.pi/agent/skills/<name>` (Pi)
@@ -90,23 +88,5 @@ dotfiles install skills
 # Or directly
 ~/dotfiles/skills/install
 ```
-
-## Playwright Skill vs Playwright MCP
-
-This dotfiles repo includes both the Playwright Skill and Playwright MCP:
-
-| | Playwright MCP | Playwright Skill |
-|--|----------------|------------------|
-| **Location** | `opencode/opencode.json` | `skills/external/playwright-skill/` |
-| **How it works** | Tool-based (MCP protocol) | Claude writes custom scripts |
-| **Best for** | Quick single actions | Complex multi-step automation |
-
-They're complementary:
-- **MCP**: Quick tasks like "take a screenshot of this page"
-- **Skill**: Complex flows like "test the login, then verify dashboard loads, then check responsive design"
-
-### Codespaces Note
-
-In Codespaces, Playwright must run headless (no display available). The `HEADLESS=true` env var is automatically set in `.zshrc` when `$CODESPACES` is detected. When using the playwright-skill, Claude should use `headless: true` or the `helpers.launchBrowser()` function which respects this env var.
 
 `gccli` from badlogic/pi-skills is intentionally linked only on local machines (macOS/Arch), not in Codespaces.
