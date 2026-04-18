@@ -1,6 +1,6 @@
 # Skills
 
-Skills are structured prompts that provide domain-specific knowledge to AI coding assistants like [OpenCode](https://opencode.ai) and Claude Code. They're loaded automatically when the skill name is mentioned or when the context matches.
+Skills are structured prompts that provide domain-specific knowledge to AI coding assistants like Claude Code and Pi. They're loaded automatically when the skill name is mentioned or when the context matches.
 
 ## Structure
 
@@ -38,7 +38,6 @@ The `install` script:
 1. Clones [badlogic/pi-skills](https://github.com/badlogic/pi-skills) and links the `gccli` skill on local machines (skipped in Codespaces)
 2. Clones private skills from a private repo (if accessible)
 3. Symlinks all skills to global locations:
-   - `~/.config/opencode/skill/<name>` (OpenCode)
    - `~/.claude/skills/<name>` (Claude Code)
    - `~/.pi/agent/skills/<name>` (Pi)
 

@@ -80,7 +80,6 @@ run_step "gccli/install" bash "$SCRIPT_DIR/gccli/install"
 run_step "pi/install" bash "$SCRIPT_DIR/pi/install"
 run_step "jj/install" bash "$SCRIPT_DIR/jj/install"
 run_step "gh/install" bash "$SCRIPT_DIR/gh/install"
-run_step "opencode/install" bash "$SCRIPT_DIR/opencode/install"
 run_step "skills/install" bash "$SCRIPT_DIR/skills/install"
 
 # Phase 2: Editors (direct downloads)

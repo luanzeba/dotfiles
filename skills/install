@@ -21,7 +21,7 @@ check_installed() {
 
 check_configured() {
     # Check if the dotfiles skill is properly symlinked
-    [[ -L "$HOME/.config/opencode/skill/dotfiles" ]]
+    [[ -L "$HOME/.pi/agent/skills/dotfiles" ]]
 }
 
 # Download skill-creator from Anthropic's skills repo
@@ -146,12 +146,10 @@ symlink_skill() {
     fi
 
     # Remove existing symlinks/directories
-    rm -rf ~/.config/opencode/skill/"$skill_name"
     rm -rf ~/.claude/skills/"$skill_name"
     rm -rf ~/.pi/agent/skills/"$skill_name"
 
     # Create new symlinks
-    ln -s "$skill_path" ~/.config/opencode/skill/"$skill_name"
     ln -s "$skill_path" ~/.claude/skills/"$skill_name"
     ln -s "$skill_path" ~/.pi/agent/skills/"$skill_name"
 
@@ -162,7 +160,6 @@ symlink_skill() {
 # Create global skill directories and symlink all skills
 configure() {
     # Create global skill directories
-    mkdir -p ~/.config/opencode/skill
     mkdir -p ~/.claude/skills
     mkdir -p ~/.pi/agent/skills
 
@@ -229,5 +226,5 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     echo "Skills installation complete!"
     echo ""
     echo "Installed skills:"
-    ls -la ~/.config/opencode/skill/
+    ls -la ~/.pi/agent/skills/
 fi

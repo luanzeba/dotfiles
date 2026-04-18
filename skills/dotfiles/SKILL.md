@@ -37,8 +37,7 @@ See [references/tool-template.md](references/tool-template.md) for the install s
 | Ghostty | `ghostty/` | `~/.config/ghostty` | No |
 | Helix | `helix/` | `~/.config/helix` | Yes |
 | Whisper | `whisper/` | N/A | Yes (macOS/Arch only) |
-| OpenCode | `opencode/` | `~/.config/opencode/` | Yes |
-| Skills | `skills/` | `~/.config/opencode/skill/`, `~/.claude/skills/` | Yes |
+| Skills | `skills/` | `~/.claude/skills/`, `~/.pi/agent/skills/` | Yes |
 | Rust | `rust/` | N/A | Yes (rustup) |
 | Go | `go/` | N/A | Yes (Go tools: gopls, gofumpt, etc.) |
 | Node | `node/` | N/A | Yes (fnm + TypeScript tools) |
@@ -70,7 +69,7 @@ Always make changes in `~/dotfiles/` so they are:
 3. Not overwritten by install scripts
 
 Common mistakes to avoid:
-- Creating skills in `~/.config/opencode/skill/` instead of `~/dotfiles/skills/`
+- Creating skills in `~/.claude/skills/` or `~/.pi/agent/skills/` instead of `~/dotfiles/skills/`
 - Editing nvim config in `~/.config/nvim/` instead of `~/dotfiles/nvim/`
 - Adding scripts to `~/.local/bin/` instead of `~/dotfiles/bin/`
 

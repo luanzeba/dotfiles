@@ -49,7 +49,7 @@ description: Work with the github/github local macOS arm64 devcontainer. Use whe
 Run inside container:
 
 ```bash
-which dotfiles dot pi opencode nvim tmux gh
+which dotfiles dot pi nvim tmux gh
 ```
 
 ## Lifecycle Rules (important)
