@@ -70,7 +70,35 @@ fi
 echo "Ensuring Chrome is running with remote debugging on :9222 (visible window)..."
 "$NODE_BIN" "$START_SCRIPT"
 
-# Bring Chrome to the foreground for a normal launch-like experience.
-/usr/bin/open -a "Google Chrome"
+# If Chrome is already running, activate it (prefer Work profile window).
+# Otherwise, open a new instance.
+if pgrep -x "Google Chrome" >/dev/null 2>&1; then
+  echo "Chrome is already running — activating existing window..."
+  osascript -e '
+    tell application "Google Chrome"
+      activate
+      set workWindow to missing value
+      set fallbackWindow to missing value
+      repeat with w in windows
+        try
+          -- Chrome includes " - Work" in window name for Work profile
+          if name of w contains "- Work" then
+            set workWindow to w
+          else if fallbackWindow is missing value then
+            set fallbackWindow to w
+          end if
+        end try
+      end repeat
+      if workWindow is not missing value then
+        set index of workWindow to 1
+      else if fallbackWindow is not missing value then
+        set index of fallbackWindow to 1
+      end if
+    end tell
+  '
+else
+  echo "No Chrome process found — launching..."
+  /usr/bin/open -a "Google Chrome"
+fi
 
 echo "✓ Ready. Pi can now use the web-browser skill on the active visible debug session."
