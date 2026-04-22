@@ -2,14 +2,17 @@
 # login.sh — Open Chrome for Datadog SSO authentication
 
 open_datadog_page() {
-  # Prefer reusing the existing Chrome instance/profile so we don't interfere with
-  # normal browsing sessions.
+  local pi_open_url_script="${DATADOG_PI_OPEN_URL_SCRIPT:-$HOME/dotfiles/bin/chrome-pi-open-url.sh}"
+  if [[ -x "$pi_open_url_script" ]]; then
+    "$pi_open_url_script" "https://app.datadoghq.com"
+    return 0
+  fi
+
+  # Fallback path when Pi browser wrapper is unavailable.
   if [[ "$(uname)" == "Darwin" ]]; then
     if pgrep -x "Google Chrome" >/dev/null 2>&1; then
       /usr/bin/open -a "Google Chrome" "https://app.datadoghq.com"
     else
-      # If Chrome is not running, start a dedicated window using the configured
-      # profile directory.
       /usr/bin/open -na "Google Chrome" --args \
         --profile-directory="$CHROME_PROFILE_DIRECTORY" \
         --no-first-run \

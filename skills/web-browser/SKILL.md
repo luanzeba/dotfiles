@@ -16,6 +16,13 @@ Minimal CDP tools for collaborative site exploration.
 
 ## Start Chrome (visible session only)
 
+`start.js` is now a thin wrapper over a shared composable module:
+
+- `./scripts/chrome-session-core.cjs` (shared policy + CDP session bootstrap)
+- `./scripts/start.js` (CLI entrypoint for humans/agents)
+
+Other tools should import/reuse `chrome-session-core.cjs` instead of duplicating CDP policy logic.
+
 ```bash
 ./scripts/start.js
 ```
@@ -31,13 +38,22 @@ Behavior:
 - Reuses an existing `:9222` debug instance when safe
 - Never uses headless mode
 - Never kills existing Chrome processes
-- Tries your regular Chrome profile first when supported
-- On modern Chrome versions (136+), CDP on the primary profile is blocked, so `start.js` skips straight to the isolated Pi profile (`~/.cache/scraping`)
-- Isolated fallback keeps automation working without touching your open browsing windows
+- Enforces **Work** profile semantics (display name + resolved profile directory)
+- Supports a canonical Pi debug profile store at `~/.cache/pi-chrome-profile`
+- If Chrome is running without `:9222`, it fails fast and asks for a manual relaunch
 
-Optional profile refresh for isolated fallback mode:
+If needed, relaunch your debug session via:
 ```bash
-./scripts/start.js --refresh-profile
+~/dotfiles/bin/chrome-pi-debug.sh
+```
+
+Profile lifecycle helper:
+```bash
+~/dotfiles/bin/chrome-pi-profile.sh status
+~/dotfiles/bin/chrome-pi-profile.sh migrate
+~/dotfiles/bin/chrome-pi-profile.sh backup
+~/dotfiles/bin/chrome-pi-profile.sh sync
+~/dotfiles/bin/chrome-pi-profile.sh sanitize
 ```
 
 ## Navigate

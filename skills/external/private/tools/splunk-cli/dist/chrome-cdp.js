@@ -170,13 +170,57 @@ function patchMirroredProfilePreferences(mirrorUserDataDir, profileDirectory) {
         // Best effort only.
     }
 }
+function isChromeProcessRunning() {
+    const result = (0, child_process_1.spawnSync)('pgrep', ['-x', 'Google Chrome'], { stdio: 'ignore' });
+    return result.status === 0;
+}
+function resolveSharedChromeCorePath() {
+    if (process.env.SPLUNK_SHARED_CHROME_CORE_MODULE) {
+        return process.env.SPLUNK_SHARED_CHROME_CORE_MODULE;
+    }
+    return path_1.default.resolve(__dirname, '../../../../../web-browser/scripts/chrome-session-core.cjs');
+}
+function loadSharedChromeCore() {
+    const modulePath = resolveSharedChromeCorePath();
+    if (!fs_1.default.existsSync(modulePath)) {
+        return null;
+    }
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const loaded = require(modulePath);
+    if (typeof loaded?.ensureDebugSession !== 'function') {
+        return null;
+    }
+    return loaded;
+}
 async function ensureChromeForCDP(options) {
     const profileDirectory = options.profileDirectory?.trim() ||
         resolveChromeProfileDirectory(options.profileName, options.userDataDir);
-    // Safer default: prefer isolated mirrored profile so we don't interfere with
-    // the user's normal Chrome instance.
-    const preferMirror = process.env.SPLUNK_CHROME_PREFER_MIRROR !== '0';
-    const allowLiveFallback = process.env.SPLUNK_CHROME_ALLOW_LIVE_PROFILE_FALLBACK === '1';
+    const autoStart = process.env.SPLUNK_CHROME_AUTO_START === '1';
+    const allowMirrorAutoStart = process.env.SPLUNK_CHROME_ALLOW_MIRROR_AUTOSTART === '1';
+    const sharedCore = loadSharedChromeCore();
+    const requestedPolicyProfile = (options.profileName || profileDirectory).trim();
+    const canUseSharedPolicy = Boolean(sharedCore && options.port === 9222);
+    if (canUseSharedPolicy && sharedCore) {
+        const launchAttempts = Math.max(10, Math.ceil(options.startupTimeoutMs / 500));
+        const canonicalProfileStore = options.mirrorUserDataDir ||
+            sharedCore.DEFAULT_ISOLATED_USER_DATA_DIR ||
+            options.userDataDir;
+        const result = await sharedCore.ensureDebugSession({
+            port: options.port,
+            requiredProfileDirectory: requestedPolicyProfile,
+            isolatedUserDataDir: canonicalProfileStore,
+            launchUserDataDir: canonicalProfileStore,
+            rejectIsolated: false,
+            autoLaunchWhenChromeNotRunning: autoStart,
+            launchAttempts,
+            launchDelayMs: 500,
+        });
+        return {
+            profileDirectory,
+            startedBrowser: result.startedBrowser ?? !result.reusedExisting,
+            usedMirroredProfile: canonicalProfileStore !== options.userDataDir,
+        };
+    }
     if (await isCDPEndpointAvailable(options.port)) {
         return {
             profileDirectory,
@@ -184,63 +228,53 @@ async function ensureChromeForCDP(options) {
             usedMirroredProfile: false,
         };
     }
-    const tryLive = async (timeoutMs) => {
-        launchChromeForCDP(options.port, profileDirectory);
-        return waitForCDPEndpoint(options.port, timeoutMs);
-    };
-    const tryMirror = async (timeoutMs) => {
-        if (!options.mirrorUserDataDir) {
-            return false;
-        }
-        syncProfileSnapshot(options.userDataDir, options.mirrorUserDataDir);
-        patchMirroredProfilePreferences(options.mirrorUserDataDir, profileDirectory);
-        launchChromeForCDP(options.port, profileDirectory, options.mirrorUserDataDir);
-        return waitForCDPEndpoint(options.port, timeoutMs);
-    };
-    if (preferMirror) {
-        if (await tryMirror(options.startupTimeoutMs)) {
-            return {
-                profileDirectory,
-                startedBrowser: true,
-                usedMirroredProfile: true,
-            };
-        }
-        if (allowLiveFallback) {
-            const liveTimeoutMs = Math.min(5000, options.startupTimeoutMs);
-            if (await tryLive(liveTimeoutMs)) {
-                return {
-                    profileDirectory,
-                    startedBrowser: true,
-                    usedMirroredProfile: false,
-                };
-            }
-        }
-    }
-    else {
-        const liveTimeoutMs = Math.min(5000, options.startupTimeoutMs);
-        if (await tryLive(liveTimeoutMs)) {
-            return {
-                profileDirectory,
-                startedBrowser: true,
-                usedMirroredProfile: false,
-            };
-        }
-        const remainingTimeoutMs = Math.max(2000, options.startupTimeoutMs - liveTimeoutMs);
-        if (await tryMirror(remainingTimeoutMs)) {
-            return {
-                profileDirectory,
-                startedBrowser: true,
-                usedMirroredProfile: true,
-            };
-        }
-    }
     const liveCmd = manualStartCommand(options.port, profileDirectory);
     const mirrorCmd = options.mirrorUserDataDir
         ? manualStartCommand(options.port, profileDirectory, options.mirrorUserDataDir)
         : '';
-    throw new Error(`Failed to connect to Chrome DevTools endpoint on port ${options.port}. ` +
-        `Try starting Chrome in debug mode manually.\n\n` +
-        `Live profile command:\n${liveCmd}` +
-        (mirrorCmd ? `\n\nIsolated mirrored profile command:\n${mirrorCmd}` : '') +
-        `\n\nDefaults: SPLUNK_CHROME_PREFER_MIRROR=1 and SPLUNK_CHROME_ALLOW_LIVE_PROFILE_FALLBACK=0.`);
+    if (!autoStart) {
+        if (isChromeProcessRunning()) {
+            throw new Error(`Chrome is running but no CDP endpoint is available on port ${options.port}. ` +
+                `To avoid touching your existing browser session, splunk-cli will not auto-start an isolated Chrome instance.\n\n` +
+                `Please relaunch your existing Chrome session with remote debugging enabled (profile: ${profileDirectory}).\n` +
+                `Manual command:\n${liveCmd}\n\n` +
+                `Set SPLUNK_CHROME_AUTO_START=1 only if you explicitly want splunk-cli to launch Chrome for you.`);
+        }
+        throw new Error(`No CDP endpoint found on port ${options.port}. ` +
+            `Start Chrome in debug mode manually (profile: ${profileDirectory}) and retry.\n\n` +
+            `Manual command:\n${liveCmd}\n\n` +
+            `Set SPLUNK_CHROME_AUTO_START=1 only if you explicitly want splunk-cli to launch Chrome for you.`);
+    }
+    if (isChromeProcessRunning()) {
+        throw new Error(`Chrome is already running but no CDP endpoint is available on port ${options.port}. ` +
+            `Refusing to launch another Chrome instance automatically to avoid disrupting your session.\n\n` +
+            `Please relaunch Chrome with remote debugging enabled (profile: ${profileDirectory}).\n` +
+            `Manual command:\n${liveCmd}`);
+    }
+    launchChromeForCDP(options.port, profileDirectory);
+    if (await waitForCDPEndpoint(options.port, options.startupTimeoutMs)) {
+        return {
+            profileDirectory,
+            startedBrowser: true,
+            usedMirroredProfile: false,
+        };
+    }
+    if (allowMirrorAutoStart && options.mirrorUserDataDir) {
+        syncProfileSnapshot(options.userDataDir, options.mirrorUserDataDir);
+        patchMirroredProfilePreferences(options.mirrorUserDataDir, profileDirectory);
+        launchChromeForCDP(options.port, profileDirectory, options.mirrorUserDataDir);
+        if (await waitForCDPEndpoint(options.port, options.startupTimeoutMs)) {
+            return {
+                profileDirectory,
+                startedBrowser: true,
+                usedMirroredProfile: true,
+            };
+        }
+    }
+    throw new Error(`Failed to connect to Chrome DevTools endpoint on port ${options.port}.\n\n` +
+        `Manual command:\n${liveCmd}` +
+        (mirrorCmd ? `\n\nOptional isolated fallback (explicit opt-in only):\n${mirrorCmd}` : '') +
+        `\n\nAuto-start flags:\n` +
+        `- SPLUNK_CHROME_AUTO_START=1 (allow live profile autostart)\n` +
+        `- SPLUNK_CHROME_ALLOW_MIRROR_AUTOSTART=1 (allow isolated fallback autostart)`);
 }

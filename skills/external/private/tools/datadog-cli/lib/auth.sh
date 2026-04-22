@@ -3,10 +3,11 @@
 
 SESSION_FILE="${DATADOG_SESSION_FILE:-$HOME/.datadog-session.json}"
 SESSION_TTL="${DATADOG_SESSION_TTL:-7200}"  # 2 hours in seconds
-CHROME_CDP_PORT="${DATADOG_CHROME_CDP_PORT:-9223}"
-CHROME_CDP_MIRROR_USER_DATA_DIR="${DATADOG_CHROME_CDP_MIRROR_USER_DATA_DIR:-$HOME/.datadog-cdp-profile}"
+CHROME_CDP_PORT="${DATADOG_CHROME_CDP_PORT:-9222}"
+CHROME_CDP_MIRROR_USER_DATA_DIR="${DATADOG_CHROME_CDP_MIRROR_USER_DATA_DIR:-$HOME/.cache/pi-chrome-profile}"
 # For safety, avoid touching the live Chrome profile unless explicitly enabled.
 DATADOG_CHROME_ALLOW_LIVE_PROFILE="${DATADOG_CHROME_ALLOW_LIVE_PROFILE:-0}"
+DATADOG_CHROME_ALLOW_HEADLESS_FALLBACK="${DATADOG_CHROME_ALLOW_HEADLESS_FALLBACK:-0}"
 
 # Chrome profile defaults: use normal Chrome user data dir and the Work profile.
 default_chrome_user_data_dir() {
@@ -163,6 +164,45 @@ print(f\"DD_CSRF='{csrf}'\")
 ")"
 }
 
+resolve_node() {
+  if command -v node >/dev/null 2>&1; then
+    command -v node
+    return 0
+  fi
+
+  local fnm_node="$HOME/.local/share/fnm/current/bin/node"
+  if [[ -x "$fnm_node" ]]; then
+    echo "$fnm_node"
+    return 0
+  fi
+
+  if [[ -x "$HOME/.local/share/fnm/fnm" ]]; then
+    # shellcheck disable=SC1090
+    eval "$($HOME/.local/share/fnm/fnm env --shell bash)" >/dev/null 2>&1 || true
+    if command -v node >/dev/null 2>&1; then
+      command -v node
+      return 0
+    fi
+  fi
+
+  return 1
+}
+
+ensure_pi_debug_session() {
+  local start_script="${DATADOG_PI_START_SCRIPT:-$HOME/dotfiles/skills/web-browser/scripts/start.js}"
+  if [[ ! -f "$start_script" ]]; then
+    return 1
+  fi
+
+  local node_bin
+  node_bin="$(resolve_node || true)"
+  if [[ -z "$node_bin" || ! -x "$node_bin" ]]; then
+    return 1
+  fi
+
+  "$node_bin" "$start_script" >/tmp/pi-browser-demos/datadog-last-start.txt 2>&1
+}
+
 wait_for_cdp_endpoint() {
   local retries=0
   while ! curl -s "http://localhost:${CHROME_CDP_PORT}/json" &>/dev/null; do
@@ -250,7 +290,7 @@ extract_cookies_via_profile() {
   printf '%s' "$cookies_json"
 }
 
-# Refresh session by extracting cookies from Chrome profile
+# Refresh session by extracting cookies from the canonical Pi Chrome debug session.
 refresh_session() {
   # Check if Chrome user data dir exists
   if [[ ! -d "$CHROME_USER_DATA_DIR" ]]; then
@@ -263,28 +303,32 @@ refresh_session() {
 
   local cookies_json
 
-  # 1) First try existing CDP endpoints (e.g. already-open Chrome debug session)
+  # 1) Ensure canonical visible Chrome debug session exists on :9222.
+  if ! ensure_pi_debug_session; then
+    echo "Warning: could not ensure canonical Pi debug session. Trying existing CDP endpoints..." >&2
+  fi
+
+  # 2) Primary path: extract from the active visible CDP session.
   cookies_json=$(extract_cookies 2>/dev/null || true)
 
-  # 2) Preferred fallback: mirror profile and launch headless there.
-  # This avoids interfering with the user's active Chrome session.
-  if [[ -z "$cookies_json" ]]; then
-    echo "Trying mirrored profile snapshot..." >&2
+  # 3) Optional headless fallback (disabled by default).
+  if [[ -z "$cookies_json" && "$DATADOG_CHROME_ALLOW_HEADLESS_FALLBACK" == "1" ]]; then
+    echo "Trying mirrored profile snapshot with headless fallback..." >&2
     if sync_profile_snapshot "$CHROME_USER_DATA_DIR" "$CHROME_CDP_MIRROR_USER_DATA_DIR"; then
       cookies_json=$(extract_cookies_via_profile "$CHROME_CDP_MIRROR_USER_DATA_DIR" 2>/dev/null || true)
     fi
   fi
 
-  # 3) Optional fallback: live profile (disabled by default for safety)
-  if [[ -z "$cookies_json" && "$DATADOG_CHROME_ALLOW_LIVE_PROFILE" == "1" ]]; then
-    echo "Mirrored profile failed; trying live profile (DATADOG_CHROME_ALLOW_LIVE_PROFILE=1)..." >&2
+  # 4) Optional live-profile headless fallback (also disabled by default).
+  if [[ -z "$cookies_json" && "$DATADOG_CHROME_ALLOW_HEADLESS_FALLBACK" == "1" && "$DATADOG_CHROME_ALLOW_LIVE_PROFILE" == "1" ]]; then
+    echo "Mirrored profile failed; trying live profile headless fallback (DATADOG_CHROME_ALLOW_LIVE_PROFILE=1)..." >&2
     cookies_json=$(extract_cookies_via_profile "$CHROME_USER_DATA_DIR" 2>/dev/null || true)
   fi
 
   if [[ -z "$cookies_json" ]]; then
-    echo "Error: Failed to extract Datadog cookies from Chrome profile '$CHROME_PROFILE_NAME' (directory '$CHROME_PROFILE_DIRECTORY')." >&2
-    echo "Try running 'datadog login' in your Work profile and retry."
-    echo "If you want to allow live-profile extraction, set DATADOG_CHROME_ALLOW_LIVE_PROFILE=1." >&2
+    echo "Error: Failed to extract Datadog cookies from the canonical Chrome debug session/profile." >&2
+    echo "Try running 'datadog login' and then retry." >&2
+    echo "Optional fallback flags: DATADOG_CHROME_ALLOW_HEADLESS_FALLBACK=1 (and DATADOG_CHROME_ALLOW_LIVE_PROFILE=1)." >&2
     return 1
   fi
 

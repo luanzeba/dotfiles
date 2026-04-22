@@ -4,36 +4,29 @@
  * @typedef {import('/Applications/Finicky.app/Contents/Resources/finicky.d.ts').FinickyConfig} FinickyConfig
  */
 
+const PI_OPEN_URL_SCRIPT = "/Users/luan/dotfiles/bin/chrome-pi-open-url.sh";
+
+const openInPiChrome = (url) => ({
+  appType: "path",
+  name: PI_OPEN_URL_SCRIPT,
+  args: [url.toString()],
+});
+
 /** @type {FinickyConfig} */
 export default {
-  defaultBrowser: {
-    name: "Google Chrome",
-    profile: "Work",
-  },
+  defaultBrowser: openInPiChrome,
   handlers: [
     {
-      // GitHub org URLs should always open in the Work Chrome profile.
       match: /^https:\/\/github\.com\/github(?:[/?#]|$)/,
-      browser: {
-        name: "Google Chrome",
-        profile: "Work",
-      },
+      browser: openInPiChrome,
     },
     {
-      // X should always open in the Home Chrome profile.
       match: /^https:\/\/x\.com(?:[/?#]|$)/,
-      browser: {
-        name: "Google Chrome",
-        profile: "Home",
-      },
+      browser: openInPiChrome,
     },
     {
-      // TravelJoy should always open in the Home Chrome profile.
       match: /^https:\/\/(?:www\.)?traveljoy\.com(?:[/?#]|$)/,
-      browser: {
-        name: "Google Chrome",
-        profile: "Home",
-      },
+      browser: openInPiChrome,
     },
   ],
 };
