@@ -39,7 +39,7 @@ install() {
     local os arch
     case "$(uname -s)" in
         Darwin) os="apple-darwin" ;;
-        Linux) os="unknown-linux-gnu" ;;
+        Linux) os="unknown-linux-musl" ;;
         *) echo "Unsupported OS: $(uname -s)"; return 1 ;;
     esac
 
@@ -69,15 +69,20 @@ install() {
     fi
 
     # Extract - jj tarball contains just the binary
-    tar -xzf /tmp/jj.tar.gz -C /tmp
+    tar -xzf /tmp/jj.tar.gz -C /tmp 2>/dev/null || true
+
+    if [[ ! -f /tmp/jj ]]; then
+        echo "Error: Failed to extract jj binary"
+        return 1
+    fi
 
     # Install to ~/.local/bin
     mkdir -p "$JJ_INSTALL_DIR"
     mv /tmp/jj "$JJ_INSTALL_DIR/"
     chmod +x "$JJ_INSTALL_DIR/jj"
-    rm /tmp/jj.tar.gz
+    rm -f /tmp/jj.tar.gz
 
-    echo "jj installed: $(jj --version)"
+    echo "jj installed: $("$JJ_INSTALL_DIR/jj" --version)"
 }
 
 configure() {
@@ -108,7 +113,7 @@ update() {
     local os arch
     case "$(uname -s)" in
         Darwin) os="apple-darwin" ;;
-        Linux) os="unknown-linux-gnu" ;;
+        Linux) os="unknown-linux-musl" ;;
         *) echo "Unsupported OS"; return 1 ;;
     esac
 
@@ -121,14 +126,19 @@ update() {
     local url="https://github.com/martinvonz/jj/releases/download/${latest}/jj-${latest}-${arch}-${os}.tar.gz"
 
     curl -fsSL "$url" -o /tmp/jj.tar.gz
-    tar -xzf /tmp/jj.tar.gz -C /tmp
+    tar -xzf /tmp/jj.tar.gz -C /tmp 2>/dev/null || true
+
+    if [[ ! -f /tmp/jj ]]; then
+        echo "Error: Failed to extract jj binary"
+        return 1
+    fi
 
     mkdir -p "$JJ_INSTALL_DIR"
     mv /tmp/jj "$JJ_INSTALL_DIR/"
     chmod +x "$JJ_INSTALL_DIR/jj"
-    rm /tmp/jj.tar.gz
+    rm -f /tmp/jj.tar.gz
 
-    echo "jj updated: $(jj --version)"
+    echo "jj updated: $("$JJ_INSTALL_DIR/jj" --version)"
 }
 
 # Main (only run when executed directly, not when sourced)

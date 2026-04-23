@@ -364,25 +364,40 @@ cmd_edit() {
 }
 
 cmd_pull() {
-    [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]] && { show_pull_help; return 0; }
-    
-    if is_omarchy; then
-        echo "Skipping pull on Omarchy (using default configs)"
-        return 0
-    fi
-    
+    local force_apply=false
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            -h|--help)
+                show_pull_help
+                return 0
+                ;;
+            --apply)
+                force_apply=true
+                ;;
+            *)
+                log_error "Unknown option: $1"
+                show_pull_help
+                return 1
+                ;;
+        esac
+        shift
+    done
+
     local dir
     dir="$(dotfiles_dir)"
     cd "$dir" || exit 1
-    
+
     clear_error_log  # Clear errors before pull
     log_info "Pulling latest changes..."
-    
+
     local output
     local exit_code
+    set +e
     output=$(vcs_pull 2>&1)
     exit_code=$?
-    
+    set -e
+
     if [[ $exit_code -ne 0 ]]; then
         log_error_persistent "pull" "-" "$exit_code" "$output"
         log_error "Pull failed"
@@ -390,10 +405,18 @@ cmd_pull() {
         return $exit_code
     fi
     [[ -n "$output" ]] && echo "$output"
-    
+
+    if is_omarchy && [[ "$force_apply" != "true" ]]; then
+        log_info "Omarchy detected: pulled latest changes."
+        log_info "Skipping apply() to preserve Omarchy defaults."
+        log_info "Run 'dot pull --apply' when you want to apply tool changes."
+        log_success "Done!"
+        return 0
+    fi
+
     log_info "Applying changes..."
     apply_all
-    
+
     log_success "Done!"
 }
 
@@ -968,13 +991,15 @@ show_pull_help() {
 dot pull - Pull latest changes and apply them
 
 Usage:
-  dot pull [-h|--help]
+  dot pull [--apply] [-h|--help]
 
-Pulls the latest changes from the remote repository and runs
-apply() for each tool to reload configurations.
+Pulls the latest changes from the remote repository.
+By default, it then runs apply() for each tool to reload configurations.
+
+On Omarchy, apply() is skipped by default to preserve Omarchy defaults.
+Use --apply to force apply() after pulling.
 
 Clears the error log before pulling.
-Note: Skipped on Omarchy (uses default configs).
 EOF
 }
 

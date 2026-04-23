@@ -46,7 +46,7 @@ After installation, use the `dotfiles` (or `dot`) command:
 | Command | Description |
 |---------|-------------|
 | `dot status` | Show repo status |
-| `dot pull` | Pull latest and apply changes |
+| `dot pull` | Pull latest (Omarchy skips apply by default; use `--apply`) |
 | `dot install` | Run full install |
 | `dot install <tool>` | Install specific tool(s) |
 | `dot install -f <tool>` | Force reinstall (skip install check) |
@@ -100,7 +100,7 @@ dot logs --clear      # Clear error log
 | Platform | Detection | Notes |
 |----------|-----------|-------|
 | macOS | `uname == Darwin` | Primary dev machine |
-| Omarchy | `~/.local/share/omarchy` | Arch + Hyprland, uses its own configs |
+| Omarchy | `~/.local/share/omarchy` | Arch + Hyprland; preserves Omarchy defaults (`dot pull` skips apply unless `--apply`, `install-local` skips nvim unless `DOTFILES_INSTALL_NVIM_ON_OMARCHY=1`) |
 | GitHub Codespaces | `$CODESPACES` | Auto-installed on codespace creation |
 
 ## Codespaces: Local Pi, remote dotcom tools

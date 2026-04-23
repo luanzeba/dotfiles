@@ -89,7 +89,7 @@ vcs_pull() {
         # jj workflow: fetch and rebase
         jj git fetch && jj rebase -d main@origin
     else
-        git pull --rebase
+        git pull --rebase --autostash
     fi
 }
 

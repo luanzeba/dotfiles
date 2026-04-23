@@ -51,6 +51,11 @@ get_installed_version() {
 }
 
 install() {
+    if check_installed; then
+        echo "Ruby already installed: $(get_installed_version)"
+        return 0
+    fi
+
     case "$(uname -s)" in
         Darwin)
             if ! command -v brew &>/dev/null; then
