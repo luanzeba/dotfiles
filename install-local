@@ -120,6 +120,7 @@ run_step "ghostty/install" bash "$SCRIPT_DIR/ghostty/install"
 run_step "chrome/install" bash "$SCRIPT_DIR/chrome/install"
 run_step "finicky/install" bash "$SCRIPT_DIR/finicky/install"
 run_step "1password/install" bash "$SCRIPT_DIR/1password/install"
+run_step "tailscale/install" bash "$SCRIPT_DIR/tailscale/install"
 
 # Phase 4: Shell setup (after everything else)
 log_info "Phase 4: Setting up shell"
