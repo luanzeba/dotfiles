@@ -10,16 +10,80 @@ check_installed() {
 
 check_configured() {
     # Tailscale is "configured" when the daemon is running and we're logged in
-    # Check if tailscaled is active (works on both macOS and Linux)
     if [[ "$(uname)" == "Darwin" ]]; then
         # macOS: Tailscale runs as an app, check if it's in the menu bar
         pgrep -x "Tailscale" &>/dev/null || return 1
     else
         # Linux: Check systemd service
+        command -v systemctl &>/dev/null || return 1
         systemctl is-active --quiet tailscaled 2>/dev/null || return 1
     fi
+
     # Check if logged in (has an IP assigned)
     tailscale ip -4 &>/dev/null 2>&1
+}
+
+run_as_root() {
+    if [[ "$EUID" -eq 0 ]]; then
+        "$@"
+    else
+        sudo "$@"
+    fi
+}
+
+ensure_sudo() {
+    if [[ "$EUID" -eq 0 ]]; then
+        return 0
+    fi
+
+    # Already authenticated sudo session
+    if sudo -n true 2>/dev/null; then
+        return 0
+    fi
+
+    # Interactive terminal: prompt once up front
+    if [[ -t 0 ]]; then
+        echo "Tailscale install requires sudo privileges..."
+        sudo -v
+        return $?
+    fi
+
+    # Non-interactive (e.g. agent harness)
+    echo "Error: sudo authentication is required, but no interactive terminal is available."
+    echo "Run this from your own terminal (or pre-authenticate with 'sudo -v') and retry:"
+    echo "  dot install tailscale"
+    return 1
+}
+
+install_arch_tailscale() {
+    # First attempt: fast path if package databases are fresh
+    if run_as_root pacman -S --noconfirm --needed tailscale; then
+        return 0
+    fi
+
+    # Common Omarchy/Arch failure mode: stale package DB -> 404 on mirror
+    echo "Initial pacman install failed; syncing package databases and retrying..."
+    run_as_root pacman -Syu --noconfirm tailscale
+}
+
+ensure_tailscaled_service() {
+    if [[ "$(uname)" == "Darwin" ]]; then
+        return 0
+    fi
+
+    if ! command -v systemctl &>/dev/null; then
+        echo "Warning: systemctl not found; cannot manage tailscaled automatically."
+        return 1
+    fi
+
+    if systemctl is-enabled --quiet tailscaled 2>/dev/null && systemctl is-active --quiet tailscaled 2>/dev/null; then
+        echo "tailscaled service already enabled and running"
+        return 0
+    fi
+
+    ensure_sudo
+    run_as_root systemctl enable --now tailscaled
+    echo "tailscaled service enabled and started"
 }
 
 install() {
@@ -34,33 +98,19 @@ install() {
         # macOS: Install via Homebrew cask (GUI app)
         if command -v brew &>/dev/null; then
             brew install --cask tailscale
-            echo ""
-            echo "Tailscale installed. Please:"
-            echo "  1. Open Tailscale from Applications"
-            echo "  2. Click the menu bar icon and log in"
         else
             echo "Error: Homebrew required for Tailscale on macOS"
             echo "Install Homebrew first, then run: brew install --cask tailscale"
             return 1
         fi
     elif command -v pacman &>/dev/null; then
-        # Arch Linux
-        sudo pacman -S --noconfirm tailscale
-
-        # Enable and start the daemon
-        sudo systemctl enable --now tailscaled
-
-        echo ""
-        echo "Tailscale installed. Run 'sudo tailscale up' to authenticate."
+        # Arch Linux / Omarchy
+        ensure_sudo
+        install_arch_tailscale
     elif [[ -n "$CODESPACES" ]] || command -v apt-get &>/dev/null; then
         # Debian/Ubuntu/Codespaces - use official install script
-        curl -fsSL https://tailscale.com/install.sh | sh
-
-        # Enable and start the daemon
-        sudo systemctl enable --now tailscaled
-
-        echo ""
-        echo "Tailscale installed. Run 'sudo tailscale up' to authenticate."
+        ensure_sudo
+        curl -fsSL https://tailscale.com/install.sh | run_as_root sh
     else
         echo "Unknown platform. Please install Tailscale manually:"
         echo "  https://tailscale.com/download"
@@ -72,10 +122,29 @@ install() {
 }
 
 configure() {
-    # Tailscale stores its state in /var/lib/tailscale (Linux) or
-    # ~/Library/Containers/io.tailscale.ipn.macos (macOS)
-    # No dotfiles configuration needed
-    :
+    if ! command -v tailscale &>/dev/null; then
+        echo "tailscale is not installed yet"
+        return 1
+    fi
+
+    if [[ "$(uname)" == "Darwin" ]]; then
+        echo ""
+        echo "To complete setup on macOS:"
+        echo "  1. Open Tailscale from Applications"
+        echo "  2. Click the menu bar icon and log in"
+        return 0
+    fi
+
+    ensure_tailscaled_service
+
+    if tailscale ip -4 &>/dev/null 2>&1; then
+        echo "Tailscale authenticated: $(tailscale ip -4 | head -1)"
+    else
+        echo ""
+        echo "Tailscale is installed and tailscaled is running."
+        echo "Complete authentication with:"
+        echo "  sudo tailscale up"
+    fi
 }
 
 apply() {
@@ -91,13 +160,20 @@ update() {
             brew upgrade --cask tailscale 2>/dev/null || echo "Tailscale already up to date"
         fi
     elif command -v pacman &>/dev/null; then
-        sudo pacman -Syu --noconfirm tailscale
+        ensure_sudo
+        run_as_root pacman -Syu --noconfirm tailscale
     elif command -v apt-get &>/dev/null; then
-        sudo apt-get update
-        sudo apt-get install -y tailscale
+        ensure_sudo
+        run_as_root apt-get update
+        run_as_root apt-get install -y tailscale
     fi
 
-    echo "tailscale version: $(tailscale version | head -1)"
+    if command -v tailscale &>/dev/null; then
+        echo "tailscale version: $(tailscale version | head -1)"
+    fi
+
+    # Keep service running after update on Linux
+    [[ "$(uname)" == "Darwin" ]] || ensure_tailscaled_service || true
 }
 
 # Main (only run when executed directly, not when sourced)
