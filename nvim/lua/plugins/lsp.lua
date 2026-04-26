@@ -78,6 +78,8 @@ return {
 		config = function()
 			local lspconfig = require("lspconfig")
 			local util = require("util.lsp")
+			local ruby_lsp_bundle_gemfile = vim.fn.stdpath("config") .. "/ruby-lsp/Gemfile"
+			local ruby_lsp_bundle_path = vim.fn.stdpath("data") .. "/ruby-lsp/bundle"
 
 			-- Configure diagnostics
 			vim.diagnostic.config({
@@ -141,29 +143,22 @@ return {
 				zls = {},
 				-- Ruby
 				ruby_lsp = {
+					-- Use the launcher so the server can recover gracefully when the project
+					-- bundle cannot be fully composed (e.g. private git gem sources).
+					cmd = { "ruby-lsp", "--use-launcher" },
+					-- Keep ruby-lsp in an isolated bundle so project Gemfiles don't block startup.
+					-- This avoids failures with private git gems or legacy gemspecs.
+					cmd_env = {
+						BUNDLE_GEMFILE = ruby_lsp_bundle_gemfile,
+						BUNDLE_PATH = ruby_lsp_bundle_path,
+						-- Some bundles contain private git dependencies hosted on github.com.
+						-- Force Git to rewrite https URLs to SSH for ruby-lsp subprocesses.
+						GIT_CONFIG_COUNT = "1",
+						GIT_CONFIG_KEY_0 = "url.git@github.com:.insteadof",
+						GIT_CONFIG_VALUE_0 = "https://github.com/",
+					},
 					init_options = {
-						formatter = "rubocop",
-						linters = { "rubocop" },
-						enabledFeatures = {
-							codeActions = true,
-							codeLens = true,
-							completion = true,
-							definition = true,
-							diagnostics = true,
-							documentHighlights = true,
-							documentLink = true,
-							documentSymbols = true,
-							foldingRanges = true,
-							formatting = true,
-							hover = true,
-							inlayHint = true,
-							onTypeFormatting = true,
-							selectionRanges = true,
-							semanticHighlighting = true,
-							signatureHelp = true,
-							typeHierarchy = true,
-							workspaceSymbol = true,
-						},
+						formatter = "auto",
 						featuresConfiguration = {
 							inlayHint = {
 								implicitHashValue = true,

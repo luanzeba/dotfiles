@@ -30,4 +30,8 @@ require("lazy").setup("plugins", {
   checker = {
     enabled = false, -- Disable automatic checking for updates
   },
+  rocks = {
+    enabled = false,
+    hererocks = false,
+  },
 })

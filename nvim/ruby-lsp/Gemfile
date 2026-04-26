@@ -1,0 +1,5 @@
+source "https://rubygems.org"
+
+gem "ruby-lsp", require: false
+gem "debug", require: false
+gem "ruby-lsp-rails", require: false

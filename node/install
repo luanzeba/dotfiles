@@ -104,8 +104,8 @@ configure() {
         return
     fi
 
-    echo "Installing TypeScript packages..."
-    npm install -g typescript-language-server typescript prettier
+    echo "Installing Node-based developer tools..."
+    npm install -g typescript-language-server typescript prettier tree-sitter-cli @github/copilot-language-server
 }
 
 update() {
