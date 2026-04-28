@@ -1,51 +1,338 @@
 #!/bin/bash
-#
-# dev - Quickly create and SSH into GitHub Codespaces
-#
-# Creates a codespace for the specified repo with preferred settings,
-# copies Ghostty terminfo for terminal support, and SSHes in with
-# RDM socket forwarding for copy/paste support.
-#
-# Usage: dev <repo>
-#   repo: gh (github/github), meuse, bp (billing-platform)
-#
-# Notifies when the codespace is ready.
-#
 
-if [[ $# > 0 ]]; then
-  case "$1" in
-    gh)
-      repo="github/github"
-      machine="xLargePremiumLinux"
-      ;;
-    meuse)
-      repo="github/meuse"
-      machine="xLargePremiumLinux"
-      ;;
-    bp)
-      repo="github/billing-platform"
-      machine="xLargePremiumLinux"
-      ;;
-    *)
-      echo "Unknown command $1"
-      echo "Usage: $0 {gh|meuse|bp}"
-      exit 1
-      ;;
-  esac
+set -euo pipefail
+
+CONFIG_REL=".devcontainer/local-macos-arm64/devcontainer.json"
+DEFAULT_WORKSPACE="$HOME/github/github"
+
+usage() {
+  cat <<'EOF'
+dev - github/github local arm64 devcontainer helper
+
+Usage:
+  dev [--workspace-folder PATH] status
+  dev [--workspace-folder PATH] ssh [-- COMMAND [ARGS...]]
+  dev [--workspace-folder PATH] rebuild [--force]
+
+Commands:
+  status   Show container status, age, and git safety summary
+  ssh      Exec into devcontainer (default: bash -l)
+  rebuild  Recreate container via devcontainers CLI; blocks on dirty/unpushed work unless --force
+
+Options:
+  -w, --workspace-folder PATH   Defaults to current repo root (if config exists), else ~/github/github
+  -h, --help                    Show this help
+EOF
+}
+
+die() { echo "Error: $*" >&2; exit 1; }
+need_cmd() { command -v "$1" >/dev/null 2>&1 || die "Missing required command: $1"; }
+
+ensure_docker() {
+  need_cmd docker
+  docker info >/dev/null 2>&1 || die "Docker is not running. Start OrbStack/Docker Desktop and retry."
+}
+
+ensure_github_token() {
+  [[ -n "${GITHUB_TOKEN:-}" ]] && return
+  need_cmd gh
+  local token
+  token="$(gh auth token 2>/dev/null || true)"
+  [[ -n "$token" ]] || die "GITHUB_TOKEN unset and gh auth token unavailable. Run: gh auth login -s read:packages"
+  export GITHUB_TOKEN="$token"
+}
+
+resolve_workspace() {
+  local override="${1:-}"
+  local workspace=""
+
+  if [[ -n "$override" ]]; then
+    workspace="$override"
+  elif [[ -f "$PWD/$CONFIG_REL" ]]; then
+    workspace="$PWD"
+  else
+    local git_root
+    git_root="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+    if [[ -n "$git_root" && -f "$git_root/$CONFIG_REL" ]]; then
+      workspace="$git_root"
+    else
+      workspace="$DEFAULT_WORKSPACE"
+    fi
+  fi
+
+  workspace="$(cd "$workspace" 2>/dev/null && pwd -P)" || die "Workspace does not exist: $workspace"
+  [[ -f "$workspace/$CONFIG_REL" ]] || die "Missing config file: $workspace/$CONFIG_REL"
+  echo "$workspace"
+}
+
+find_container_id() {
+  local workspace="$1"
+  local config_abs="$workspace/$CONFIG_REL"
+  local id
+
+  id="$(docker ps -a \
+    --filter "label=devcontainer.local_folder=$workspace" \
+    --filter "label=devcontainer.config_file=$config_abs" \
+    --format '{{.ID}}' | head -n1)"
+
+  if [[ -z "$id" ]]; then
+    id="$(docker ps -a \
+      --filter "label=devcontainer.local_folder=$workspace" \
+      --format '{{.ID}}' | head -n1)"
+  fi
+
+  echo "$id"
+}
+
+repo_dir_in_container() {
+  echo "/workspaces/$(basename "$1")"
+}
+
+git_probe() {
+  local container_id="$1"
+  local repo_dir="$2"
+
+  docker exec -i -u vscode "$container_id" bash -s -- "$repo_dir" <<'EOF'
+set -euo pipefail
+
+repo_dir="$1"
+cd "$repo_dir"
+
+branch="$(git symbolic-ref --short -q HEAD || echo DETACHED)"
+dirty="$(git status --porcelain | wc -l | tr -d ' ')"
+
+if git rev-parse --verify @{upstream} >/dev/null 2>&1; then
+  upstream="$(git rev-parse --abbrev-ref --symbolic-full-name @{upstream})"
+  read -r behind ahead <<< "$(git rev-list --left-right --count @{upstream}...HEAD)"
 else
-  echo "Usage: $0 gh|meuse|bp"
+  upstream=""
+  ahead="$(git rev-list --count origin/master..HEAD 2>/dev/null || echo 0)"
+  behind=0
+fi
+
+printf '%s|%s|%s|%s|%s\n' "$branch" "$dirty" "$upstream" "$ahead" "$behind"
+EOF
+}
+
+parse_git_probe() {
+  local line="$1"
+  IFS='|' read -r GIT_BRANCH GIT_DIRTY GIT_UPSTREAM GIT_AHEAD GIT_BEHIND <<< "$line"
+  GIT_DIRTY="${GIT_DIRTY:-0}"
+  GIT_AHEAD="${GIT_AHEAD:-0}"
+  GIT_BEHIND="${GIT_BEHIND:-0}"
+}
+
+print_git_summary() {
+  echo "Git (inside container):"
+  echo "  branch: ${GIT_BRANCH:-unknown}"
+
+  if (( GIT_DIRTY > 0 )); then
+    echo "  working tree: dirty ($GIT_DIRTY changed file(s))"
+  else
+    echo "  working tree: clean"
+  fi
+
+  if [[ -n "${GIT_UPSTREAM:-}" ]]; then
+    echo "  tracking: $GIT_UPSTREAM (ahead $GIT_AHEAD, behind $GIT_BEHIND)"
+  else
+    echo "  tracking: none"
+    (( GIT_AHEAD > 0 )) && echo "  commits not on origin/master: $GIT_AHEAD"
+  fi
+}
+
+status_cmd() {
+  local workspace="$1"
+  ensure_docker
+
+  local container_id
+  container_id="$(find_container_id "$workspace")"
+
+  echo "Workspace: $workspace"
+  echo "Config:    $workspace/$CONFIG_REL"
+
+  if [[ -z "$container_id" ]]; then
+    echo "Container: not created"
+    echo "State:     down"
+    echo "Hint: run 'dev rebuild' to create/start it."
+    return
+  fi
+
+  local inspect_line ps_line
+  inspect_line="$(docker inspect -f '{{.Name}}|{{.State.Status}}|{{if .State.Health}}{{.State.Health.Status}}{{else}}n/a{{end}}|{{.Config.Image}}' "$container_id")"
+  ps_line="$(docker ps -a --filter "id=$container_id" --format '{{.Status}}|{{.RunningFor}}|{{.CreatedAt}}' | head -n1)"
+
+  local name state health image
+  IFS='|' read -r name state health image <<< "$inspect_line"
+  name="${name#/}"
+
+  local docker_status running_for created_at
+  IFS='|' read -r docker_status running_for created_at <<< "$ps_line"
+
+  echo "Container: $name ($container_id)"
+  echo "State:     $state"
+  [[ "$health" != "n/a" ]] && echo "Health:    $health"
+  echo "Image:     $image"
+  [[ -n "$created_at" ]] && echo "Created:   $created_at"
+  [[ -n "$running_for" ]] && echo "Age:       $running_for"
+  [[ -n "$docker_status" ]] && echo "Docker:    $docker_status"
+
+  if [[ "$state" == "running" ]]; then
+    local git_line
+    if git_line="$(git_probe "$container_id" "$(repo_dir_in_container "$workspace")" 2>/dev/null)"; then
+      parse_git_probe "$git_line"
+      print_git_summary
+    else
+      echo "Git (inside container): unavailable"
+    fi
+  fi
+}
+
+ssh_cmd() {
+  local workspace="$1"
+  shift
+
+  ensure_docker
+  need_cmd npx
+  ensure_github_token
+
+  local cmd=("bash" "-l")
+  if [[ $# -gt 0 ]]; then
+    [[ "$1" == "--" ]] && shift
+    [[ $# -gt 0 ]] && cmd=("$@")
+  fi
+
+  (
+    cd "$workspace"
+    npx @devcontainers/cli exec \
+      --workspace-folder . \
+      --config "$CONFIG_REL" \
+      "${cmd[@]}"
+  )
+}
+
+ensure_clean_for_rebuild() {
+  local container_id="$1"
+  local repo_dir="$2"
+
+  local state started_for_check=0
+  state="$(docker inspect -f '{{.State.Status}}' "$container_id")"
+
+  if [[ "$state" != "running" ]]; then
+    echo "Container is $state; starting it temporarily to inspect git state..."
+    docker start "$container_id" >/dev/null
+    started_for_check=1
+  fi
+
+  local git_line
+  if ! git_line="$(git_probe "$container_id" "$repo_dir" 2>/dev/null)"; then
+    (( started_for_check == 1 )) && docker stop "$container_id" >/dev/null || true
+    die "Unable to inspect git state in container. Re-run with --force to bypass checks."
+  fi
+
+  parse_git_probe "$git_line"
+
+  local reasons=()
+  (( GIT_DIRTY > 0 )) && reasons+=("$GIT_DIRTY uncommitted file change(s)")
+
+  if (( GIT_AHEAD > 0 )); then
+    if [[ -n "${GIT_UPSTREAM:-}" ]]; then
+      reasons+=("$GIT_AHEAD unpushed commit(s) ahead of $GIT_UPSTREAM")
+    else
+      reasons+=("branch '$GIT_BRANCH' has $GIT_AHEAD commit(s) not on origin/master and no upstream")
+    fi
+  fi
+
+  (( started_for_check == 1 )) && docker stop "$container_id" >/dev/null || true
+
+  if (( ${#reasons[@]} > 0 )); then
+    echo "Refusing to rebuild. Potentially unpushed work detected inside container:" >&2
+    for reason in "${reasons[@]}"; do
+      echo "  - $reason" >&2
+    done
+    echo "Use 'dev rebuild --force' to rebuild anyway." >&2
+    return 1
+  fi
+}
+
+rebuild_cmd() {
+  local workspace="$1"
+  shift
+
+  local force=0
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      -f|--force) force=1; shift ;;
+      -h|--help) echo "Usage: dev rebuild [--force]"; return ;;
+      *) die "Unknown rebuild option: $1" ;;
+    esac
+  done
+
+  ensure_docker
+  need_cmd npx
+  ensure_github_token
+
+  local container_id
+  container_id="$(find_container_id "$workspace")"
+
+  if [[ -n "$container_id" && "$force" -eq 0 ]]; then
+    ensure_clean_for_rebuild "$container_id" "$(repo_dir_in_container "$workspace")"
+  fi
+
+  echo "Rebuilding devcontainer for $workspace"
+  (
+    cd "$workspace"
+    npx @devcontainers/cli up \
+      --workspace-folder . \
+      --config "$CONFIG_REL" \
+      --remove-existing-container
+  )
+}
+
+workspace_override=""
+
+if [[ $# -eq 0 ]]; then
+  usage
   exit 1
 fi
 
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -w|--workspace-folder)
+      shift
+      [[ $# -gt 0 ]] || die "Missing value for --workspace-folder"
+      workspace_override="$1"
+      shift
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    status|ssh|rebuild|help)
+      command="$1"
+      shift
+      break
+      ;;
+    *)
+      die "Unknown command/option: $1"
+      ;;
+  esac
+done
 
-rdm server &                                                                                   # Start RDM server https://github.com/BlakeWilliams/remote-development-manager
-csw create -R $repo -m $machine --devcontainer-path ".devcontainer/devcontainer.json" --status "${@:2}" # Create codespace, wait for it to come up, and store name
+if [[ "${command:-}" == "help" ]]; then
+  usage
+  exit 0
+fi
 
-# Copy ghostty's terminfo to the codespace for better terminal support
-# Hopefully temporary
-# https://ghostty.org/docs/help/terminfo#copy-ghostty's-terminfo-to-a-remote-machine
-infocmp -x | csw ssh -- tic -x -
+[[ -n "${command:-}" ]] || {
+  usage
+  exit 1
+}
 
-osascript -e "display notification \"✅ $(csw get)\" \
-  with title \"Codespace ready\" sound name \"Glass\"" &                                       # Notify user that codespace is ready
-csw ssh -- -R 127.0.0.1:7391:$(rdm socket)                                                     # SSH to the codespace with socket forwarding
+workspace="$(resolve_workspace "$workspace_override")"
+
+case "$command" in
+  status) status_cmd "$workspace" ;;
+  ssh) ssh_cmd "$workspace" "$@" ;;
+  rebuild) rebuild_cmd "$workspace" "$@" ;;
+  *) usage; exit 1 ;;
+esac
