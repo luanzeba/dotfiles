@@ -12,12 +12,16 @@ dev - github/github local arm64 devcontainer helper
 Usage:
   dev [--workspace-folder PATH] status
   dev [--workspace-folder PATH] ssh [-- COMMAND [ARGS...]]
+  dev [--workspace-folder PATH] push-branches [--dry-run]
   dev [--workspace-folder PATH] rebuild [--force]
 
 Commands:
-  status   Show container status, age, and git safety summary
-  ssh      Exec into devcontainer (default: bash -l)
-  rebuild  Recreate container via devcontainers CLI; blocks on dirty/unpushed work unless --force
+  status         Show container status, age, and git safety summary
+  ssh            Exec into devcontainer (default: bash -l)
+  push-branches  Push all local non-main branches in container to origin
+                 (continues on branch-level errors, exits non-zero if any errors
+                 or if working tree has uncommitted changes)
+  rebuild        Recreate container via devcontainers CLI; blocks on dirty/unpushed work unless --force
 
 Options:
   -w, --workspace-folder PATH   Defaults to current repo root (if config exists), else ~/github/github
@@ -210,6 +214,122 @@ ssh_cmd() {
   )
 }
 
+push_branches_cmd() {
+  local workspace="$1"
+  shift
+
+  local dry_run=0
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      -n|--dry-run) dry_run=1; shift ;;
+      -h|--help)
+        echo "Usage: dev push-branches [--dry-run]"
+        return
+        ;;
+      *) die "Unknown push-branches option: $1" ;;
+    esac
+  done
+
+  ensure_docker
+
+  local container_id
+  container_id="$(find_container_id "$workspace")"
+  [[ -n "$container_id" ]] || die "Devcontainer not found. Run 'dev rebuild' first."
+
+  local state started_for_check=0
+  state="$(docker inspect -f '{{.State.Status}}' "$container_id")"
+
+  if [[ "$state" != "running" ]]; then
+    echo "Container is $state; starting it temporarily for branch push..."
+    docker start "$container_id" >/dev/null
+    started_for_check=1
+  fi
+
+  local repo_dir
+  repo_dir="$(repo_dir_in_container "$workspace")"
+
+  local exit_code=0
+  if docker exec -i -u vscode "$container_id" bash -s -- "$repo_dir" "$dry_run" <<'EOF'
+set -euo pipefail
+
+repo_dir="$1"
+dry_run="$2"
+
+cd "$repo_dir"
+
+dirty="$(git status --porcelain | wc -l | tr -d ' ')"
+if (( dirty > 0 )); then
+  echo "WARN: working tree has $dirty uncommitted file(s); those cannot be pushed." >&2
+fi
+
+mapfile -t rows < <(git for-each-ref --format='%(refname:short)|%(upstream:short)' refs/heads)
+
+pushed=0
+skipped_base=0
+failed=0
+
+for row in "${rows[@]}"; do
+  IFS='|' read -r branch upstream <<< "$row"
+
+  case "$branch" in
+    master|main|trunk)
+      ((skipped_base += 1))
+      continue
+      ;;
+  esac
+
+  refspec="refs/heads/$branch:refs/heads/$branch"
+
+  if [[ "$dry_run" == "1" ]]; then
+    if [[ -n "$upstream" ]]; then
+      echo "DRY  git push origin $refspec"
+    else
+      echo "DRY  git push -u origin $refspec"
+    fi
+    ((pushed += 1))
+    continue
+  fi
+
+  if [[ -n "$upstream" ]]; then
+    if git push origin "$refspec"; then
+      echo "OK   $branch"
+      ((pushed += 1))
+    else
+      echo "FAIL $branch" >&2
+      ((failed += 1))
+    fi
+  else
+    if git push -u origin "$refspec"; then
+      echo "OK   $branch (set upstream)"
+      ((pushed += 1))
+    else
+      echo "FAIL $branch (set upstream)" >&2
+      ((failed += 1))
+    fi
+  fi
+
+done
+
+echo ""
+echo "Summary: pushed=$pushed base_skipped=$skipped_base failed=$failed dirty=$dirty"
+
+if (( failed > 0 || dirty > 0 )); then
+  exit 1
+fi
+EOF
+  then
+    exit_code=0
+  else
+    exit_code=$?
+  fi
+
+  if (( started_for_check == 1 )); then
+    docker stop "$container_id" >/dev/null || true
+  fi
+
+  return "$exit_code"
+}
+
 ensure_clean_for_rebuild() {
   local container_id="$1"
   local repo_dir="$2"
@@ -307,7 +427,7 @@ while [[ $# -gt 0 ]]; do
       usage
       exit 0
       ;;
-    status|ssh|rebuild|help)
+    status|ssh|push-branches|rebuild|help)
       command="$1"
       shift
       break
@@ -333,6 +453,7 @@ workspace="$(resolve_workspace "$workspace_override")"
 case "$command" in
   status) status_cmd "$workspace" ;;
   ssh) ssh_cmd "$workspace" "$@" ;;
+  push-branches) push_branches_cmd "$workspace" "$@" ;;
   rebuild) rebuild_cmd "$workspace" "$@" ;;
   *) usage; exit 1 ;;
 esac
