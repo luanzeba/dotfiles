@@ -4,6 +4,7 @@ set -euo pipefail
 
 CONFIG_REL=".devcontainer/local-macos-arm64/devcontainer.json"
 DEFAULT_WORKSPACE="$HOME/github/github"
+DEFAULT_IMAGE="ghcr.io/github/github/local-bootstrapped:latest"
 
 usage() {
   cat <<'EOF'
@@ -13,7 +14,7 @@ Usage:
   dev [--workspace-folder PATH] status
   dev [--workspace-folder PATH] ssh [-- COMMAND [ARGS...]]
   dev [--workspace-folder PATH] push-branches [--dry-run]
-  dev [--workspace-folder PATH] rebuild [--force]
+  dev [--workspace-folder PATH] rebuild [--force] [--pull-latest]
 
 Commands:
   status         Show container status, age, and git safety summary
@@ -22,10 +23,15 @@ Commands:
                  (continues on branch-level errors, exits non-zero if any errors
                  or if working tree has uncommitted changes)
   rebuild        Recreate container via devcontainers CLI; blocks on dirty/unpushed work unless --force
+                 --pull-latest first runs docker pull for the configured image
 
 Options:
   -w, --workspace-folder PATH   Defaults to current repo root (if config exists), else ~/github/github
   -h, --help                    Show this help
+
+rebuild options:
+  -f, --force                   Rebuild even with uncommitted/unpushed work
+  -p, --pull-latest             Pull latest configured image before rebuild
 EOF
 }
 
@@ -86,6 +92,28 @@ find_container_id() {
   fi
 
   echo "$id"
+}
+
+configured_image() {
+  local workspace="$1"
+  local config_file="$workspace/$CONFIG_REL"
+  local image
+
+  image="$(sed -nE 's/^[[:space:]]*"image"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/p' "$config_file" | head -n1)"
+  if [[ -n "$image" ]]; then
+    echo "$image"
+  else
+    echo "$DEFAULT_IMAGE"
+  fi
+}
+
+pull_latest_image() {
+  local workspace="$1"
+  local image
+  image="$(configured_image "$workspace")"
+
+  echo "Pulling latest image: $image"
+  docker pull "$image"
 }
 
 repo_dir_in_container() {
@@ -379,10 +407,12 @@ rebuild_cmd() {
   shift
 
   local force=0
+  local pull_latest=0
   while [[ $# -gt 0 ]]; do
     case "$1" in
       -f|--force) force=1; shift ;;
-      -h|--help) echo "Usage: dev rebuild [--force]"; return ;;
+      -p|--pull-latest) pull_latest=1; shift ;;
+      -h|--help) echo "Usage: dev rebuild [--force] [--pull-latest]"; return ;;
       *) die "Unknown rebuild option: $1" ;;
     esac
   done
@@ -396,6 +426,10 @@ rebuild_cmd() {
 
   if [[ -n "$container_id" && "$force" -eq 0 ]]; then
     ensure_clean_for_rebuild "$container_id" "$(repo_dir_in_container "$workspace")"
+  fi
+
+  if [[ "$pull_latest" -eq 1 ]]; then
+    pull_latest_image "$workspace"
   fi
 
   echo "Rebuilding devcontainer for $workspace"
