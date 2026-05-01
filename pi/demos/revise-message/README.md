@@ -2,10 +2,15 @@
 
 This demo shows the `/revise` extension workflow:
 
-1. Pick a previous assistant message from an overlay list.
-2. Edit markdown inline.
-3. `Ctrl+Y` copies the edited markdown to clipboard.
-4. `Ctrl+S` sends edited markdown back to the assistant to continue.
+1. Load the most recent assistant message automatically.
+2. Edit it in `$VISUAL`/`$EDITOR` (for example `nvim`) with inline fallback.
+3. Choose what to do next: copy to clipboard, send back to assistant, or both.
+
+You can also pass an action argument directly:
+
+- `/revise copy`
+- `/revise send`
+- `/revise both`
 
 ## Files
 

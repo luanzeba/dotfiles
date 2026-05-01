@@ -1,37 +1,25 @@
+import { spawnSync } from "node:child_process";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import {
 	copyToClipboard,
 	type ExtensionAPI,
 	type ExtensionCommandContext,
 	type SessionEntry,
-	type Theme,
 } from "@mariozechner/pi-coding-agent";
-import {
-	Editor,
-	type EditorTheme,
-	Key,
-	matchesKey,
-	SelectList,
-	type SelectItem,
-	type Focusable,
-	type TUI,
-	truncateToWidth,
-	visibleWidth,
-} from "@mariozechner/pi-tui";
+import { truncateToWidth, type Component, type TUI } from "@mariozechner/pi-tui";
 
-const MAX_ASSISTANT_MESSAGES = 20;
+type ReviseAction = "copy" | "continue" | "copyAndContinue";
 
 interface AssistantCandidate {
 	entryId: string;
-	timestamp: string;
 	text: string;
-	preview: string;
 	relativeTime: string;
 }
 
-interface ReviseOverlayResult {
-	action: "copy" | "continue";
-	text: string;
-	candidate: AssistantCandidate;
+interface SendResult {
+	queued: boolean;
 }
 
 function extractAssistantText(content: unknown): string {
@@ -68,9 +56,7 @@ function formatRelativeTime(timestamp: string): string {
 	return `${deltaDays}d ago`;
 }
 
-function collectAssistantCandidates(entries: SessionEntry[], limit = MAX_ASSISTANT_MESSAGES): AssistantCandidate[] {
-	const candidates: AssistantCandidate[] = [];
-
+function findLastAssistantCandidate(entries: SessionEntry[]): AssistantCandidate | undefined {
 	for (let i = entries.length - 1; i >= 0; i -= 1) {
 		const entry = entries[i];
 		if (entry.type !== "message") continue;
@@ -81,19 +67,14 @@ function collectAssistantCandidates(entries: SessionEntry[], limit = MAX_ASSISTA
 		const text = extractAssistantText(message.content);
 		if (!text) continue;
 
-		const preview = text.replace(/\s+/g, " ").trim();
-		candidates.push({
+		return {
 			entryId: entry.id,
-			timestamp: entry.timestamp,
 			text,
-			preview,
 			relativeTime: formatRelativeTime(entry.timestamp),
-		});
-
-		if (candidates.length >= limit) break;
+		};
 	}
 
-	return candidates;
+	return undefined;
 }
 
 function buildContinuationPrompt(editedMarkdown: string): string {
@@ -106,282 +87,237 @@ function buildContinuationPrompt(editedMarkdown: string): string {
 	].join("\n");
 }
 
-class ReviseOverlayComponent implements Focusable {
-	private mode: "pick" | "edit" = "pick";
-	private activeCandidate: AssistantCandidate;
-	private selectList: SelectList;
-	private editor: Editor;
-	private candidateById = new Map<string, AssistantCandidate>();
-	private _focused = false;
+function parseActionArg(args: string): ReviseAction | undefined {
+	const raw = args.trim().toLowerCase();
+	if (!raw) return undefined;
 
-	get focused(): boolean {
-		return this._focused;
-	}
+	if (["copy", "clipboard", "clip"].includes(raw)) return "copy";
+	if (["send", "continue", "submit"].includes(raw)) return "continue";
+	if (["both", "copy+send", "copy-and-send", "send+copy"].includes(raw)) return "copyAndContinue";
 
-	set focused(value: boolean) {
-		this._focused = value;
-		this.editor.focused = value && this.mode === "edit";
-	}
+	return undefined;
+}
 
-	constructor(
-		private tui: TUI,
-		private theme: Theme,
-		private candidates: AssistantCandidate[],
-		private done: (result: ReviseOverlayResult | undefined) => void,
-	) {
-		this.activeCandidate = candidates[0]!;
-		for (const candidate of candidates) {
-			this.candidateById.set(candidate.entryId, candidate);
-		}
+async function promptForAction(ctx: ExtensionCommandContext): Promise<ReviseAction | undefined> {
+	const choice = await ctx.ui.select("Choose revise action", [
+		"Copy edited markdown to clipboard",
+		"Send edited markdown back to assistant",
+		"Copy and send",
+	]);
 
-		const listItems: SelectItem[] = candidates.map((candidate, index) => ({
-			value: candidate.entryId,
-			label: `${index + 1}. ${candidate.preview}`,
-			description: `${candidate.relativeTime} · ${candidate.entryId.slice(0, 8)}`,
-		}));
+	if (!choice) return undefined;
+	if (choice === "Copy edited markdown to clipboard") return "copy";
+	if (choice === "Send edited markdown back to assistant") return "continue";
+	return "copyAndContinue";
+}
 
-		const selectTheme = {
-			selectedPrefix: (text: string) => theme.fg("accent", text),
-			selectedText: (text: string) => theme.fg("accent", text),
-			description: (text: string) => theme.fg("muted", text),
-			scrollInfo: (text: string) => theme.fg("dim", text),
-			noMatch: (text: string) => theme.fg("warning", text),
-		};
+function runExternalEditor(tui: TUI, editorCommand: string, initialText: string): { text?: string; error?: string } {
+	const tempDir = mkdtempSync(path.join(tmpdir(), "pi-revise-message-"));
+	const tempFile = path.join(tempDir, "revise-last-message.md");
+	let stoppedTui = false;
 
-		this.selectList = new SelectList(listItems, Math.min(listItems.length, 8), selectTheme, {
-			truncatePrimary: ({ text, maxWidth }) => truncateToWidth(text, maxWidth),
+	try {
+		writeFileSync(tempFile, initialText, "utf8");
+
+		tui.stop();
+		stoppedTui = true;
+
+		const result = spawnSync(editorCommand, [tempFile], {
+			stdio: "inherit",
+			shell: true,
 		});
-		this.selectList.onSelectionChange = (item) => {
-			const candidate = this.candidateById.get(item.value);
-			if (!candidate) return;
-			this.activeCandidate = candidate;
-			this.tui.requestRender();
-		};
-		this.selectList.onSelect = (item) => this.openCandidate(item.value);
-		this.selectList.onCancel = () => this.done(undefined);
 
-		const editorTheme: EditorTheme = {
-			borderColor: (text: string) => theme.fg("accent", text),
-			selectList: selectTheme,
-		};
-		this.editor = new Editor(tui, editorTheme, { paddingX: 1 });
-		this.editor.disableSubmit = true;
-		this.editor.setText(this.activeCandidate.text);
-	}
-
-	private frameLine(text: string, innerWidth: number): string {
-		const content = truncateToWidth(text, innerWidth);
-		const padding = Math.max(0, innerWidth - visibleWidth(content));
-		return this.theme.fg("border", "│") + content + " ".repeat(padding) + this.theme.fg("border", "│");
-	}
-
-	private openCandidate(entryId: string): void {
-		const candidate = this.candidateById.get(entryId);
-		if (!candidate) return;
-
-		this.activeCandidate = candidate;
-		this.mode = "edit";
-		this.editor.setText(candidate.text);
-		this.editor.focused = this.focused;
-		this.tui.requestRender();
-	}
-
-	private renderPicker(innerWidth: number): string[] {
-		const listWidth = Math.max(20, innerWidth - 2);
-		const lines: string[] = [];
-
-		lines.push(this.frameLine(this.theme.fg("accent", this.theme.bold("Revise Assistant Message")), innerWidth));
-		lines.push(this.frameLine(this.theme.fg("muted", "Pick a recent assistant response to edit."), innerWidth));
-		lines.push(this.frameLine("", innerWidth));
-
-		for (const line of this.selectList.render(listWidth)) {
-			lines.push(this.frameLine(` ${line}`, innerWidth));
+		if (result.error) {
+			return { error: result.error.message };
 		}
 
-		lines.push(this.frameLine("", innerWidth));
-		lines.push(this.frameLine(this.theme.fg("muted", "Preview:"), innerWidth));
-		lines.push(this.frameLine(` ${truncateToWidth(this.activeCandidate.preview, innerWidth - 1)}`, innerWidth));
-		lines.push(this.frameLine("", innerWidth));
-		lines.push(
-			this.frameLine(
-				this.theme.fg("dim", "↑↓ navigate • enter edit • esc cancel"),
-				innerWidth,
-			),
-		);
-
-		return lines;
-	}
-
-	private renderEditor(innerWidth: number): string[] {
-		const editorWidth = Math.max(20, innerWidth - 2);
-		const lines: string[] = [];
-
-		const source = `${this.activeCandidate.relativeTime} · ${this.activeCandidate.entryId.slice(0, 8)}`;
-		lines.push(this.frameLine(this.theme.fg("accent", this.theme.bold("Edit Markdown")), innerWidth));
-		lines.push(this.frameLine(this.theme.fg("muted", `Source: ${source}`), innerWidth));
-		lines.push(this.frameLine("", innerWidth));
-
-		const rawEditorLines = this.editor.render(editorWidth);
-		const maxEditorLines = Math.max(8, (this.tui.terminal.rows || 24) - 14);
-		const visibleEditorLines = rawEditorLines.slice(0, maxEditorLines);
-		for (const line of visibleEditorLines) {
-			lines.push(this.frameLine(` ${line}`, innerWidth));
-		}
-		if (rawEditorLines.length > visibleEditorLines.length) {
-			const hiddenCount = rawEditorLines.length - visibleEditorLines.length;
-			lines.push(this.frameLine(this.theme.fg("dim", ` … ${hiddenCount} more line(s)`), innerWidth));
+		if (typeof result.status === "number" && result.status !== 0) {
+			return { error: `Editor exited with status ${result.status}` };
 		}
 
-		lines.push(this.frameLine("", innerWidth));
-		lines.push(
-			this.frameLine(
-				this.theme.fg(
-					"dim",
-					"ctrl+y copy • ctrl+s continue • esc back",
-				),
-				innerWidth,
-			),
-		);
-
-		return lines;
-	}
-
-	handleInput(data: string): void {
-		if (this.mode === "pick") {
-			this.selectList.handleInput(data);
-			this.tui.requestRender();
-			return;
+		const edited = readFileSync(tempFile, "utf8");
+		return { text: edited.replace(/\n$/, "") };
+	} catch (error) {
+		const message = error instanceof Error ? error.message : String(error);
+		return { error: message };
+	} finally {
+		if (stoppedTui) {
+			tui.start();
+			tui.requestRender(true);
 		}
-
-		if (
-			matchesKey(data, Key.escape) ||
-			matchesKey(data, Key.ctrlShift("p")) ||
-			matchesKey(data, "f2") ||
-			matchesKey(data, "ctrl+b")
-		) {
-			this.mode = "pick";
-			this.editor.focused = false;
-			this.tui.requestRender();
-			return;
+		try {
+			rmSync(tempDir, { recursive: true, force: true });
+		} catch {
+			// ignore cleanup errors
 		}
-
-		if (
-			matchesKey(data, Key.ctrlShift("c")) ||
-			matchesKey(data, Key.alt("c")) ||
-			matchesKey(data, "f5") ||
-			matchesKey(data, "ctrl+y")
-		) {
-			this.done({
-				action: "copy",
-				text: this.editor.getExpandedText(),
-				candidate: this.activeCandidate,
-			});
-			return;
-		}
-
-		if (
-			matchesKey(data, Key.ctrlShift("s")) ||
-			matchesKey(data, "ctrl+enter") ||
-			matchesKey(data, "ctrl+return") ||
-			matchesKey(data, "alt+enter") ||
-			matchesKey(data, "f6") ||
-			matchesKey(data, "ctrl+s")
-		) {
-			this.done({
-				action: "continue",
-				text: this.editor.getExpandedText(),
-				candidate: this.activeCandidate,
-			});
-			return;
-		}
-
-		this.editor.handleInput(data);
-		this.tui.requestRender();
-	}
-
-	render(width: number): string[] {
-		const safeWidth = Math.max(20, width);
-		const innerWidth = Math.max(1, safeWidth - 2);
-
-		const topBorder = this.theme.fg("border", `┌${"─".repeat(innerWidth)}┐`);
-		const bottomBorder = this.theme.fg("border", `└${"─".repeat(innerWidth)}┘`);
-
-		const body = this.mode === "pick" ? this.renderPicker(innerWidth) : this.renderEditor(innerWidth);
-
-		return [topBorder, ...body, bottomBorder].map((line) => truncateToWidth(line, safeWidth));
-	}
-
-	invalidate(): void {
-		this.selectList.invalidate();
-		this.editor.invalidate();
 	}
 }
 
-async function runReviseCommand(pi: ExtensionAPI, ctx: ExtensionCommandContext): Promise<void> {
+async function editWithExternalEditor(
+	ctx: ExtensionCommandContext,
+	editorCommand: string,
+	initialText: string,
+): Promise<string | undefined> {
+	return ctx.ui.custom<string | undefined>((tui, theme, _keybindings, done) => {
+		let finished = false;
+
+		queueMicrotask(() => {
+			if (finished) return;
+			const result = runExternalEditor(tui, editorCommand, initialText);
+			finished = true;
+
+			if (result.error) {
+				ctx.ui.notify(`Failed to open external editor: ${result.error}`, "error");
+				done(undefined);
+				return;
+			}
+
+			done(result.text ?? "");
+		});
+
+		const component: Component = {
+			render(width: number) {
+				return [
+					truncateToWidth(theme.fg("accent", theme.bold("Opening external editor...")), width),
+					truncateToWidth(theme.fg("muted", editorCommand), width),
+				];
+			},
+			invalidate() {},
+		};
+
+		return component;
+	});
+}
+
+async function editLastMessage(ctx: ExtensionCommandContext, candidate: AssistantCandidate): Promise<string | undefined> {
+	const editorCommand = process.env.VISUAL || process.env.EDITOR;
+	const canLaunchExternalEditor = Boolean(editorCommand) && Boolean(process.stdin.isTTY) && Boolean(process.stdout.isTTY);
+
+	if (!canLaunchExternalEditor) {
+		if (!editorCommand) {
+			ctx.ui.notify("No $VISUAL/$EDITOR set, using inline editor", "warning");
+		}
+		return ctx.ui.editor("Revise last assistant message", candidate.text);
+	}
+
+	return editWithExternalEditor(ctx, editorCommand!, candidate.text);
+}
+
+async function sendEditedMarkdown(pi: ExtensionAPI, ctx: ExtensionCommandContext, editedMarkdown: string): Promise<SendResult> {
+	const continuationPrompt = buildContinuationPrompt(editedMarkdown);
+	if (ctx.isIdle()) {
+		pi.sendUserMessage(continuationPrompt);
+		return { queued: false };
+	}
+
+	pi.sendUserMessage(continuationPrompt, { deliverAs: "followUp" });
+	return { queued: true };
+}
+
+async function runReviseCommand(pi: ExtensionAPI, ctx: ExtensionCommandContext, args: string): Promise<void> {
 	if (!ctx.hasUI) {
 		ctx.ui.notify("/revise requires interactive mode", "error");
 		return;
 	}
 
-	const candidates = collectAssistantCandidates(ctx.sessionManager.getBranch());
-	if (!candidates.length) {
+	const requestedAction = parseActionArg(args);
+	if (args.trim() && !requestedAction) {
+		ctx.ui.notify("Usage: /revise [copy|send|both]", "warning");
+		return;
+	}
+
+	const candidate = findLastAssistantCandidate(ctx.sessionManager.getBranch());
+	if (!candidate) {
 		ctx.ui.notify("No assistant messages with markdown text found in this branch", "warning");
 		return;
 	}
 
-	const result = await ctx.ui.custom<ReviseOverlayResult | undefined>(
-		(tui, theme, _keybindings, done) => new ReviseOverlayComponent(tui, theme, candidates, done),
-		{
-			overlay: true,
-			overlayOptions: {
-				anchor: "center",
-				width: "90%",
-				maxWidth: 140,
-				maxHeight: "90%",
-			},
-		},
+	ctx.ui.notify(
+		`Editing last assistant message (${candidate.relativeTime}, ${candidate.entryId.slice(0, 8)})`,
+		"info",
 	);
 
-	if (!result) {
+	const editedFromEditor = await editLastMessage(ctx, candidate);
+	if (editedFromEditor === undefined) {
 		ctx.ui.notify("Revise canceled", "info");
 		return;
 	}
 
-	const editedMarkdown = result.text.replace(/\s+$/, "");
+	const editedMarkdown = editedFromEditor.replace(/\s+$/, "");
 	if (!editedMarkdown.trim()) {
 		ctx.ui.notify("Edited markdown is empty", "warning");
 		return;
 	}
 
-	if (result.action === "copy") {
+	const action = requestedAction ?? (await promptForAction(ctx));
+	if (!action) {
+		ctx.ui.notify("Revise canceled", "info");
+		return;
+	}
+
+	let copied = false;
+	let copyError: string | undefined;
+
+	if (action === "copy" || action === "copyAndContinue") {
 		try {
 			await copyToClipboard(editedMarkdown);
-			ctx.ui.notify("Copied edited markdown to clipboard", "success");
+			copied = true;
 		} catch (error) {
-			const message = error instanceof Error ? error.message : String(error);
-			ctx.ui.notify(`Failed to copy to clipboard: ${message}`, "error");
+			copyError = error instanceof Error ? error.message : String(error);
+		}
+	}
+
+	let sendResult: SendResult | undefined;
+	if (action === "continue" || action === "copyAndContinue") {
+		sendResult = await sendEditedMarkdown(pi, ctx, editedMarkdown);
+	}
+
+	if (action === "copy") {
+		if (copied) {
+			ctx.ui.notify("Copied edited markdown to clipboard", "success");
+		} else {
+			ctx.ui.notify(`Failed to copy to clipboard: ${copyError}`, "error");
 		}
 		return;
 	}
 
-	const continuationPrompt = buildContinuationPrompt(editedMarkdown);
-	if (ctx.isIdle()) {
-		pi.sendUserMessage(continuationPrompt);
-		ctx.ui.notify("Sent edited markdown back to assistant", "success");
-	} else {
-		pi.sendUserMessage(continuationPrompt, { deliverAs: "followUp" });
-		ctx.ui.notify("Queued edited markdown as follow-up", "info");
+	if (action === "continue") {
+		ctx.ui.notify(sendResult?.queued ? "Queued edited markdown as follow-up" : "Sent edited markdown back to assistant", "success");
+		return;
+	}
+
+	if (copied && sendResult) {
+		ctx.ui.notify(
+			sendResult.queued
+				? "Copied edited markdown and queued as follow-up"
+				: "Copied edited markdown and sent to assistant",
+			"success",
+		);
+		return;
+	}
+
+	if (!copied && sendResult) {
+		ctx.ui.notify(
+			`Sent edited markdown, but failed to copy: ${copyError ?? "unknown error"}`,
+			"warning",
+		);
+		return;
+	}
+
+	if (!copied) {
+		ctx.ui.notify(`Failed to copy to clipboard: ${copyError ?? "unknown error"}`, "error");
 	}
 }
 
 export default function reviseMessageExtension(pi: ExtensionAPI) {
 	pi.registerCommand("revise", {
-		description: "Open an overlay to pick/edit a previous assistant message, then copy or continue",
-		handler: async (_args, ctx) => runReviseCommand(pi, ctx),
+		description:
+			"Open the latest assistant message in $VISUAL/$EDITOR (or inline), then copy/send it back",
+		handler: async (args, ctx) => runReviseCommand(pi, ctx, args),
 	});
 
 	pi.registerCommand("revise-last", {
 		description: "Alias for /revise",
-		handler: async (_args, ctx) => runReviseCommand(pi, ctx),
+		handler: async (args, ctx) => runReviseCommand(pi, ctx, args),
 	});
 }
