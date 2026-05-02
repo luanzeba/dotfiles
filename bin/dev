@@ -19,6 +19,7 @@ Usage:
 Commands:
   status         Show container status, age, and git safety summary
   ssh            Exec into devcontainer (default: bash -l)
+                 Interactive shells set an auto-attach marker used by Ghostty splits
   push-branches  Push all local non-main branches in container to origin
                  (continues on branch-level errors, exits non-zero if any errors
                  or if working tree has uncommitted changes)
@@ -73,6 +74,38 @@ resolve_workspace() {
   workspace="$(cd "$workspace" 2>/dev/null && pwd -P)" || die "Workspace does not exist: $workspace"
   [[ -f "$workspace/$CONFIG_REL" ]] || die "Missing config file: $workspace/$CONFIG_REL"
   echo "$workspace"
+}
+
+# Global marker directory used by host shells (e.g. Ghostty splits)
+# to detect active `dev ssh` interactive sessions.
+global_ssh_marker_dir() {
+  local base="${XDG_RUNTIME_DIR:-/tmp}"
+  local user_id="${USER:-$(id -u)}"
+  echo "$base/dev-ssh-active-$user_id"
+}
+
+# Marker file name is <pid>.<random>; file contents are the workspace path.
+create_ssh_marker() {
+  local workspace="$1"
+  local marker_token="$2"
+  local marker_dir
+
+  [[ -n "$marker_token" ]] || return 1
+
+  marker_dir="$(global_ssh_marker_dir)"
+  mkdir -p "$marker_dir"
+  printf '%s\n' "$workspace" > "$marker_dir/$marker_token"
+}
+
+cleanup_ssh_marker() {
+  local marker_token="$1"
+  local marker_dir
+
+  [[ -n "$marker_token" ]] || return 0
+
+  marker_dir="$(global_ssh_marker_dir)"
+  rm -f "$marker_dir/$marker_token" 2>/dev/null || true
+  rmdir "$marker_dir" 2>/dev/null || true
 }
 
 find_container_id() {
@@ -219,27 +252,77 @@ status_cmd() {
   fi
 }
 
+# Fallback when `npx` is unavailable in the caller environment.
+# Uses docker exec directly against the existing devcontainer.
+ssh_cmd_docker_fallback() {
+  local workspace="$1"
+  shift
+  local cmd=("$@")
+
+  local container_id
+  container_id="$(find_container_id "$workspace")"
+  [[ -n "$container_id" ]] || die "Missing required command: npx (and no devcontainer found for workspace). Run 'dev rebuild' once, then retry."
+
+  local state
+  state="$(docker inspect -f '{{.State.Status}}' "$container_id" 2>/dev/null || true)"
+  if [[ "$state" != "running" ]]; then
+    docker start "$container_id" >/dev/null || die "Failed to start devcontainer: $container_id"
+  fi
+
+  local repo_dir
+  repo_dir="$(repo_dir_in_container "$workspace")"
+
+  local -a tty_flags
+  tty_flags=("-i")
+  if [[ -t 0 && -t 1 ]]; then
+    tty_flags+=("-t")
+  fi
+
+  docker exec "${tty_flags[@]}" -u vscode -w "$repo_dir" "$container_id" "${cmd[@]}"
+}
+
 ssh_cmd() {
   local workspace="$1"
   shift
 
   ensure_docker
-  need_cmd npx
-  ensure_github_token
 
   local cmd=("bash" "-l")
+  local mark_session=1
   if [[ $# -gt 0 ]]; then
     [[ "$1" == "--" ]] && shift
-    [[ $# -gt 0 ]] && cmd=("$@")
+    if [[ $# -gt 0 ]]; then
+      cmd=("$@")
+      mark_session=0
+    fi
   fi
 
-  (
-    cd "$workspace"
-    npx @devcontainers/cli exec \
-      --workspace-folder . \
-      --config "$CONFIG_REL" \
-      "${cmd[@]}"
-  )
+  local marker_token=""
+  if (( mark_session == 1 )); then
+    marker_token="$$.$RANDOM"
+    if ! create_ssh_marker "$workspace" "$marker_token"; then
+      marker_token=""
+    fi
+  fi
+
+  local exit_code=0
+  if command -v npx >/dev/null 2>&1; then
+    (
+      cd "$workspace"
+      npx @devcontainers/cli exec \
+        --workspace-folder . \
+        --config "$CONFIG_REL" \
+        "${cmd[@]}"
+    ) || exit_code=$?
+  else
+    ssh_cmd_docker_fallback "$workspace" "${cmd[@]}" || exit_code=$?
+  fi
+
+  if [[ -n "$marker_token" ]]; then
+    cleanup_ssh_marker "$marker_token"
+  fi
+
+  return "$exit_code"
 }
 
 push_branches_cmd() {
