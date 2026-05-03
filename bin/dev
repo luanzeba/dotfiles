@@ -5,6 +5,7 @@ set -euo pipefail
 CONFIG_REL=".devcontainer/local-macos-arm64/devcontainer.json"
 DEFAULT_WORKSPACE="$HOME/github/github"
 DEFAULT_IMAGE="ghcr.io/github/github/local-bootstrapped:latest"
+DEFAULT_DOTFILES_REPO="https://github.com/luanzeba/dotfiles.git"
 
 usage() {
   cat <<'EOF'
@@ -18,8 +19,9 @@ Usage:
 
 Commands:
   status         Show container status, age, and git safety summary
-  ssh            Exec into devcontainer (default: bash -l)
+  ssh            Exec into devcontainer (default: zsh -l)
                  Interactive shells set an auto-attach marker used by Ghostty splits
+                 and ensure zsh dotfiles are installed in the container
   push-branches  Push all local non-main branches in container to origin
                  (continues on branch-level errors, exits non-zero if any errors
                  or if working tree has uncommitted changes)
@@ -147,6 +149,48 @@ pull_latest_image() {
 
   echo "Pulling latest image: $image"
   docker pull "$image"
+}
+
+# Ensure personal zsh dotfiles are present for interactive shells inside
+# the devcontainer. Disable with DEV_SSH_INSTALL_ZSH_DOTFILES=0.
+# Override repo with DEV_SSH_DOTFILES_REPO.
+ensure_container_zsh_dotfiles() {
+  local workspace="$1"
+  local container_id state repo
+
+  [[ "${DEV_SSH_INSTALL_ZSH_DOTFILES:-1}" == "1" ]] || return 0
+
+  container_id="$(find_container_id "$workspace")"
+  [[ -n "$container_id" ]] || return 0
+
+  state="$(docker inspect -f '{{.State.Status}}' "$container_id" 2>/dev/null || true)"
+  [[ "$state" == "running" ]] || return 0
+
+  repo="${DEV_SSH_DOTFILES_REPO:-$DEFAULT_DOTFILES_REPO}"
+
+  docker exec -i -u vscode "$container_id" bash -s -- "$repo" <<'EOF' >/dev/null 2>&1 || true
+set -euo pipefail
+
+repo="$1"
+dotfiles_dir="$HOME/dotfiles"
+desired_zshrc="$dotfiles_dir/zsh/.zshrc"
+current_zshrc="$(readlink "$HOME/.zshrc" 2>/dev/null || true)"
+
+if [[ "$current_zshrc" == "$desired_zshrc" ]]; then
+  exit 0
+fi
+
+command -v git >/dev/null 2>&1 || exit 0
+command -v zsh >/dev/null 2>&1 || exit 0
+
+if [[ ! -d "$dotfiles_dir/.git" ]]; then
+  git clone --depth 1 "$repo" "$dotfiles_dir" >/dev/null 2>&1 || exit 0
+fi
+
+if [[ -f "$dotfiles_dir/zsh/install.zsh" ]]; then
+  zsh "$dotfiles_dir/zsh/install.zsh" >/dev/null 2>&1 || true
+fi
+EOF
 }
 
 repo_dir_in_container() {
@@ -287,7 +331,7 @@ ssh_cmd() {
 
   ensure_docker
 
-  local cmd=("bash" "-l")
+  local cmd=("zsh" "-l")
   local mark_session=1
   if [[ $# -gt 0 ]]; then
     [[ "$1" == "--" ]] && shift
@@ -303,10 +347,13 @@ ssh_cmd() {
     if ! create_ssh_marker "$workspace" "$marker_token"; then
       marker_token=""
     fi
+
+    ensure_container_zsh_dotfiles "$workspace"
   fi
 
   local exit_code=0
   if command -v npx >/dev/null 2>&1; then
+    ensure_github_token
     (
       cd "$workspace"
       npx @devcontainers/cli exec \
