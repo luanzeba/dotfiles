@@ -47,9 +47,9 @@ check_configured() {
 
     export PATH="$FNM_DIR:$PATH"
     export FNM_ARCH="$(get_node_arch)"
-    eval "$("$FNM_DIR/fnm" env)" 2>/dev/null || return 1
+    eval "$("$FNM_DIR/fnm" env --shell bash)" 2>/dev/null || return 1
 
-    command -v typescript-language-server &>/dev/null
+    command -v typescript-language-server &>/dev/null && tree_sitter_works
 }
 
 install() {
@@ -77,10 +77,12 @@ install() {
 
     echo "fnm installed to $FNM_DIR"
 
-    # Ensure fnm is in PATH for this script
+    # Ensure fnm is in PATH for this script.
+    # This installer runs under bash, but can inherit SHELL=zsh from parent scripts.
+    # Forcing bash output avoids zsh-only commands (e.g. `rehash`) in eval.
     export PATH="$FNM_DIR:$PATH"
     export FNM_ARCH="$node_arch"
-    eval "$("$FNM_DIR/fnm" env)"
+    eval "$("$FNM_DIR/fnm" env --shell bash)"
 
     # If a previous installation pulled the wrong architecture (e.g. x64 on arm64),
     # Node binaries will fail with dynamic loader errors. Reinstall versions cleanly.
@@ -94,10 +96,37 @@ install() {
     fnm default lts-latest
 }
 
+tree_sitter_works() {
+    command -v tree-sitter &>/dev/null && tree-sitter --version >/dev/null 2>&1
+}
+
+install_tree_sitter_cli() {
+    npm install -g tree-sitter-cli
+
+    if tree_sitter_works; then
+        return 0
+    fi
+
+    local tree_sitter_error
+    tree_sitter_error="$(tree-sitter --version 2>&1 || true)"
+
+    # tree-sitter-cli Linux prebuilt may require newer glibc than Ubuntu 22.04.
+    if [[ "$(uname -s)" == "Linux" && "$tree_sitter_error" == *"GLIBC_"* ]]; then
+        echo "Latest tree-sitter-cli binary is incompatible with this Linux libc."
+        echo "Installing compatible fallback: tree-sitter-cli@0.24.7"
+        npm install -g tree-sitter-cli@0.24.7
+        tree_sitter_works
+        return
+    fi
+
+    [[ -n "$tree_sitter_error" ]] && echo "$tree_sitter_error"
+    return 1
+}
+
 configure() {
     export PATH="$FNM_DIR:$PATH"
     export FNM_ARCH="$(get_node_arch)"
-    eval "$(fnm env)" 2>/dev/null || true
+    eval "$("$FNM_DIR/fnm" env --shell bash)" 2>/dev/null || true
 
     if ! command -v npm &>/dev/null; then
         echo "npm not available, skipping TypeScript packages"
@@ -105,7 +134,8 @@ configure() {
     fi
 
     echo "Installing Node-based developer tools..."
-    npm install -g typescript-language-server typescript prettier tree-sitter-cli @github/copilot-language-server
+    npm install -g typescript-language-server typescript prettier @github/copilot-language-server
+    install_tree_sitter_cli
 }
 
 update() {
@@ -118,7 +148,7 @@ update() {
     node_arch=$(get_node_arch)
 
     export FNM_ARCH="$node_arch"
-    eval "$("$FNM_DIR/fnm" env)" 2>/dev/null || true
+    eval "$("$FNM_DIR/fnm" env --shell bash)" 2>/dev/null || true
 
     local url="https://github.com/Schniz/fnm/releases/latest/download/${asset}"
     curl -fsSL "$url" -o /tmp/fnm.zip
@@ -133,6 +163,7 @@ update() {
     if command -v npm &>/dev/null; then
         echo "Updating global npm packages..."
         npm update -g
+        install_tree_sitter_cli
     fi
 }
 
