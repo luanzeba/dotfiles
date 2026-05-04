@@ -1,0 +1,545 @@
+#!/bin/bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+DOTFILES_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+source "$DOTFILES_DIR/lib/common.sh"
+
+TODO_REPO_PATH_DEFAULT="$HOME/projects/todo"
+TODO_REPO_URL_DEFAULT="https://github.com/luanzeba/todo.git"
+TODO_REPO_PATH="${TODO_REPO_PATH:-$TODO_REPO_PATH_DEFAULT}"
+TODO_REPO_URL="${TODO_REPO_URL:-$TODO_REPO_URL_DEFAULT}"
+
+TODO_CONFIG_DIR="${TODO_CONFIG_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/todo}"
+TODO_CONFIG_PATH="${TODO_CONFIG_PATH:-$TODO_CONFIG_DIR/config}"
+TODO_ENV_PATH="${TODO_ENV_PATH:-$TODO_CONFIG_DIR/todo-api.env}"
+TODO_SYSTEMD_USER_DIR="${TODO_SYSTEMD_USER_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user}"
+TODO_SERVICE_PATH="${TODO_SERVICE_PATH:-$TODO_SYSTEMD_USER_DIR/todo-api.service}"
+TODO_DB_PATH_DEFAULT="${XDG_DATA_HOME:-$HOME/.local/share}/todo/todo.db"
+
+is_interactive() {
+    [[ -t 0 && -t 1 ]]
+}
+
+check_installed() {
+    command -v todo &>/dev/null || [[ -x "$TODO_REPO_PATH/zig-out/bin/todo" ]]
+}
+
+check_configured() {
+    [[ -f "$TODO_CONFIG_PATH" ]]
+}
+
+zig_version_ok() {
+    command -v zig &>/dev/null || return 1
+
+    local version major minor
+    version="$(zig version 2>/dev/null | head -n1)"
+    major="$(echo "$version" | awk -F. '{print $1}')"
+    minor="$(echo "$version" | awk -F. '{print $2}')"
+
+    [[ "$major" =~ ^[0-9]+$ ]] || return 1
+    [[ "$minor" =~ ^[0-9]+$ ]] || return 1
+
+    if (( major > 0 )); then
+        return 0
+    fi
+
+    (( minor >= 16 ))
+}
+
+ensure_sudo() {
+    if [[ "$EUID" -eq 0 ]]; then
+        return 0
+    fi
+
+    if sudo -n true 2>/dev/null; then
+        return 0
+    fi
+
+    if is_interactive; then
+        echo "todo setup requires sudo for package installation..."
+        sudo -v
+        return $?
+    fi
+
+    echo "Error: sudo authentication is required, but no interactive terminal is available."
+    echo "Run from your own terminal (or pre-authenticate with 'sudo -v') and retry."
+    return 1
+}
+
+install_essential_packages() {
+    if is_macos; then
+        if ! command -v brew &>/dev/null; then
+            echo "Error: Homebrew is required on macOS to install Zig/SQLite."
+            echo "Install Homebrew first: https://brew.sh"
+            return 1
+        fi
+
+        if ! zig_version_ok; then
+            echo "Installing/updating Zig via Homebrew..."
+            brew install zig >/dev/null 2>&1 || brew upgrade zig >/dev/null 2>&1 || true
+        fi
+
+        if ! command -v sqlite3 &>/dev/null; then
+            echo "Installing SQLite via Homebrew..."
+            brew install sqlite >/dev/null 2>&1 || true
+        fi
+
+        return 0
+    fi
+
+    if is_arch; then
+        local missing=()
+
+        if ! zig_version_ok; then
+            missing+=("zig")
+        fi
+
+        command -v sqlite3 &>/dev/null || missing+=("sqlite")
+        command -v git &>/dev/null || missing+=("git")
+
+        if [[ ${#missing[@]} -gt 0 ]]; then
+            ensure_sudo
+            sudo pacman -S --noconfirm --needed "${missing[@]}"
+        fi
+
+        return 0
+    fi
+
+    if ! zig_version_ok; then
+        echo "Error: Zig >= 0.16.0 is required."
+        echo "Install Zig manually and rerun: dot install todo"
+        return 1
+    fi
+
+    command -v sqlite3 &>/dev/null || {
+        echo "Error: sqlite3 is required. Install it and rerun."
+        return 1
+    }
+}
+
+ensure_repo() {
+    if [[ -d "$TODO_REPO_PATH/.git" ]]; then
+        return 0
+    fi
+
+    mkdir -p "$(dirname "$TODO_REPO_PATH")"
+
+    if [[ "${TODO_AUTO_CLONE:-}" == "1" ]]; then
+        echo "Cloning todo repo into $TODO_REPO_PATH"
+        git clone "$TODO_REPO_URL" "$TODO_REPO_PATH"
+        return 0
+    fi
+
+    if ! is_interactive; then
+        echo "Error: todo repo not found at $TODO_REPO_PATH"
+        echo "Set TODO_AUTO_CLONE=1 (and optionally TODO_REPO_URL) to allow non-interactive clone."
+        return 1
+    fi
+
+    local choice
+    read -r -p "todo repo not found at $TODO_REPO_PATH. Clone now? [Y/n] " choice
+    choice="${choice:-Y}"
+    if [[ "$choice" =~ ^[Yy]$ ]]; then
+        git clone "$TODO_REPO_URL" "$TODO_REPO_PATH"
+        return 0
+    fi
+
+    echo "Aborting: todo repository is required to build/install the CLI."
+    return 1
+}
+
+build_todo() {
+    if [[ ! -f "$TODO_REPO_PATH/build.zig" ]]; then
+        echo "Error: $TODO_REPO_PATH does not look like the todo repository"
+        return 1
+    fi
+
+    echo "Building todo CLI (ReleaseSafe)..."
+    (cd "$TODO_REPO_PATH" && zig build -Doptimize=ReleaseSafe)
+}
+
+link_todo_binary() {
+    local binary="$TODO_REPO_PATH/zig-out/bin/todo"
+    if [[ ! -x "$binary" ]]; then
+        echo "Error: todo binary not found at $binary"
+        return 1
+    fi
+
+    mkdir -p "$HOME/.local/bin"
+    ln -sf "$binary" "$HOME/.local/bin/todo"
+}
+
+install() {
+    install_essential_packages
+
+    if ! zig_version_ok; then
+        echo "Error: Zig >= 0.16.0 is required and could not be installed automatically."
+        return 1
+    fi
+
+    ensure_repo
+    build_todo
+    link_todo_binary
+
+    echo "todo installed: $("$TODO_REPO_PATH/zig-out/bin/todo" help | head -n1)"
+}
+
+prompt_with_default() {
+    local prompt="$1"
+    local default="$2"
+
+    if ! is_interactive; then
+        echo "$default"
+        return
+    fi
+
+    local value
+    read -r -p "$prompt [$default]: " value
+    echo "${value:-$default}"
+}
+
+prompt_yes_no() {
+    local prompt="$1"
+    local default="$2" # y or n
+
+    if ! is_interactive; then
+        [[ "$default" == "y" ]] && return 0
+        return 1
+    fi
+
+    local value
+    local suffix="[y/N]"
+    [[ "$default" == "y" ]] && suffix="[Y/n]"
+
+    while true; do
+        read -r -p "$prompt $suffix " value
+        value="${value:-$default}"
+        case "$value" in
+            y|Y) return 0 ;;
+            n|N) return 1 ;;
+        esac
+    done
+}
+
+prompt_secret() {
+    local prompt="$1"
+
+    if ! is_interactive; then
+        echo ""
+        return
+    fi
+
+    local value
+    read -r -s -p "$prompt: " value
+    echo
+    echo "$value"
+}
+
+choose_role() {
+    if [[ -n "${TODO_ROLE:-}" ]]; then
+        case "$TODO_ROLE" in
+            server|client) echo "$TODO_ROLE"; return 0 ;;
+            *) echo "Error: TODO_ROLE must be 'server' or 'client'" >&2; return 1 ;;
+        esac
+    fi
+
+    if ! is_interactive; then
+        echo "Error: set TODO_ROLE=server|client in non-interactive mode" >&2
+        return 1
+    fi
+
+    echo ""
+    echo "todo setup: choose role"
+    echo "  1) server (host todo API and data)"
+    echo "  2) client (use todo locally or connect remote)"
+
+    local choice
+    while true; do
+        read -r -p "Role [1/2]: " choice
+        case "$choice" in
+            1) echo "server"; return 0 ;;
+            2) echo "client"; return 0 ;;
+        esac
+    done
+}
+
+choose_mode() {
+    if [[ -n "${TODO_MODE:-}" ]]; then
+        case "$TODO_MODE" in
+            local|remote) echo "$TODO_MODE"; return 0 ;;
+            *) echo "Error: TODO_MODE must be 'local' or 'remote'" >&2; return 1 ;;
+        esac
+    fi
+
+    if ! is_interactive; then
+        echo "Error: set TODO_MODE=local|remote in non-interactive mode" >&2
+        return 1
+    fi
+
+    echo ""
+    echo "todo setup: choose backend mode"
+    echo "  1) local  (SQLite on this machine)"
+    echo "  2) remote (connect to another todo server)"
+
+    local choice
+    while true; do
+        read -r -p "Mode [1/2]: " choice
+        case "$choice" in
+            1) echo "local"; return 0 ;;
+            2) echo "remote"; return 0 ;;
+        esac
+    done
+}
+
+write_config_local() {
+    local db_path="$1"
+
+    mkdir -p "$TODO_CONFIG_DIR"
+    cat > "$TODO_CONFIG_PATH" <<CFG
+backend = local
+db-path = $db_path
+CFG
+
+    chmod 600 "$TODO_CONFIG_PATH" 2>/dev/null || true
+}
+
+write_config_remote() {
+    local remote_url="$1"
+    local remote_token_env="$2"
+    local remote_token="$3"
+
+    mkdir -p "$TODO_CONFIG_DIR"
+
+    {
+        echo "backend = remote"
+        echo "remote-url = $remote_url"
+        if [[ -n "$remote_token_env" ]]; then
+            echo "remote-token-env = $remote_token_env"
+        fi
+        if [[ -n "$remote_token" ]]; then
+            echo "remote-token = $remote_token"
+        fi
+    } > "$TODO_CONFIG_PATH"
+
+    chmod 600 "$TODO_CONFIG_PATH" 2>/dev/null || true
+}
+
+random_token() {
+    if command -v openssl &>/dev/null; then
+        openssl rand -hex 32
+        return
+    fi
+
+    od -An -N32 -tx1 /dev/urandom | tr -d ' \n'
+}
+
+setup_server_local() {
+    local db_path host port token expose_tailscale
+
+    db_path="$(prompt_with_default "DB path" "${TODO_SERVER_DB_PATH:-$TODO_DB_PATH_DEFAULT}")"
+    host="$(prompt_with_default "API host" "${TODO_SERVER_HOST:-127.0.0.1}")"
+    port="$(prompt_with_default "API port" "${TODO_SERVER_PORT:-4015}")"
+
+    token="${TODO_SERVER_TOKEN:-}"
+    if [[ -z "$token" ]]; then
+        token="$(random_token)"
+    fi
+
+    write_config_local "$db_path"
+
+    mkdir -p "$TODO_CONFIG_DIR"
+    cat > "$TODO_ENV_PATH" <<ENV
+TODO_DB_PATH=$db_path
+TODO_API_HOST=$host
+TODO_API_PORT=$port
+TODO_API_TOKEN=$token
+ENV
+    chmod 600 "$TODO_ENV_PATH" 2>/dev/null || true
+
+    if command -v systemctl &>/dev/null; then
+        mkdir -p "$TODO_SYSTEMD_USER_DIR"
+        cat > "$TODO_SERVICE_PATH" <<SERVICE
+[Unit]
+Description=todo API server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+EnvironmentFile=$TODO_ENV_PATH
+ExecStart=$TODO_REPO_PATH/zig-out/bin/todo serve
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=default.target
+SERVICE
+
+        if systemctl --user daemon-reload && systemctl --user enable --now todo-api.service; then
+            echo "Systemd user service enabled: $TODO_SERVICE_PATH"
+        else
+            echo "Warning: failed to enable/start systemd user service automatically"
+            echo "Run manually: systemctl --user daemon-reload && systemctl --user enable --now todo-api.service"
+        fi
+    else
+        echo "Note: systemctl not found; skipping service setup"
+    fi
+
+    expose_tailscale="${TODO_SERVER_EXPOSE_TAILSCALE:-}"
+    if [[ -z "$expose_tailscale" ]]; then
+        if prompt_yes_no "Expose API on Tailscale Serve now?" "n"; then
+            expose_tailscale="1"
+        else
+            expose_tailscale="0"
+        fi
+    fi
+
+    if [[ "$expose_tailscale" == "1" ]]; then
+        if command -v tailscale &>/dev/null; then
+            if tailscale serve --bg "http://$host:$port"; then
+                echo "Tailscale Serve configured for http://$host:$port"
+            else
+                echo "Warning: tailscale serve failed. Configure manually: tailscale serve --bg http://$host:$port"
+            fi
+        else
+            echo "Warning: tailscale not found; skipping Tailscale Serve setup"
+        fi
+    fi
+
+    echo ""
+    echo "Server setup complete."
+    echo "Config: $TODO_CONFIG_PATH"
+    echo "Env:    $TODO_ENV_PATH"
+    echo "Token:  $token"
+    echo "Store this token in 1Password and set TODO_REMOTE_TOKEN on clients."
+}
+
+setup_client_local() {
+    local db_path
+
+    db_path="$(prompt_with_default "DB path" "${TODO_CLIENT_DB_PATH:-$TODO_DB_PATH_DEFAULT}")"
+    write_config_local "$db_path"
+
+    echo ""
+    echo "Local client setup complete."
+    echo "Config: $TODO_CONFIG_PATH"
+}
+
+setup_client_remote() {
+    local remote_url token_mode remote_token_env remote_token
+
+    remote_url="$(prompt_with_default "Remote API URL" "${TODO_REMOTE_URL:-https://mo.tail534aa7.ts.net}")"
+
+    token_mode="${TODO_REMOTE_TOKEN_MODE:-}"
+    remote_token_env="${TODO_REMOTE_TOKEN_ENV:-}"
+    remote_token="${TODO_REMOTE_TOKEN:-}"
+
+    if [[ -z "$token_mode" ]]; then
+        if is_interactive; then
+            echo ""
+            echo "How should the remote token be configured?"
+            echo "  1) env var (recommended)"
+            echo "  2) store token in config file"
+            echo "  3) skip for now"
+
+            local choice
+            while true; do
+                read -r -p "Choice [1/2/3]: " choice
+                case "$choice" in
+                    1) token_mode="env"; break ;;
+                    2) token_mode="inline"; break ;;
+                    3) token_mode="skip"; break ;;
+                esac
+            done
+        else
+            token_mode="env"
+        fi
+    fi
+
+    case "$token_mode" in
+        env)
+            remote_token_env="${remote_token_env:-TODO_REMOTE_TOKEN}"
+            remote_token=""
+            ;;
+        inline)
+            if [[ -z "$remote_token" ]]; then
+                remote_token="$(prompt_secret "Remote API token")"
+            fi
+            remote_token_env=""
+            ;;
+        skip)
+            remote_token_env="${remote_token_env:-TODO_REMOTE_TOKEN}"
+            remote_token=""
+            ;;
+        *)
+            echo "Error: TODO_REMOTE_TOKEN_MODE must be env|inline|skip"
+            return 1
+            ;;
+    esac
+
+    write_config_remote "$remote_url" "$remote_token_env" "$remote_token"
+
+    echo ""
+    echo "Remote client setup complete."
+    echo "Config: $TODO_CONFIG_PATH"
+
+    if [[ -n "$remote_token_env" ]]; then
+        echo "Set token before running todo:"
+        echo "  export $remote_token_env=\"<your-token>\""
+    fi
+}
+
+configure() {
+    local role mode
+    role="$(choose_role)"
+    mode="$(choose_mode)"
+
+    if [[ "$role" == "server" && "$mode" == "remote" ]]; then
+        echo ""
+        echo "Server role always uses a local backend. Switching mode to 'local'."
+        mode="local"
+    fi
+
+    case "$role:$mode" in
+        server:local)
+            ensure_repo
+            setup_server_local
+            ;;
+        client:local)
+            setup_client_local
+            ;;
+        client:remote)
+            setup_client_remote
+            ;;
+        *)
+            echo "Error: unsupported role/mode combination: $role/$mode"
+            return 1
+            ;;
+    esac
+}
+
+apply() {
+    # No shell config reload needed.
+    :
+}
+
+update() {
+    ensure_repo
+
+    if [[ -d "$TODO_REPO_PATH/.git" ]]; then
+        echo "Updating todo repo..."
+        (cd "$TODO_REPO_PATH" && git pull --ff-only)
+    fi
+
+    build_todo
+    link_todo_binary
+
+    echo "todo updated"
+}
+
+# Main (only run when executed directly, not when sourced)
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    install
+    configure
+fi

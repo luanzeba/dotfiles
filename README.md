@@ -39,6 +39,9 @@ git clone https://github.com/luanzeba/dotfiles.git ~/dotfiles
 
 The main `install` script detects your platform and runs the appropriate setup.
 
+`todo` is intentionally opt-in and **not** included in default install phases.
+Use `dot install todo` when you want to set it up.
+
 ## dotfiles CLI
 
 After installation, use the `dotfiles` (or `dot`) command:
@@ -49,6 +52,7 @@ After installation, use the `dotfiles` (or `dot`) command:
 | `dot pull` | Pull latest (Omarchy skips apply by default; use `--apply`) |
 | `dot install` | Run full install |
 | `dot install <tool>` | Install specific tool(s) |
+| `dot install todo` | Interactive todo installer (server/client + local/remote) |
 | `dot install -f <tool>` | Force reinstall (skip install check) |
 | `dot update` | Update tools (brew, nvim plugins, etc.) |
 | `dot doctor` | Check setup health |
