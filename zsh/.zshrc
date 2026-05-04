@@ -34,7 +34,10 @@ fi
 alias v="nvim"
 alias vvim="vim $HOME/.config/nvim/init.vim"
 alias svim="source $HOME/.config/nvim/init.vim"
-alias tailscale="/Applications/Tailscale.app/Contents/MacOS/Tailscale"
+# Use bundled Tailscale binary on macOS only when `tailscale` isn't already in PATH.
+if [[ "$(uname)" == "Darwin" ]] && ! command -v tailscale >/dev/null 2>&1 && [[ -x "/Applications/Tailscale.app/Contents/MacOS/Tailscale" ]]; then
+  alias tailscale="/Applications/Tailscale.app/Contents/MacOS/Tailscale"
+fi
 # Only define `cssh` if the `rdm` binary exists
 # https://github.com/BlakeWilliams/remote-development-manager
 if [[ -x "$(command -v rdm)" ]]; then
