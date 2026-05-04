@@ -109,22 +109,18 @@ devcontainer_auto_ssh_if_needed() {
   local -a active_workspaces
 
   context_workspace="$(_dev_auto_ssh_context_workspace 2>/dev/null || true)"
+  [[ -n "$context_workspace" ]] || return 0
+
   active_workspaces=("${(@f)$(_dev_auto_ssh_active_workspaces)}")
 
-  # Prefer matching the shell's current repo context. If that can't be
-  # determined, auto-attach only when there is exactly one active session.
-  if [[ -n "$context_workspace" ]]; then
-    for ws in "${active_workspaces[@]}"; do
-      if [[ "$ws" == "$context_workspace" ]]; then
-        target_workspace="$ws"
-        break
-      fi
-    done
-  fi
-
-  if [[ -z "$target_workspace" ]] && (( ${#active_workspaces[@]} == 1 )); then
-    target_workspace="$active_workspaces[1]"
-  fi
+  # Strict matching: auto-attach only when the shell's current repo context
+  # is itself an active dev ssh session workspace.
+  for ws in "${active_workspaces[@]}"; do
+    if [[ "$ws" == "$context_workspace" ]]; then
+      target_workspace="$ws"
+      break
+    fi
+  done
 
   [[ -n "$target_workspace" ]] || return 0
 

@@ -1,3 +1,8 @@
 font-family = BerkeleyMono Nerd Font
 cursor-style = block
 shell-integration-features = no-title
+
+# Keep split cwd inheritance for devcontainer auto-attach, but disable tab
+# inheritance so new tabs don't auto-enter the container session.
+split-inherit-working-directory = true
+tab-inherit-working-directory = false
