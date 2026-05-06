@@ -161,6 +161,18 @@ configure() {
     # Symlink extensions
     if [[ -d "$SCRIPT_DIR/extensions" ]]; then
         mkdir -p "$PI_CONFIG_DIR/extensions"
+
+        # Remove stale symlinks to extensions managed by this dotfiles directory.
+        for linked_ext in "$PI_CONFIG_DIR/extensions"/*.ts; do
+            [[ -L "$linked_ext" ]] || continue
+            local target
+            target="$(readlink "$linked_ext")"
+            if [[ "$target" == "$SCRIPT_DIR/extensions/"* && ! -e "$target" ]]; then
+                rm -f "$linked_ext"
+                echo "Removed stale extension: $linked_ext"
+            fi
+        done
+
         for ext in "$SCRIPT_DIR/extensions"/*.ts; do
             [[ -f "$ext" ]] || continue
             local name
