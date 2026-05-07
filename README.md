@@ -42,6 +42,12 @@ The main `install` script detects your platform and runs the appropriate setup.
 `todo` is intentionally opt-in and **not** included in default install phases.
 Use `dot install todo` when you want to set it up.
 
+`hunk` is included in default installs (macOS, Arch/Omarchy, and Codespaces).
+It is configured with:
+- `~/.config/hunk/config.toml` from `hunk/config.toml`
+- Git aliases: `git hdiff` and `git hshow` (both use `hunk pager`)
+- The `hunk-review` agent skill via `skills/hunk-review/`
+
 ## dotfiles CLI
 
 After installation, use the `dotfiles` (or `dot`) command:
