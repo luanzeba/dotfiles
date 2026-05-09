@@ -18,6 +18,8 @@
   rom = !"git fetch; git rebase origin/$(git main)"
   sm = !"git switch $(git main)"
   smartpull = "!f() { \\\n  if [[ -n $(git status --porcelain) ]]; then \\\n    echo \"Stashing changes...\"; \\\n    git stash; \\\n    STASHED=true; \\\n  fi; \\\n  git pull --rebase; \\\n  if [ \"$STASHED\" = true ]; then \\\n    echo \"Applying stashed changes...\"; \\\n    git stash pop; \\\n  fi; \\\n}; f"
+	hdiff = -c core.pager=\"hunk pager\" diff
+	hshow = -c core.pager=\"hunk pager\" show
 [rerere] # automatic conflict resolution
   enabled = true
 [rebase]
