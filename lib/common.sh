@@ -271,3 +271,14 @@ print_table_row() {
     done
     echo "$line"
 }
+
+# =============================================================================
+# Nix / npm-global PATH bootstrap
+# =============================================================================
+# Make sure binaries installed by lib/nix.sh (node + node-based tools via the
+# nix profile) and any per-user npm globals are visible to all dotfiles
+# scripts, even when the user's shell rc hasn't been sourced.
+[[ -d "$HOME/.nix-profile/bin" && ":$PATH:" != *":$HOME/.nix-profile/bin:"* ]] \
+    && export PATH="$HOME/.nix-profile/bin:$PATH"
+[[ -d "$HOME/.npm-global/bin"  && ":$PATH:" != *":$HOME/.npm-global/bin:"*  ]] \
+    && export PATH="$HOME/.npm-global/bin:$PATH"
