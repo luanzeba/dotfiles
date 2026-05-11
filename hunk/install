@@ -1,115 +1,82 @@
 #!/bin/bash
+# Drop-in replacement for hunk/install once the nix flake works.
+# To activate: mv nix/drafts/hunk-install ../hunk/install
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+HUNK_DIR="$SCRIPT_DIR"
 HUNK_CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/hunk"
 HUNK_CONFIG_FILE="$HUNK_CONFIG_DIR/config.toml"
 HUNK_PACKAGE="hunkdiff"
 HUNK_GIT_ALIAS_DIFF='-c core.pager="hunk pager" diff'
 HUNK_GIT_ALIAS_SHOW='-c core.pager="hunk pager" show'
-FNM_DIR="$HOME/.local/share/fnm"
 
-get_node_arch() {
-    case "$(uname -m)" in
-        x86_64) echo "x64" ;;
-        arm64|aarch64) echo "arm64" ;;
-        *) echo "" ;;
-    esac
-}
+# Per-user npm global prefix (avoids needing sudo, plays nice with nix's npm).
+NPM_GLOBAL_PREFIX="$HOME/.npm-global"
 
-ensure_node_env() {
-    if command -v npm &>/dev/null; then
-        return 0
-    fi
+# shellcheck disable=SC1091
+source "$SCRIPT_DIR/../lib/nix.sh"
 
-    if [[ -x "$FNM_DIR/fnm" ]]; then
-        export PATH="$FNM_DIR:$PATH"
-
-        local node_arch
-        node_arch="$(get_node_arch)"
-        [[ -n "$node_arch" ]] && export FNM_ARCH="$node_arch"
-
-        eval "$("$FNM_DIR/fnm" env --shell bash)" 2>/dev/null || true
-    fi
-
-    command -v npm &>/dev/null
+_npm_path_setup() {
+    export PATH="$NPM_GLOBAL_PREFIX/bin:$PATH"
 }
 
 check_installed() {
-    if command -v hunk &>/dev/null; then
-        return 0
-    fi
-
-    ensure_node_env || return 1
+    _npm_path_setup
     command -v hunk &>/dev/null
 }
 
 check_configured() {
     [[ -L "$HUNK_CONFIG_FILE" ]] || return 1
-
     command -v git &>/dev/null || return 1
-
-    local alias_diff alias_show
-    alias_diff="$(git config --global --get alias.hdiff 2>/dev/null || true)"
-    alias_show="$(git config --global --get alias.hshow 2>/dev/null || true)"
-
-    [[ "$alias_diff" == "$HUNK_GIT_ALIAS_DIFF" ]] || return 1
-    [[ "$alias_show" == "$HUNK_GIT_ALIAS_SHOW" ]] || return 1
-
+    [[ "$(git config --global --get alias.hdiff 2>/dev/null)" == "$HUNK_GIT_ALIAS_DIFF" ]] || return 1
+    [[ "$(git config --global --get alias.hshow 2>/dev/null)" == "$HUNK_GIT_ALIAS_SHOW" ]] || return 1
     return 0
 }
 
-get_installed_version() {
-    command -v hunk &>/dev/null || ensure_node_env || return 1
-
-    if command -v hunk &>/dev/null; then
-        hunk --version 2>/dev/null | head -1
-    fi
-}
-
 install() {
-    if ! ensure_node_env; then
-        echo "npm not found. Please run node/install first"
+    # Make sure node/npm are present (from the nix flake).
+    nix_profile_sync
+    _source_nix_env
+
+    if ! command -v npm &>/dev/null; then
+        echo "npm not on PATH after nix sync — something is wrong"
         return 1
     fi
+
+    mkdir -p "$NPM_GLOBAL_PREFIX"
+    npm config set prefix "$NPM_GLOBAL_PREFIX"
+    _npm_path_setup
 
     if command -v hunk &>/dev/null; then
         echo "hunk already installed: $(hunk --version | head -1)"
         return 0
     fi
 
-    echo "Installing hunk..."
+    echo "Installing hunk via npm..."
     npm install -g "$HUNK_PACKAGE"
-
     echo "hunk installed: $(hunk --version | head -1)"
 }
 
 configure() {
     mkdir -p "$HUNK_CONFIG_DIR"
-    ln -sfn "$SCRIPT_DIR/config.toml" "$HUNK_CONFIG_FILE"
-
+    ln -sfn "$HUNK_DIR/config.toml" "$HUNK_CONFIG_FILE"
     if command -v git &>/dev/null; then
         git config --global alias.hdiff "$HUNK_GIT_ALIAS_DIFF"
         git config --global alias.hshow "$HUNK_GIT_ALIAS_SHOW"
     fi
 }
 
-apply() {
-    # Hunk reads config on startup.
-    :
-}
-
 update() {
-    if ! ensure_node_env; then
-        echo "npm not found, cannot update hunk"
-        return 1
+    nix_profile_sync
+    _source_nix_env
+    _npm_path_setup
+    if command -v npm &>/dev/null; then
+        echo "Updating hunk via npm..."
+        npm update -g "$HUNK_PACKAGE"
     fi
-
-    echo "Updating hunk..."
-    npm update -g "$HUNK_PACKAGE"
 }
 
-# Main (only run when executed directly, not when sourced)
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     install
     configure
