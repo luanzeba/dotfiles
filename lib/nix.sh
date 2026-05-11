@@ -82,16 +82,17 @@ _ensure_nix_daemon_running() {
     fi
 
     log_info "Starting nix-daemon (no systemd; backgrounding via nohup)..."
+    local daemon_cmd=""
     if command -v determinate-nixd &>/dev/null; then
-        sudo -b nohup determinate-nixd daemon \
-            >/var/log/nix-daemon.log 2>&1 </dev/null &
+        daemon_cmd="determinate-nixd daemon"
     elif command -v nix-daemon &>/dev/null; then
-        sudo -b nohup nix-daemon \
-            >/var/log/nix-daemon.log 2>&1 </dev/null &
+        daemon_cmd="nix-daemon"
     else
         log_error "No nix-daemon binary found"
         return 1
     fi
+    # Redirect must happen inside sudo so /var/log is writable.
+    sudo sh -c "nohup $daemon_cmd >/var/log/nix-daemon.log 2>&1 </dev/null &"
 
     # Wait up to 10s for the socket to come up.
     local i
