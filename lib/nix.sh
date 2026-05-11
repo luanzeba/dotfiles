@@ -44,18 +44,63 @@ _source_nix_env() {
 }
 
 ensure_nix() {
-    if _source_nix_env; then
+    if _source_nix_env && _nix_daemon_ready; then
         return 0
     fi
 
-    log_info "Installing Nix via Determinate Systems installer (will request sudo)..."
-    curl --proto '=https' --tlsv1.2 -sSf -L https://install.determinate.systems/nix \
-        | sh -s -- install --determinate --no-confirm
+    if ! command -v nix &>/dev/null; then
+        log_info "Installing Nix via Determinate Systems installer (will request sudo)..."
+        curl --proto '=https' --tlsv1.2 -sSf -L https://install.determinate.systems/nix \
+            | sh -s -- install --determinate --no-confirm
 
-    _source_nix_env || {
-        log_error "Nix installed but not on PATH. Open a new shell and re-run."
+        _source_nix_env || {
+            log_error "Nix installed but not on PATH. Open a new shell and re-run."
+            return 1
+        }
+    fi
+
+    _ensure_nix_daemon_running
+}
+
+# Check whether the nix-daemon socket is responding.
+_nix_daemon_ready() {
+    nix --extra-experimental-features 'nix-command' store ping >/dev/null 2>&1
+}
+
+# Start the Determinate nix-daemon if it isn't already running.
+# Required on containers without systemd (e.g. supervisord-based devcontainers).
+_ensure_nix_daemon_running() {
+    if _nix_daemon_ready; then
+        return 0
+    fi
+
+    if pgrep -f 'determinate-nixd daemon' >/dev/null 2>&1 \
+       || pgrep -x nix-daemon >/dev/null 2>&1; then
+        # Already started, just give it a moment
+        sleep 1
+        _nix_daemon_ready && return 0
+    fi
+
+    log_info "Starting nix-daemon (no systemd; backgrounding via nohup)..."
+    if command -v determinate-nixd &>/dev/null; then
+        sudo -b nohup determinate-nixd daemon \
+            >/var/log/nix-daemon.log 2>&1 </dev/null &
+    elif command -v nix-daemon &>/dev/null; then
+        sudo -b nohup nix-daemon \
+            >/var/log/nix-daemon.log 2>&1 </dev/null &
+    else
+        log_error "No nix-daemon binary found"
         return 1
-    }
+    fi
+
+    # Wait up to 10s for the socket to come up.
+    local i
+    for i in 1 2 3 4 5 6 7 8 9 10; do
+        sleep 1
+        _nix_daemon_ready && return 0
+    done
+    log_error "nix-daemon did not become ready in time"
+    return 1
 }
 
 nix_profile_installed() {
