@@ -72,21 +72,21 @@ warnings=0
 UI_EXPECTED=0
 
 ok() {
-  echo "✅ $*"
+  echo "[OK] $*"
 }
 
 warn() {
-  echo "⚠️  $*"
+  echo "[WARN] $*"
   ((warnings += 1))
 }
 
 fail() {
-  echo "❌ $*"
+  echo "[FAIL] $*"
   ((failures += 1))
 }
 
 info() {
-  echo "ℹ️  $*"
+  echo "[INFO] $*"
 }
 
 have_cmd() {
