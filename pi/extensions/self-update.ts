@@ -1,8 +1,13 @@
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
-const PACKAGE = "@mariozechner/pi-coding-agent";
-const INSTALL_ARGS = ["install", "-g", PACKAGE];
+const PACKAGE = "@earendil-works/pi-coding-agent";
+const UPDATE_ARGS = ["update", "--self", "--force"];
 const TIMEOUT_MS = 1000 * 60 * 3;
+
+function findPiBinary(): string {
+  // process.argv[1] is the pi entrypoint script; the launcher is usually a sibling `pi` binary.
+  return process.argv[1] ?? "pi";
+}
 
 type PendingRestart = {
   cwd: string;
@@ -49,22 +54,24 @@ export default function (pi: ExtensionAPI) {
   });
 
   pi.registerCommand("update", {
-    description: `Update ${PACKAGE} via npm and restart pi`,
+    description: `Update ${PACKAGE} via 'pi update --self' and restart pi`,
     handler: async (_args, ctx) => {
+      const piBin = findPiBinary();
+
       if (!ctx.hasUI) {
-        const result = await pi.exec("npm", INSTALL_ARGS, { timeout: TIMEOUT_MS });
+        const result = await pi.exec(piBin, UPDATE_ARGS, { timeout: TIMEOUT_MS });
         if (result.code !== 0) {
-          throw new Error(result.stderr || "npm update failed");
+          throw new Error(result.stderr || result.stdout || "pi update failed");
         }
         return;
       }
 
       ctx.ui.setStatus("pi-update", "Updating pi...");
       try {
-        const result = await pi.exec("npm", INSTALL_ARGS, { timeout: TIMEOUT_MS });
+        const result = await pi.exec(piBin, UPDATE_ARGS, { timeout: TIMEOUT_MS });
 
         if (result.code !== 0) {
-          ctx.ui.notify(result.stderr || "npm update failed", "error");
+          ctx.ui.notify(result.stderr || result.stdout || "pi update failed", "error");
           return;
         }
 
