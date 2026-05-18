@@ -6,6 +6,8 @@ CONFIG_REL=".devcontainer/local-macos-arm64/devcontainer.json"
 DEFAULT_WORKSPACE="$HOME/github/github"
 DEFAULT_IMAGE="ghcr.io/github/github/local-bootstrapped:latest"
 DEFAULT_DOTFILES_REPO="https://github.com/luanzeba/dotfiles.git"
+SELF_PATH="$(readlink -f "${BASH_SOURCE[0]}")"
+SELF_DIR="$(cd "$(dirname "$SELF_PATH")" && pwd -P)"
 
 usage() {
   cat <<'EOF'
@@ -16,8 +18,7 @@ Usage:
   dev [--workspace-folder PATH] ssh [-- COMMAND [ARGS...]]
   dev [--workspace-folder PATH] push-branches [--dry-run]
   dev [--workspace-folder PATH] rebuild [--force] [--pull-latest]
-  dev [--workspace-folder PATH] health check
-  dev [--workspace-folder PATH] health fix
+  dev [--workspace-folder PATH] health [check|fix] [--ui|--no-ui]
 
 Commands:
   status         Show container status, age, and git safety summary
@@ -32,6 +33,7 @@ Commands:
   health         Run inside-container health checks/fixes for local arm64 devcontainer
                  check: validate dotfiles/auth/bundle/server state
                  fix: apply safe fixes, then re-run checks
+                 flags: --ui (force UI mode), --no-ui (force Rails-only mode)
 
 Options:
   -w, --workspace-folder PATH   Defaults to current repo root (if config exists), else ~/github/github
@@ -87,13 +89,8 @@ running_inside_devcontainer() {
   [[ -f "/.dockerenv" || -n "${LOCAL_DEVCONTAINER:-}" || -n "${CODESPACES:-}" ]]
 }
 
-health_script_rel() {
-  echo ".devcontainer/local-macos-arm64/health.sh"
-}
-
 health_script_path() {
-  local workspace="$1"
-  echo "$workspace/$(health_script_rel)"
+  echo "$SELF_DIR/dev-health"
 }
 
 # Global marker directory used by host shells (e.g. Ghostty splits)
@@ -318,30 +315,31 @@ health_cmd() {
   local workspace="$1"
   shift
 
-  local action="${1:-check}"
-  shift || true
+  local action="check"
+  if [[ $# -gt 0 ]]; then
+    case "$1" in
+      check|fix)
+        action="$1"
+        shift
+        ;;
+      -h|--help|help)
+        echo "Usage: dev health [check|fix] [--ui|--no-ui]"
+        return
+        ;;
+    esac
+  fi
 
-  case "$action" in
-    check|fix) ;;
-    -h|--help|help)
-      echo "Usage: dev health [check|fix]"
-      return
-      ;;
-    *)
-      die "Unknown health action: $action (expected 'check' or 'fix')"
-      ;;
-  esac
+  local health_args=("$@")
 
-  local script_rel script_path
-  script_rel="$(health_script_rel)"
-  script_path="$(health_script_path "$workspace")"
-  [[ -f "$script_path" ]] || die "Health script not found: $script_path"
+  local health_script
+  health_script="$(health_script_path)"
+  [[ -f "$health_script" ]] || die "Health script not found: $health_script"
 
   # If already inside a devcontainer, run checks/fixes directly.
   if running_inside_devcontainer; then
     (
       cd "$workspace"
-      bash "$script_rel" "$action"
+      bash "$health_script" "$action" "${health_args[@]}"
     )
     return
   fi
@@ -363,19 +361,8 @@ health_cmd() {
   local repo_dir exit_code=0
   repo_dir="$(repo_dir_in_container "$workspace")"
 
-  if command -v npx >/dev/null 2>&1; then
-    ensure_github_token
-    (
-      cd "$workspace"
-      npx @devcontainers/cli exec \
-        --workspace-folder . \
-        --config "$CONFIG_REL" \
-        bash -lc "$script_rel $action"
-    ) || exit_code=$?
-  else
-    docker exec -i -u vscode -w "$repo_dir" "$container_id" \
-      bash -lc "$script_rel $action" || exit_code=$?
-  fi
+  docker exec -i -u vscode -w "$repo_dir" "$container_id" \
+    bash -s -- "$action" "${health_args[@]}" < "$health_script" || exit_code=$?
 
   if (( started_for_health == 1 )); then
     docker stop "$container_id" >/dev/null || true

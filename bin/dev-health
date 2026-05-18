@@ -1,0 +1,530 @@
+#!/bin/bash
+
+set -euo pipefail
+
+ACTION="check"
+FORCE_UI_MODE=""
+UI_DETECTION_REASON=""
+
+usage() {
+  cat <<'EOF'
+Usage: dev-health [check|fix] [--ui|--no-ui]
+
+Runs health diagnostics for the github/github local arm64 devcontainer.
+
+Actions:
+  check   Run diagnostics only
+  fix     Apply safe fixes, then run diagnostics
+
+Options:
+  --ui       Force UI checks/fixes on
+  --no-ui    Force Rails-only mode (skip UI checks/fixes)
+EOF
+}
+
+if [[ $# -gt 0 ]]; then
+  case "$1" in
+    check|fix)
+      ACTION="$1"
+      shift
+      ;;
+    -h|--help|help)
+      usage
+      exit 0
+      ;;
+  esac
+fi
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --ui)
+      FORCE_UI_MODE="1"
+      shift
+      ;;
+    --no-ui|--rails-only)
+      FORCE_UI_MODE="0"
+      shift
+      ;;
+    -h|--help|help)
+      usage
+      exit 0
+      ;;
+    *)
+      echo "Unknown option: $1" >&2
+      usage
+      exit 1
+      ;;
+  esac
+done
+
+WORKSPACE_DIR="${WORKSPACE_DIR:-$(pwd -P)}"
+if [[ ! -f "$WORKSPACE_DIR/.devcontainer/local-macos-arm64/devcontainer.json" ]]; then
+  if [[ -f "/workspaces/github/.devcontainer/local-macos-arm64/devcontainer.json" ]]; then
+    WORKSPACE_DIR="/workspaces/github"
+  fi
+fi
+
+GITHUB_UI_DIR="${GITHUB_UI_DIR:-$(cd "$WORKSPACE_DIR/../github-ui" 2>/dev/null && pwd -P || true)}"
+ARCH="$(uname -m)"
+
+failures=0
+warnings=0
+UI_EXPECTED=0
+
+ok() {
+  echo "✅ $*"
+}
+
+warn() {
+  echo "⚠️  $*"
+  ((warnings += 1))
+}
+
+fail() {
+  echo "❌ $*"
+  ((failures += 1))
+}
+
+info() {
+  echo "ℹ️  $*"
+}
+
+have_cmd() {
+  command -v "$1" >/dev/null 2>&1
+}
+
+json_is_valid() {
+  if have_cmd jq; then
+    jq -e . >/dev/null 2>&1
+  else
+    node -e 'let d=""; process.stdin.on("data", c => d += c); process.stdin.on("end", () => { JSON.parse(d); });' >/dev/null 2>&1
+  fi
+}
+
+manifest_bundlers() {
+  if have_cmd jq; then
+    jq -r '[keys[] | select(. == "rspack" or . == "css" or . == "vite")] | join(",")'
+  else
+    node -e 'let d=""; process.stdin.on("data", c => d += c); process.stdin.on("end", () => { const j = JSON.parse(d); const keys = Object.keys(j).filter(k => ["rspack", "css", "vite"].includes(k)); process.stdout.write(keys.join(",")); });'
+  fi
+}
+
+overmind_running() {
+  overmind status >/dev/null 2>&1
+}
+
+port_is_listening() {
+  local port="$1"
+  ss -ltn "sport = :$port" 2>/dev/null | tail -n +2 | grep -q .
+}
+
+overmind_status_output() {
+  overmind status 2>/dev/null || true
+}
+
+overmind_pid_for_process() {
+  local process="$1"
+  local status_output="$2"
+  awk -v p="$process" '$1 == p { print $2; exit }' <<< "$status_output"
+}
+
+pid_has_ui_env() {
+  local pid="$1"
+
+  [[ -n "$pid" ]] || return 1
+  [[ -r "/proc/$pid/environ" ]] || return 1
+
+  tr '\0' '\n' < "/proc/$pid/environ" | grep -Eq '^UI=(1|true)$'
+}
+
+detect_ui_expected() {
+  local status_output=""
+  local pid
+
+  if [[ -n "$FORCE_UI_MODE" ]]; then
+    UI_EXPECTED="$FORCE_UI_MODE"
+    if [[ "$FORCE_UI_MODE" == "1" ]]; then
+      UI_DETECTION_REASON="forced via --ui"
+    else
+      UI_DETECTION_REASON="forced via --no-ui"
+    fi
+    return
+  fi
+
+  if port_is_listening 3014 || port_is_listening 3013 || port_is_listening 3011; then
+    UI_EXPECTED=1
+    UI_DETECTION_REASON="UI/dev-asset ports are listening (3011/3013/3014)"
+    return
+  fi
+
+  if overmind_running; then
+    status_output="$(overmind_status_output)"
+
+    for process in web js-assets ui-assets; do
+      pid="$(overmind_pid_for_process "$process" "$status_output")"
+      if pid_has_ui_env "$pid"; then
+        UI_EXPECTED=1
+        UI_DETECTION_REASON="overmind process environment has UI=1"
+        return
+      fi
+    done
+  fi
+
+  UI_EXPECTED=0
+  UI_DETECTION_REASON="no UI ports/process env detected"
+}
+
+check_overmind_and_processes() {
+  local ui_expected="${1:-0}"
+  if ! have_cmd overmind; then
+    fail "overmind is not installed in the container"
+    return
+  fi
+
+  if ! overmind_running; then
+    fail "overmind is not reachable (missing/stale /tmp/overmind.sock or crashed tmux client)"
+    return
+  fi
+
+  ok "overmind socket is reachable"
+
+  local status_output
+  status_output="$(overmind_status_output)"
+
+  local critical=(web)
+  if (( ui_expected == 1 )); then
+    critical+=(js-assets ui-assets)
+  fi
+
+  local proc state
+  for proc in "${critical[@]}"; do
+    state="$(awk -v p="$proc" '$1 == p { print $3 }' <<< "$status_output")"
+    if [[ "$state" == "running" ]]; then
+      ok "$proc is running"
+    elif [[ -z "$state" ]]; then
+      fail "$proc is missing from overmind status"
+    else
+      fail "$proc is $state"
+    fi
+  done
+}
+
+check_endpoints() {
+  local ui_expected="${1:-0}"
+  local status_code
+
+  status_code="$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3000/status || true)"
+  if [[ "$status_code" == "200" ]]; then
+    ok "web status endpoint is healthy (GET http://localhost:3000/status)"
+  else
+    fail "web status endpoint returned $status_code (expected 200)"
+  fi
+
+  if (( ui_expected == 0 )); then
+    info "UI checks skipped (UI mode appears disabled)"
+    return
+  fi
+
+  local manifest=""
+  local bundlers=""
+  local attempt
+
+  for attempt in {1..10}; do
+    manifest="$(curl -s http://localhost:3014/ui-manifest.json || true)"
+
+    if [[ -z "$manifest" ]]; then
+      sleep 1
+      continue
+    fi
+
+    if ! printf '%s' "$manifest" | json_is_valid; then
+      sleep 1
+      continue
+    fi
+
+    bundlers="$(printf '%s' "$manifest" | manifest_bundlers)"
+    if [[ -n "$bundlers" ]]; then
+      break
+    fi
+
+    sleep 1
+  done
+
+  if [[ -z "$manifest" ]]; then
+    fail "ui-manifest endpoint did not return content"
+    return
+  fi
+
+  if ! printf '%s' "$manifest" | json_is_valid; then
+    fail "ui-manifest is not valid JSON (likely UI bundler startup failure)"
+    return
+  fi
+
+  if [[ -z "$bundlers" ]]; then
+    fail "ui-manifest JSON is valid but has no active bundler sections (rspack/css/vite)"
+  else
+    ok "ui-manifest is healthy (bundlers: $bundlers)"
+  fi
+}
+
+check_ui_commands_generated() {
+  if [[ -z "$GITHUB_UI_DIR" || ! -d "$GITHUB_UI_DIR" ]]; then
+    warn "github-ui directory not found; skipping UI command metadata check"
+    return
+  fi
+
+  local generated_file="$GITHUB_UI_DIR/packages/ui-commands/__generated__/ui-commands.json"
+  if [[ -f "$generated_file" ]]; then
+    ok "ui-commands metadata exists"
+  else
+    fail "missing ui-commands metadata ($generated_file)"
+  fi
+}
+
+check_arm64_native_bindings() {
+  if [[ "$ARCH" != "arm64" && "$ARCH" != "aarch64" ]]; then
+    return
+  fi
+
+  if [[ -z "$GITHUB_UI_DIR" || ! -d "$GITHUB_UI_DIR" ]]; then
+    warn "github-ui directory not found; skipping arm64 binding checks"
+    return
+  fi
+
+  local required=(
+    "node_modules/@rspack/binding-linux-arm64-gnu"
+    "node_modules/@rspack/resolver-binding-linux-arm64-gnu"
+    "node_modules/lightningcss-linux-arm64-gnu"
+    "node_modules/@tailwindcss/oxide-linux-arm64-gnu"
+    "node_modules/@swc/core-linux-arm64-gnu"
+  )
+
+  local missing=0
+  local rel
+  for rel in "${required[@]}"; do
+    if [[ -d "$GITHUB_UI_DIR/$rel" ]]; then
+      ok "arm64 native dependency present: ${rel#node_modules/}"
+    else
+      fail "missing arm64 native dependency: ${rel#node_modules/}"
+      missing=1
+    fi
+  done
+
+  local relay_bin="$GITHUB_UI_DIR/node_modules/relay-compiler/linux-arm64/relay"
+  if [[ -x "$relay_bin" ]]; then
+    ok "relay arm64 binary shim exists"
+  else
+    fail "missing relay arm64 binary shim ($relay_bin)"
+    missing=1
+  fi
+
+  if (( missing == 1 )); then
+    warn "run 'dev health fix' to install/fix missing arm64 UI runtime binaries"
+  fi
+}
+
+listener_pids_for_port() {
+  local port="$1"
+  ss -ltnp "sport = :$port" 2>/dev/null | sed -n 's/.*pid=\([0-9]\+\).*/\1/p' | sort -u
+}
+
+kill_stale_listener_ports() {
+  local ports=(9999 8149 8150 8151 8152 8153 3011 3012 3014 3015)
+  local all_pids=""
+  local port pids
+
+  for port in "${ports[@]}"; do
+    pids="$(listener_pids_for_port "$port")"
+    if [[ -n "$pids" ]]; then
+      info "found listeners on :$port -> $(tr '\n' ' ' <<< "$pids" | xargs)"
+      all_pids+=$'\n'
+      all_pids+="$pids"
+    fi
+  done
+
+  all_pids="$(printf '%s\n' "$all_pids" | sed '/^$/d' | sort -u)"
+  if [[ -z "$all_pids" ]]; then
+    ok "no stale listener ports found"
+    return
+  fi
+
+  info "killing stale listener pids: $(tr '\n' ' ' <<< "$all_pids" | xargs)"
+  while IFS= read -r pid; do
+    [[ -n "$pid" ]] || continue
+    kill -9 "$pid" 2>/dev/null || true
+  done <<< "$all_pids"
+
+  ok "stale listeners killed"
+}
+
+optional_dep_version() {
+  local package_json="$1"
+  local dep_name="$2"
+
+  [[ -f "$package_json" ]] || return 0
+
+  node -e '
+const fs = require("fs");
+const pkg = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+const dep = process.argv[2];
+const version = (pkg.optionalDependencies && pkg.optionalDependencies[dep]) || (pkg.dependencies && pkg.dependencies[dep]) || "";
+process.stdout.write(version);
+' "$package_json" "$dep_name" 2>/dev/null || true
+}
+
+install_npm_pkg_if_missing() {
+  local pkg="$1"
+  local version="$2"
+
+  if [[ -d "$GITHUB_UI_DIR/node_modules/$pkg" ]]; then
+    ok "already installed: $pkg"
+    return
+  fi
+
+  local spec="$pkg"
+  if [[ -n "$version" ]]; then
+    spec="$pkg@$version"
+  fi
+
+  info "installing $spec"
+  (cd "$GITHUB_UI_DIR" && npm install --no-save --workspaces=false "$spec")
+  ok "installed $spec"
+}
+
+fix_arm64_native_bindings() {
+  if [[ "$ARCH" != "arm64" && "$ARCH" != "aarch64" ]]; then
+    return
+  fi
+
+  if [[ -z "$GITHUB_UI_DIR" || ! -d "$GITHUB_UI_DIR" ]]; then
+    warn "github-ui directory not found; skipping arm64 binding fixes"
+    return
+  fi
+
+  local rspack_ver lightningcss_ver oxide_ver swc_ver
+  rspack_ver="$(optional_dep_version "$GITHUB_UI_DIR/node_modules/@rspack/binding/package.json" "@rspack/binding-linux-arm64-gnu")"
+  lightningcss_ver="$(optional_dep_version "$GITHUB_UI_DIR/node_modules/lightningcss/package.json" "lightningcss-linux-arm64-gnu")"
+  oxide_ver="$(optional_dep_version "$GITHUB_UI_DIR/node_modules/@tailwindcss/oxide/package.json" "@tailwindcss/oxide-linux-arm64-gnu")"
+  swc_ver="$(optional_dep_version "$GITHUB_UI_DIR/node_modules/@swc/core/package.json" "@swc/core-linux-arm64-gnu")"
+
+  install_npm_pkg_if_missing "@rspack/binding-linux-arm64-gnu" "$rspack_ver"
+  install_npm_pkg_if_missing "@rspack/resolver-binding-linux-arm64-gnu" ""
+  install_npm_pkg_if_missing "lightningcss-linux-arm64-gnu" "$lightningcss_ver"
+  install_npm_pkg_if_missing "@tailwindcss/oxide-linux-arm64-gnu" "$oxide_ver"
+  install_npm_pkg_if_missing "@swc/core-linux-arm64-gnu" "$swc_ver"
+
+  local relay_arm64_dir="$GITHUB_UI_DIR/node_modules/relay-compiler/linux-arm64"
+  local relay_arm64_bin="$relay_arm64_dir/relay"
+  local relay_x64_bin="$GITHUB_UI_DIR/node_modules/relay-compiler/linux-x64/relay"
+
+  if [[ ! -x "$relay_arm64_bin" && -x "$relay_x64_bin" ]]; then
+    mkdir -p "$relay_arm64_dir"
+    ln -sf ../linux-x64/relay "$relay_arm64_bin"
+    ok "created relay arm64 shim -> ../linux-x64/relay"
+  fi
+}
+
+fix_ui_commands_generated() {
+  if [[ -z "$GITHUB_UI_DIR" || ! -d "$GITHUB_UI_DIR" ]]; then
+    warn "github-ui directory not found; skipping ui-commands compile"
+    return
+  fi
+
+  local generated_file="$GITHUB_UI_DIR/packages/ui-commands/__generated__/ui-commands.json"
+  if [[ -f "$generated_file" ]]; then
+    ok "ui-commands metadata already generated"
+    return
+  fi
+
+  if ! have_cmd npm; then
+    fail "npm is unavailable; cannot generate ui-commands metadata"
+    return
+  fi
+
+  info "generating ui-commands metadata"
+  (cd "$GITHUB_UI_DIR" && NODE_ENV=test npm run ui-commands:compile)
+  ok "generated ui-commands metadata"
+}
+
+fix_overmind_state() {
+  local ui_expected="${1:-0}"
+
+  if overmind_running; then
+    if (( ui_expected == 1 )); then
+      info "overmind is reachable; restarting key web + UI processes"
+      overmind restart js-assets css-assets ui-assets codeload ernicorn1 ernicorn2 ernicorn3 ernicorn4 ernicorn5 >/dev/null 2>&1 || true
+    else
+      info "overmind is reachable; restarting key Rails processes"
+      overmind restart codeload ernicorn1 ernicorn2 ernicorn3 ernicorn4 ernicorn5 >/dev/null 2>&1 || true
+    fi
+
+    ok "requested overmind restarts for key processes"
+    return
+  fi
+
+  info "overmind is not reachable; cleaning stale sockets and listeners"
+  rm -f /tmp/overmind.sock "$WORKSPACE_DIR/.overmind.sock"
+  kill_stale_listener_ports
+
+  if (( ui_expected == 1 )); then
+    warn "overmind is still down. Start server again (recommended: script/server --ui --vite)"
+  else
+    warn "overmind is still down. Start server again (recommended: script/server)"
+  fi
+}
+
+run_checks() {
+  echo "== dev-health: check =="
+  echo "workspace: $WORKSPACE_DIR"
+  [[ -n "$GITHUB_UI_DIR" ]] && echo "github-ui: $GITHUB_UI_DIR"
+  echo
+
+  detect_ui_expected
+  if (( UI_EXPECTED == 1 )); then
+    info "UI mode detected: enabled (${UI_DETECTION_REASON})"
+  else
+    info "UI mode detected: disabled (${UI_DETECTION_REASON}; skipping UI-specific checks)"
+  fi
+
+  check_overmind_and_processes "$UI_EXPECTED"
+  check_endpoints "$UI_EXPECTED"
+
+  if (( UI_EXPECTED == 1 )); then
+    check_ui_commands_generated
+    check_arm64_native_bindings
+  fi
+
+  echo
+  if (( failures == 0 )); then
+    echo "Health check passed (warnings: $warnings)"
+    return 0
+  fi
+
+  echo "Health check failed (failures: $failures, warnings: $warnings)"
+  return 1
+}
+
+run_fixes() {
+  echo "== dev-health: fix =="
+  echo
+
+  detect_ui_expected
+  if (( UI_EXPECTED == 1 )); then
+    fix_ui_commands_generated
+    fix_arm64_native_bindings
+  else
+    info "UI mode appears disabled; skipping UI dependency/codegen fixes"
+  fi
+
+  fix_overmind_state "$UI_EXPECTED"
+
+  echo
+  info "re-running health checks after fixes"
+  run_checks
+}
+
+if [[ "$ACTION" == "fix" ]]; then
+  run_fixes
+else
+  run_checks
+fi
