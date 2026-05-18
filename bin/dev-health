@@ -315,15 +315,21 @@ check_arm64_native_bindings() {
   )
 
   local missing=0
+  local missing_deps=()
   local rel
   for rel in "${required[@]}"; do
-    if [[ -d "$GITHUB_UI_DIR/$rel" ]]; then
-      ok "arm64 native dependency present: ${rel#node_modules/}"
-    else
-      fail "missing arm64 native dependency: ${rel#node_modules/}"
+    if [[ ! -d "$GITHUB_UI_DIR/$rel" ]]; then
+      missing_deps+=("${rel#node_modules/}")
       missing=1
     fi
   done
+
+  if (( ${#missing_deps[@]} == 0 )); then
+    ok "arm64 native dependencies present"
+  else
+    local IFS=', '
+    fail "missing arm64 native dependencies: ${missing_deps[*]}"
+  fi
 
   local relay_bin="$GITHUB_UI_DIR/node_modules/relay-compiler/linux-arm64/relay"
   if [[ -x "$relay_bin" ]]; then
