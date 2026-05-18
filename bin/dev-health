@@ -71,22 +71,37 @@ failures=0
 warnings=0
 UI_EXPECTED=0
 
+# Color coding (similar to `dot status`).
+if [[ -t 1 && -z "${NO_COLOR:-}" ]]; then
+  GREEN=$'\033[0;32m'
+  RED=$'\033[0;31m'
+  YELLOW=$'\033[0;33m'
+  DIM=$'\033[0;90m'
+  NC=$'\033[0m'
+else
+  GREEN=""
+  RED=""
+  YELLOW=""
+  DIM=""
+  NC=""
+fi
+
 ok() {
-  echo "[OK] $*"
+  printf "%b\n" "${GREEN}[OK]${NC} $*"
 }
 
 warn() {
-  echo "[WARN] $*"
+  printf "%b\n" "${YELLOW}[WARN]${NC} $*"
   ((warnings += 1))
 }
 
 fail() {
-  echo "[FAIL] $*"
+  printf "%b\n" "${RED}[FAIL]${NC} $*"
   ((failures += 1))
 }
 
 info() {
-  echo "[INFO] $*"
+  printf "%b\n" "${DIM}[INFO]${NC} $*"
 }
 
 have_cmd() {
