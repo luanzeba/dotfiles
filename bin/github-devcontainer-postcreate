@@ -105,18 +105,19 @@ install_dotfiles_in_container() {
 set -euo pipefail
 
 dotfiles_dir="$HOME/dotfiles"
+wait_timeout_seconds=120
+wait_interval_seconds=2
 
-if [[ ! -d "$dotfiles_dir/.git" ]]; then
-  echo "Expected dotfiles repo at $dotfiles_dir, but it was not found." >&2
-  echo "This helper intentionally does not clone dotfiles." >&2
-  echo "If needed, clone it manually and retry." >&2
-  exit 1
-fi
-
-if [[ ! -x "$dotfiles_dir/install" ]]; then
-  echo "Missing executable install script: $dotfiles_dir/install" >&2
-  exit 1
-fi
+deadline=$((SECONDS + wait_timeout_seconds))
+while [[ ! -d "$dotfiles_dir/.git" || ! -x "$dotfiles_dir/install" ]]; do
+  if (( SECONDS >= deadline )); then
+    echo "Dotfiles were not ready after ${wait_timeout_seconds}s at $dotfiles_dir." >&2
+    echo "This helper intentionally does not clone dotfiles." >&2
+    echo "Retry after your dotfiles are available in the container." >&2
+    exit 1
+  fi
+  sleep "$wait_interval_seconds"
+done
 
 "$dotfiles_dir/install"
 EOF
