@@ -104,6 +104,10 @@ dot logs --clear      # Clear error log
 
 - `tui-qa`: PTY-driven TUI smoke tests. Example:
   `tui-qa --cmd "./gh-csd tui" --keys "sleep:1,j,q" --assert "codespace\(s\)"`
+- `github-devcontainer-postcreate`: re-apply dotfiles and copy local Pi auth into the
+  `github/github` local arm64 devcontainer so `/login` is not needed each time.
+  `dev rebuild` runs this automatically after a successful rebuild; run it manually as needed.
+  Example: `github-devcontainer-postcreate --workspace-folder ~/github/github`
 
 ## Platforms
 

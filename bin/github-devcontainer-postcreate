@@ -1,0 +1,224 @@
+#!/bin/bash
+
+set -euo pipefail
+
+CONFIG_REL=".devcontainer/local-macos-arm64/devcontainer.json"
+DEFAULT_WORKSPACE="$HOME/github/github"
+DEFAULT_PI_AUTH_FILE="$HOME/.pi/agent/auth.json"
+
+WORKSPACE_OVERRIDE=""
+CONTAINER_ID_OVERRIDE=""
+SKIP_DOTFILES=0
+SKIP_PI_AUTH=0
+
+usage() {
+  cat <<'EOF'
+Usage: github-devcontainer-postcreate [options]
+
+Install personal dotfiles and copy local Pi auth into the github/github
+local macOS arm64 devcontainer.
+
+Options:
+  -w, --workspace-folder PATH  Workspace folder (default: current repo root if
+                                detected, else ~/github/github)
+  --container-id ID            Explicit container ID (skip label lookup)
+  --skip-dotfiles              Skip dotfiles install/configure step
+  --skip-pi-auth               Skip Pi auth copy step
+  -h, --help                   Show this help
+
+Examples:
+  github-devcontainer-postcreate
+  github-devcontainer-postcreate --workspace-folder ~/github/github
+  github-devcontainer-postcreate --skip-dotfiles
+EOF
+}
+
+die() {
+  echo "Error: $*" >&2
+  exit 1
+}
+
+warn() {
+  echo "Warning: $*" >&2
+}
+
+info() {
+  echo "$*"
+}
+
+need_cmd() {
+  command -v "$1" >/dev/null 2>&1 || die "Missing required command: $1"
+}
+
+resolve_workspace() {
+  local override="${1:-}"
+  local workspace=""
+
+  if [[ -n "$override" ]]; then
+    workspace="$override"
+  elif [[ -f "$PWD/$CONFIG_REL" ]]; then
+    workspace="$PWD"
+  else
+    local git_root
+    git_root="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+    if [[ -n "$git_root" && -f "$git_root/$CONFIG_REL" ]]; then
+      workspace="$git_root"
+    else
+      workspace="$DEFAULT_WORKSPACE"
+    fi
+  fi
+
+  workspace="$(cd "$workspace" 2>/dev/null && pwd -P)" || die "Workspace does not exist: $workspace"
+  [[ -f "$workspace/$CONFIG_REL" ]] || die "Missing config file: $workspace/$CONFIG_REL"
+  echo "$workspace"
+}
+
+find_container_id() {
+  local workspace="$1"
+  local config_abs="$workspace/$CONFIG_REL"
+  local id
+
+  id="$(docker ps -a \
+    --filter "label=devcontainer.local_folder=$workspace" \
+    --filter "label=devcontainer.config_file=$config_abs" \
+    --format '{{.ID}}' | head -n1)"
+
+  if [[ -z "$id" ]]; then
+    id="$(docker ps -a \
+      --filter "label=devcontainer.local_folder=$workspace" \
+      --format '{{.ID}}' | head -n1)"
+  fi
+
+  echo "$id"
+}
+
+container_state() {
+  local container_id="$1"
+  docker inspect -f '{{.State.Status}}' "$container_id" 2>/dev/null || true
+}
+
+install_dotfiles_in_container() {
+  local container_id="$1"
+
+  info "Installing/configuring dotfiles in container..."
+  docker exec -i -u vscode "$container_id" bash -s <<'EOF'
+set -euo pipefail
+
+dotfiles_dir="$HOME/dotfiles"
+
+if [[ ! -d "$dotfiles_dir/.git" ]]; then
+  echo "Expected dotfiles repo at $dotfiles_dir, but it was not found." >&2
+  echo "This helper intentionally does not clone dotfiles." >&2
+  echo "If needed, clone it manually and retry." >&2
+  exit 1
+fi
+
+if [[ ! -x "$dotfiles_dir/install" ]]; then
+  echo "Missing executable install script: $dotfiles_dir/install" >&2
+  exit 1
+fi
+
+"$dotfiles_dir/install"
+EOF
+}
+
+copy_pi_auth_into_container() {
+  local container_id="$1"
+  local auth_file="$2"
+
+  if [[ ! -f "$auth_file" ]]; then
+    warn "Pi auth file not found on host ($auth_file); skipping Pi auth sync."
+    return 0
+  fi
+
+  info "Copying Pi auth into container..."
+  docker exec -i -u vscode "$container_id" bash -lc '
+set -euo pipefail
+umask 077
+mkdir -p "$HOME/.pi/agent"
+cat > "$HOME/.pi/agent/auth.json"
+chmod 600 "$HOME/.pi/agent/auth.json"
+' < "$auth_file"
+}
+
+workspace=""
+container_id=""
+started_temporarily=0
+
+cleanup() {
+  if (( started_temporarily == 1 )) && [[ -n "$container_id" ]]; then
+    info "Stopping container (it was started temporarily)..."
+    docker stop "$container_id" >/dev/null 2>&1 || true
+  fi
+}
+trap cleanup EXIT
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -w|--workspace-folder)
+      shift
+      [[ $# -gt 0 ]] || die "Missing value for --workspace-folder"
+      WORKSPACE_OVERRIDE="$1"
+      shift
+      ;;
+    --container-id)
+      shift
+      [[ $# -gt 0 ]] || die "Missing value for --container-id"
+      CONTAINER_ID_OVERRIDE="$1"
+      shift
+      ;;
+    --skip-dotfiles)
+      SKIP_DOTFILES=1
+      shift
+      ;;
+    --skip-pi-auth)
+      SKIP_PI_AUTH=1
+      shift
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      die "Unknown option: $1"
+      ;;
+  esac
+done
+
+if (( SKIP_DOTFILES == 1 && SKIP_PI_AUTH == 1 )); then
+  info "Nothing to do (--skip-dotfiles and --skip-pi-auth were both set)."
+  exit 0
+fi
+
+need_cmd docker
+
+if ! docker info >/dev/null 2>&1; then
+  die "Docker is not running. Start OrbStack/Docker Desktop and retry."
+fi
+
+workspace="$(resolve_workspace "$WORKSPACE_OVERRIDE")"
+
+if [[ -n "$CONTAINER_ID_OVERRIDE" ]]; then
+  container_id="$CONTAINER_ID_OVERRIDE"
+else
+  container_id="$(find_container_id "$workspace")"
+fi
+
+[[ -n "$container_id" ]] || die "Devcontainer not found for workspace: $workspace"
+
+state="$(container_state "$container_id")"
+if [[ "$state" != "running" ]]; then
+  info "Container is $state; starting it temporarily..."
+  docker start "$container_id" >/dev/null
+  started_temporarily=1
+fi
+
+if (( SKIP_DOTFILES == 0 )); then
+  install_dotfiles_in_container "$container_id"
+fi
+
+if (( SKIP_PI_AUTH == 0 )); then
+  copy_pi_auth_into_container "$container_id" "$DEFAULT_PI_AUTH_FILE"
+fi
+
+info "Done."

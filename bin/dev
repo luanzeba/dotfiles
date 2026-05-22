@@ -17,7 +17,7 @@ Usage:
   dev [--workspace-folder PATH] status
   dev [--workspace-folder PATH] ssh [-- COMMAND [ARGS...]]
   dev [--workspace-folder PATH] push-branches [--dry-run]
-  dev [--workspace-folder PATH] rebuild [--force] [--pull-latest]
+  dev [--workspace-folder PATH] rebuild [--force] [--pull-latest] [--skip-postcreate]
   dev [--workspace-folder PATH] health [check|fix] [--ui|--no-ui]
 
 Commands:
@@ -30,6 +30,7 @@ Commands:
                  or if working tree has uncommitted changes)
   rebuild        Recreate container via devcontainers CLI; blocks on dirty/unpushed work unless --force
                  --pull-latest first runs docker pull for the configured image
+                 Automatically runs github-devcontainer-postcreate after successful rebuild
   health         Run inside-container health checks/fixes for local arm64 devcontainer
                  check: validate dotfiles/auth/bundle/server state
                  fix: apply safe fixes, then re-run checks
@@ -42,6 +43,7 @@ Options:
 rebuild options:
   -f, --force                   Rebuild even with uncommitted/unpushed work
   -p, --pull-latest             Pull latest configured image before rebuild
+  --skip-postcreate             Skip automatic github-devcontainer-postcreate step
 EOF
 }
 
@@ -91,6 +93,10 @@ running_inside_devcontainer() {
 
 health_script_path() {
   echo "$SELF_DIR/dev-health"
+}
+
+postcreate_script_path() {
+  echo "$SELF_DIR/github-devcontainer-postcreate"
 }
 
 # Global marker directory used by host shells (e.g. Ghostty splits)
@@ -613,11 +619,13 @@ rebuild_cmd() {
 
   local force=0
   local pull_latest=0
+  local skip_postcreate=0
   while [[ $# -gt 0 ]]; do
     case "$1" in
       -f|--force) force=1; shift ;;
       -p|--pull-latest) pull_latest=1; shift ;;
-      -h|--help) echo "Usage: dev rebuild [--force] [--pull-latest]"; return ;;
+      --skip-postcreate) skip_postcreate=1; shift ;;
+      -h|--help) echo "Usage: dev rebuild [--force] [--pull-latest] [--skip-postcreate]"; return ;;
       *) die "Unknown rebuild option: $1" ;;
     esac
   done
@@ -645,6 +653,18 @@ rebuild_cmd() {
       --config "$CONFIG_REL" \
       --remove-existing-container
   )
+
+  if [[ "$skip_postcreate" == "1" ]]; then
+    echo "Skipping post-create sync (--skip-postcreate)"
+    return
+  fi
+
+  local postcreate_script
+  postcreate_script="$(postcreate_script_path)"
+  [[ -x "$postcreate_script" ]] || die "Post-create script not found/executable: $postcreate_script"
+
+  echo "Running post-create sync (dotfiles + Pi auth)..."
+  "$postcreate_script" --workspace-folder "$workspace"
 }
 
 workspace_override=""
