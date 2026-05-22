@@ -31,6 +31,7 @@ Commands:
   rebuild        Recreate container via devcontainers CLI; blocks on dirty/unpushed work unless --force
                  --pull-latest first runs docker pull for the configured image
                  Automatically runs github-devcontainer-postcreate after successful rebuild
+                 (Pi auth immediately, dotfiles install once dotfiles are available)
   health         Run inside-container health checks/fixes for local arm64 devcontainer
                  check: validate dotfiles/auth/bundle/server state
                  fix: apply safe fixes, then re-run checks
@@ -97,6 +98,49 @@ health_script_path() {
 
 postcreate_script_path() {
   echo "$SELF_DIR/github-devcontainer-postcreate"
+}
+
+start_dotfiles_postcreate_background() {
+  local workspace="$1"
+  local postcreate_script="$2"
+
+  local timestamp
+  timestamp="$(date +%Y%m%d-%H%M%S)"
+  local log_file="${TMPDIR:-/tmp}/dev-postcreate-dotfiles-${timestamp}.log"
+
+  (
+    set -euo pipefail
+
+    local deadline=$((SECONDS + 1800)) # 30 minutes
+    while (( SECONDS < deadline )); do
+      local container_id state
+      container_id="$(find_container_id "$workspace")"
+      if [[ -z "$container_id" ]]; then
+        sleep 5
+        continue
+      fi
+
+      state="$(docker inspect -f '{{.State.Status}}' "$container_id" 2>/dev/null || true)"
+      if [[ "$state" != "running" ]]; then
+        sleep 5
+        continue
+      fi
+
+      if docker exec -u vscode "$container_id" bash -lc '[[ -d "$HOME/dotfiles/.git" && -x "$HOME/dotfiles/install" ]]' >/dev/null 2>&1; then
+        "$postcreate_script" --workspace-folder "$workspace" --skip-pi-auth
+        exit 0
+      fi
+
+      sleep 5
+    done
+
+    echo "Timed out waiting for mounted dotfiles (30m)." >&2
+    exit 1
+  ) >"$log_file" 2>&1 &
+
+  local bg_pid=$!
+  echo "Background dotfiles sync started (pid $bg_pid)."
+  echo "Log: $log_file"
 }
 
 # Global marker directory used by host shells (e.g. Ghostty splits)
@@ -663,8 +707,11 @@ rebuild_cmd() {
   postcreate_script="$(postcreate_script_path)"
   [[ -x "$postcreate_script" ]] || die "Post-create script not found/executable: $postcreate_script"
 
-  echo "Running post-create sync (dotfiles + Pi auth)..."
-  "$postcreate_script" --workspace-folder "$workspace"
+  echo "Running post-create sync (Pi auth)..."
+  "$postcreate_script" --workspace-folder "$workspace" --skip-dotfiles
+
+  echo "Scheduling dotfiles install once dotfiles are available in container..."
+  start_dotfiles_postcreate_background "$workspace" "$postcreate_script"
 }
 
 workspace_override=""
