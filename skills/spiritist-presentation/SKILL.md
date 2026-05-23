@@ -31,13 +31,12 @@ Quando o usuário ou a pesquisa introduzir conceitos não presentes no capítulo
 
 ### 1. Obter e Analisar o Texto Base
 
-Extrair o capítulo. Para o Pão Nosso, usar:
+Extrair o capítulo da coleção Fonte Viva com:
 ```bash
-python3 SKILL_DIR/../pao-nosso-reflexao/scripts/extrair_capitulo.py <numero> <caminho_pdf>
+python3 SKILL_DIR/../spiritist_reflection_preparation/scripts/extrair_capitulo.py "<livro>" <numero>
 ```
-PDF padrão: `~/Obsidian/Personal/Attachments/039__Pao_Nosso_1950.pdf`
 
-Para outros livros, solicitar o PDF ou texto ao usuário.
+Se a extração falhar, solicitar o texto do capítulo ao usuário.
 
 **Análise parágrafo a parágrafo:** Mapear a estrutura do capítulo identificando:
 - Epígrafe (passagem bíblica) e seu contexto original
