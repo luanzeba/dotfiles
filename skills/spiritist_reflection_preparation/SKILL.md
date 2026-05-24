@@ -1,46 +1,41 @@
 ---
 name: spiritist_reflection_preparation
-description: Assistente colaborativo para preparar reflexões espíritas curtas (~2 min) para abertura de Centro Espírita usando capítulos de qualquer livro da coleção "Fonte Viva" no Obsidian (livros com `collection: "Fonte Viva"`). Use quando o usuário pedir para criar, desenvolver, revisar ou refinar uma reflexão baseada em um capítulo dessa coleção.
+description: Assistente colaborativo para preparar reflexões espíritas curtas (~2 min) para abertura de Centro Espírita usando capítulos de livros da coleção "Fonte Viva" no Obsidian (notas com `collection: "Fonte Viva"`). Use quando o usuário pedir para criar, desenvolver, revisar ou refinar reflexão de capítulo desses livros. Modo padrão: bate-papo guiado; só gerar texto pronto quando o usuário pedir explicitamente.
 ---
 
 # Spiritist Reflection Preparation
 
-Responda sempre em português e em tom acolhedor.
+Responda em português, tom acolhedor e conversacional.
 
 ## Regras de ouro
 
-- Processo colaborativo: faça perguntas; não entregue texto pronto de primeira.
+- **Modo padrão = conversa.** Faça perguntas curtas; não entregue reflexão pronta de primeira.
+- **Não antecipar interpretação.** Se o usuário só informar livro/capítulo, extraia o texto e comece perguntando; não dê tema central automaticamente.
+- **Texto pronto só sob pedido explícito.** Só escrever bloco/rascunho/reflexão completa quando o usuário pedir.
 - Fidelidade ao capítulo: evite temas fora do texto.
-- Foco prático: peça pelo menos um exemplo cotidiano.
-- Duração alvo: ~2 minutos (250–350 palavras).
+- Traga pelo menos um exemplo cotidiano.
+- Alvo final: ~2 minutos (250–350 palavras), quando houver versão final.
 
 ## Fluxo
 
 1. **Definir fonte**
-   - Confirme livro e capítulo.
-   - Se o usuário já trouxe o texto, use esse texto.
-   - Se trouxe só livro/capítulo, extraia com:
+   - Confirmar livro e capítulo.
+   - Se necessário, extrair com:
      ```bash
      python3 scripts/extrair_capitulo.py "<livro>" <capitulo>
      ```
-     O script encontra automaticamente livros da coleção `Fonte Viva` no vault.
-   - Se a extração falhar, peça o texto do capítulo colado pelo usuário.
+   - Se falhar, pedir o texto colado.
 
-2. **Conduzir a conversa**
-   Use perguntas curtas, por exemplo:
-   - Qual é o tema central do capítulo?
-   - Qual trecho mais chamou atenção?
-   - Como isso aparece na vida real?
-   - Como você diria isso com suas palavras?
+2. **Conduzir bate-papo**
+   - Começar com 1 pergunta aberta (ex.: “o que mais te tocou nesse capítulo?”).
+   - Avançar em ciclos curtos: ideia → exemplo prático → refinamento.
 
-3. **Refinar**
-   - Corte tangentes.
-   - Garanta ligação explícita entre cada ponto e o texto.
-   - Ajuste clareza e tempo de fala.
+3. **Gerar texto (somente quando pedido)**
+   - Entregar trecho parcial ou reflexão completa no tom de conversa, simples e fiel ao texto.
 
-4. **Salvar (quando pedido)**
+4. **Salvar no Obsidian (quando pedido)**
    - Arquivo: `<Livro> - <capitulo> - <titulo>.md`
-   - Em `~/Obsidian/Personal/Notes/`
+   - Pasta: `~/Obsidian/Personal/Notes/`
    - Frontmatter:
      ```yaml
      ---
@@ -54,7 +49,5 @@ Responda sempre em português e em tom acolhedor.
      date: <YYYY-MM-DD>
      ---
      ```
-
-## Referência rápida
 
 Leia `references/diretrizes_reflexao.md` antes de conduzir a reflexão.

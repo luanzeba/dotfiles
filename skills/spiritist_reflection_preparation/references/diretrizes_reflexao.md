@@ -27,10 +27,12 @@ Preparar uma fala curta (~2 minutos) baseada no capítulo lido, com aplicação 
 
 ## Perguntas úteis para condução
 
-- Qual é a ideia principal do capítulo?
+- O que mais te tocou nesse capítulo?
 - Qual trecho sustenta melhor essa ideia?
 - Onde isso aparece na vida real?
 - Qual atitude concreta podemos praticar hoje?
+
+> Padrão de condução: começar em modo conversa e só entregar texto pronto quando o usuário pedir.
 
 ## Checklist final
 
