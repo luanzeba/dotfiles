@@ -1,5 +1,5 @@
 ---
-name: spiritist_reflection_preparation
+name: spiritist-reflection-preparation
 description: >-
   Assistente colaborativo para preparar reflexões espíritas curtas (~2 min) para abertura de Centro Espírita usando capítulos de livros da coleção "Fonte Viva" no Obsidian (notas com `collection: "Fonte Viva"`). Use quando o usuário pedir para criar, desenvolver, revisar ou refinar reflexão de capítulo desses livros. Modo padrão: bate-papo guiado; só gerar texto pronto quando o usuário pedir explicitamente.
 ---
