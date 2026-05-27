@@ -23,8 +23,8 @@ Usage:
 Commands:
   status         Show container status, age, and git safety summary
   ssh            Exec into devcontainer (default: zsh -l)
-                 Interactive shells set an auto-attach marker used by Ghostty splits
-                 and ensure zsh dotfiles are installed in the container
+                 Interactive shells ensure zsh dotfiles are installed
+                 in the container
   push-branches  Push all local non-main branches in container to origin
                  (continues on branch-level errors, exits non-zero if any errors
                  or if working tree has uncommitted changes)
@@ -141,38 +141,6 @@ start_dotfiles_postcreate_background() {
   local bg_pid=$!
   echo "Background dotfiles sync started (pid $bg_pid)."
   echo "Log: $log_file"
-}
-
-# Global marker directory used by host shells (e.g. Ghostty splits)
-# to detect active `dev ssh` interactive sessions.
-global_ssh_marker_dir() {
-  local base="${XDG_RUNTIME_DIR:-/tmp}"
-  local user_id="${USER:-$(id -u)}"
-  echo "$base/dev-ssh-active-$user_id"
-}
-
-# Marker file name is <pid>.<random>; file contents are the workspace path.
-create_ssh_marker() {
-  local workspace="$1"
-  local marker_token="$2"
-  local marker_dir
-
-  [[ -n "$marker_token" ]] || return 1
-
-  marker_dir="$(global_ssh_marker_dir)"
-  mkdir -p "$marker_dir"
-  printf '%s\n' "$workspace" > "$marker_dir/$marker_token"
-}
-
-cleanup_ssh_marker() {
-  local marker_token="$1"
-  local marker_dir
-
-  [[ -n "$marker_token" ]] || return 0
-
-  marker_dir="$(global_ssh_marker_dir)"
-  rm -f "$marker_dir/$marker_token" 2>/dev/null || true
-  rmdir "$marker_dir" 2>/dev/null || true
 }
 
 find_container_id() {
@@ -457,22 +425,16 @@ ssh_cmd() {
   ensure_docker
 
   local cmd=("zsh" "-l")
-  local mark_session=1
+  local interactive_shell=1
   if [[ $# -gt 0 ]]; then
     [[ "$1" == "--" ]] && shift
     if [[ $# -gt 0 ]]; then
       cmd=("$@")
-      mark_session=0
+      interactive_shell=0
     fi
   fi
 
-  local marker_token=""
-  if (( mark_session == 1 )); then
-    marker_token="$$.$RANDOM"
-    if ! create_ssh_marker "$workspace" "$marker_token"; then
-      marker_token=""
-    fi
-
+  if (( interactive_shell == 1 )); then
     ensure_container_zsh_dotfiles "$workspace"
   fi
 
@@ -488,10 +450,6 @@ ssh_cmd() {
     ) || exit_code=$?
   else
     ssh_cmd_docker_fallback "$workspace" "${cmd[@]}" || exit_code=$?
-  fi
-
-  if [[ -n "$marker_token" ]]; then
-    cleanup_ssh_marker "$marker_token"
   fi
 
   return "$exit_code"
