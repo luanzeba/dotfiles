@@ -10,14 +10,30 @@ LOG_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/qmd"
 LOG_FILE="$LOG_DIR/reindex.log"
 mkdir -p "$LOG_DIR"
 
-# Ensure qmd is in PATH (fnm setup)
-FNM_DIR="$HOME/.local/share/fnm"
-if [[ -d "$FNM_DIR" ]]; then
-    export PATH="$FNM_DIR:$PATH"
-    eval "$("$FNM_DIR/fnm" env 2>/dev/null)" 2>/dev/null || true
+# Resolve symlinks to locate the dotfiles root (this script is linked to ~/.local/bin).
+REAL_SCRIPT="$0"
+while [[ -L "$REAL_SCRIPT" ]]; do
+    LINK_DIR="$(cd -P "$(dirname "$REAL_SCRIPT")" && pwd)"
+    REAL_SCRIPT="$(readlink "$REAL_SCRIPT")"
+    [[ "$REAL_SCRIPT" != /* ]] && REAL_SCRIPT="$LINK_DIR/$REAL_SCRIPT"
+done
+SCRIPT_DIR="$(cd -P "$(dirname "$REAL_SCRIPT")" && pwd)"
+DOTFILES_DIR="$(cd -P "$SCRIPT_DIR/.." && pwd)"
+
+if [[ -f "$DOTFILES_DIR/lib/common.sh" ]]; then
+    # shellcheck disable=SC1091
+    source "$DOTFILES_DIR/lib/common.sh"
+    bootstrap_node_tooling_path >/dev/null 2>&1 || true
+else
+    # Fallback bootstrap when dotfiles cannot be resolved.
+    if [[ -d "$HOME/.nix-profile/bin" && ":$PATH:" != *":$HOME/.nix-profile/bin:"* ]]; then
+        export PATH="$HOME/.nix-profile/bin:$PATH"
+    fi
+    if [[ -d "$HOME/.npm-global/bin" && ":$PATH:" != *":$HOME/.npm-global/bin:"* ]]; then
+        export PATH="$HOME/.npm-global/bin:$PATH"
+    fi
 fi
 
-# Also check common paths
 export PATH="$HOME/.local/bin:$PATH"
 
 if ! command -v qmd &>/dev/null; then

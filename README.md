@@ -48,6 +48,19 @@ It is configured with:
 - Git aliases: `git hdiff` and `git hshow` (both use `hunk pager`)
 - The `hunk-review` agent skill via `skills/hunk-review/`
 
+## Nix adoption (Phase 1)
+
+Node and core Node-based tooling are managed by the dotfiles Nix flake (`nix/flake.nix`) via `node/install`:
+
+- `nodejs_22`
+- `typescript` (`tsc`)
+- `typescript-language-server`
+- `prettier`
+- `tree-sitter`
+
+`hunk` still installs via `npm install -g hunkdiff` because `hunkdiff` is not in nixpkgs.
+The npm runtime comes from the same Nix profile, and globals use `~/.npm-global`.
+
 ## dotfiles CLI
 
 After installation, use the `dotfiles` (or `dot`) command:

@@ -8,6 +8,9 @@ START_SCRIPT="$DOTFILES_DIR/skills/web-browser/scripts/start.js"
 CHROME_BIN="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 LOG_DIR="/tmp/pi-browser-demos"
 
+# shellcheck disable=SC1091
+source "$DOTFILES_DIR/lib/common.sh"
+
 mkdir -p "$LOG_DIR"
 
 PROFILE_NAME=""
@@ -16,31 +19,6 @@ if [[ "${1:-}" == "--profile" ]]; then
   shift 2 || true
 fi
 URL="${1:-}"
-
-resolve_node() {
-  if command -v node >/dev/null 2>&1; then
-    command -v node
-    return 0
-  fi
-
-  local fnm_node
-  fnm_node="$HOME/.local/share/fnm/current/bin/node"
-  if [[ -x "$fnm_node" ]]; then
-    echo "$fnm_node"
-    return 0
-  fi
-
-  if [[ -x "$HOME/.local/share/fnm/fnm" ]]; then
-    # shellcheck disable=SC1090
-    eval "$($HOME/.local/share/fnm/fnm env --shell bash)" >/dev/null 2>&1 || true
-    if command -v node >/dev/null 2>&1; then
-      command -v node
-      return 0
-    fi
-  fi
-
-  return 1
-}
 
 activate_chrome() {
   osascript -e 'tell application "Google Chrome" to activate' || true
@@ -133,10 +111,14 @@ open_url_with_profile() {
   return 0
 }
 
-NODE_BIN="$(resolve_node || true)"
+NODE_BIN=""
+if ensure_node; then
+  NODE_BIN="$(command -v node)"
+fi
+
 PI_USER_DATA_DIR="${PI_CHROME_PROFILE_DIR:-$HOME/.cache/pi-chrome-profile}"
 
-if [[ -n "$NODE_BIN" && -x "$NODE_BIN" ]]; then
+if [[ -n "$NODE_BIN" ]]; then
   PI_USER_DATA_DIR="$(resolve_pi_user_data_dir "$NODE_BIN")"
   "$NODE_BIN" "$START_SCRIPT" >"$LOG_DIR/finicky-open-last-start.txt" 2>&1 || true
 fi
@@ -153,7 +135,7 @@ if [[ -n "$PROFILE_NAME" ]]; then
   fi
 fi
 
-if [[ -n "$NODE_BIN" && -x "$NODE_BIN" ]]; then
+if [[ -n "$NODE_BIN" ]]; then
   ENCODED_URL="$($NODE_BIN -e 'console.log(encodeURI(process.argv[1]))' "$URL")"
 
   if curl -fsS -X PUT "http://127.0.0.1:9222/json/new?$ENCODED_URL" >"$LOG_DIR/finicky-open-last-cdp.json" 2>"$LOG_DIR/finicky-open-last-cdp.err"; then

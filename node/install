@@ -1,6 +1,4 @@
 #!/bin/bash
-# Drop-in replacement for node/install once the nix flake works.
-# To activate: mv nix/drafts/node-install ../node/install
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

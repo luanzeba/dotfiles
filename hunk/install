@@ -1,6 +1,4 @@
 #!/bin/bash
-# Drop-in replacement for hunk/install once the nix flake works.
-# To activate: mv nix/drafts/hunk-install ../hunk/install
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -10,19 +8,13 @@ HUNK_CONFIG_FILE="$HUNK_CONFIG_DIR/config.toml"
 HUNK_PACKAGE="hunkdiff"
 HUNK_GIT_ALIAS_DIFF='-c core.pager="hunk pager" diff'
 HUNK_GIT_ALIAS_SHOW='-c core.pager="hunk pager" show'
-
-# Per-user npm global prefix (avoids needing sudo, plays nice with nix's npm).
-NPM_GLOBAL_PREFIX="$HOME/.npm-global"
+HUNK_NPM_PREFIX="$HOME/.npm-global"
 
 # shellcheck disable=SC1091
 source "$SCRIPT_DIR/../lib/nix.sh"
 
-_npm_path_setup() {
-    export PATH="$NPM_GLOBAL_PREFIX/bin:$PATH"
-}
-
 check_installed() {
-    _npm_path_setup
+    bootstrap_node_tooling_path >/dev/null 2>&1 || true
     command -v hunk &>/dev/null
 }
 
@@ -35,18 +27,17 @@ check_configured() {
 }
 
 install() {
-    # Make sure node/npm are present (from the nix flake).
+    # Make sure node/npm are present (from the nix flake profile).
     nix_profile_sync
-    _source_nix_env
+    _source_nix_env || true
+    bootstrap_node_tooling_path >/dev/null 2>&1 || true
 
     if ! command -v npm &>/dev/null; then
         echo "npm not on PATH after nix sync — something is wrong"
         return 1
     fi
 
-    mkdir -p "$NPM_GLOBAL_PREFIX"
-    npm config set prefix "$NPM_GLOBAL_PREFIX"
-    _npm_path_setup
+    setup_npm_global_prefix "$HUNK_NPM_PREFIX"
 
     if command -v hunk &>/dev/null; then
         echo "hunk already installed: $(hunk --version | head -1)"
@@ -69,9 +60,11 @@ configure() {
 
 update() {
     nix_profile_sync
-    _source_nix_env
-    _npm_path_setup
+    _source_nix_env || true
+    bootstrap_node_tooling_path >/dev/null 2>&1 || true
+
     if command -v npm &>/dev/null; then
+        setup_npm_global_prefix "$HUNK_NPM_PREFIX"
         echo "Updating hunk via npm..."
         npm update -g "$HUNK_PACKAGE"
     fi

@@ -43,39 +43,14 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DOTFILES_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 START_SCRIPT="$DOTFILES_DIR/skills/web-browser/scripts/start.js"
 
+# shellcheck disable=SC1091
+source "$DOTFILES_DIR/lib/common.sh"
+
 if [[ ! -f "$START_SCRIPT" ]]; then
   echo "Could not find start script: $START_SCRIPT"
   echo "Run: dot install skills"
   exit 1
 fi
-
-resolve_node() {
-  if command -v node >/dev/null 2>&1; then
-    command -v node
-    return 0
-  fi
-
-  local -a fnm_nodes=()
-  shopt -s nullglob
-  fnm_nodes=("$HOME/.local/share/fnm/node-versions"/*/installation/bin/node)
-  shopt -u nullglob
-
-  if [[ ${#fnm_nodes[@]} -gt 0 ]]; then
-    printf '%s\n' "${fnm_nodes[@]}" | sort -V | tail -n 1
-    return 0
-  fi
-
-  if [[ -x "$HOME/.local/share/fnm/fnm" ]]; then
-    # shellcheck disable=SC1090
-    eval "$($HOME/.local/share/fnm/fnm env --shell bash)" >/dev/null 2>&1 || true
-    if command -v node >/dev/null 2>&1; then
-      command -v node
-      return 0
-    fi
-  fi
-
-  return 1
-}
 
 pick_preferred_chrome_pid() {
   python3 - <<'PY'
@@ -157,12 +132,13 @@ APPLESCRIPT
   osascript -e 'tell application "Google Chrome" to activate'
 }
 
-NODE_BIN="$(resolve_node || true)"
-if [[ -z "$NODE_BIN" || ! -x "$NODE_BIN" ]]; then
+if ! ensure_node; then
   echo "Could not find a Node.js binary (Raycast often runs with a minimal PATH)."
-  echo "Install Node via dotfiles (dot install node) or ensure ~/.local/share/fnm is set up."
+  echo "Install Node via dotfiles (dot install node)."
   exit 1
 fi
+
+NODE_BIN="$(command -v node)"
 
 echo "Ensuring Chrome is running with remote debugging on :9222 (visible window)..."
 START_OUTPUT=""

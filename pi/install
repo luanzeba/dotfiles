@@ -2,7 +2,11 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+DOTFILES_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 PI_CONFIG_DIR="$HOME/.pi/agent"
+
+# shellcheck disable=SC1091
+source "$DOTFILES_DIR/lib/common.sh"
 
 check_installed() {
     command -v pi &>/dev/null
@@ -134,8 +138,8 @@ install() {
         return 0
     fi
 
-    # Ensure npm is available
-    if ! command -v npm &>/dev/null; then
+    # Ensure npm is available.
+    if ! ensure_npm; then
         echo "npm not found. Please install Node.js first (node/install)"
         return 1
     fi
@@ -187,7 +191,7 @@ configure() {
 }
 
 update() {
-    if ! command -v npm &>/dev/null; then
+    if ! ensure_npm; then
         echo "npm not found, cannot update pi"
         return 1
     fi

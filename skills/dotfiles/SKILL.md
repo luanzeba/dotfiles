@@ -40,7 +40,7 @@ See [references/tool-template.md](references/tool-template.md) for the install s
 | Skills | `skills/` | `~/.claude/skills/`, `~/.pi/agent/skills/` | Yes |
 | Rust | `rust/` | N/A | Yes (rustup) |
 | Go | `go/` | N/A | Yes (Go tools: gopls, gofumpt, etc.) |
-| Node | `node/` | N/A | Yes (fnm + TypeScript tools) |
+| Node | `node/` | N/A | Yes (Nix flake: node + TypeScript tools) |
 | Hunk | `hunk/` | `~/.config/hunk/config.toml`, git aliases (`hdiff`, `hshow`) | Yes |
 | gccli | `gccli/` | `~/.gccli/` | Yes (local-only Google Calendar CLI setup) |
 | Bin | `bin/` | `~/.local/bin` | Yes (custom scripts) |
@@ -114,8 +114,9 @@ This uses `gh cs cp` to transfer a patch file, authenticating through GitHub's C
 
 ### Installation Preference Hierarchy
 
-1. **Direct GitHub releases** - Preferred for tools with prebuilt binaries (nvim, jj, gh, helix, fnm)
-2. **Package managers** - Only when no prebuilt binaries exist (tmux via brew, system tools via apt/pacman)
+1. **Direct GitHub releases** - Preferred for tools with prebuilt binaries (nvim, jj, gh, helix)
+2. **Nix flake profile** - Preferred for shared language runtimes/toolchains managed in dotfiles (currently Node + TypeScript tools)
+3. **Package managers** - Only when no prebuilt binaries or Nix packages fit (tmux via brew, system tools via apt/pacman)
 
 Homebrew is installed lazily in Phase 3 of `install-local`, only when needed for brew-dependent tools.
 

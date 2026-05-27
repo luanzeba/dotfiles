@@ -273,14 +273,83 @@ print_table_row() {
 }
 
 # =============================================================================
-# Nix / npm-global PATH bootstrap
+# Node tooling environment helpers (Nix profile + npm globals)
 # =============================================================================
-# Make sure binaries installed by lib/nix.sh (node + node-based tools via the
-# nix profile) and any per-user npm globals are visible to all dotfiles
-# scripts, even when the user's shell rc hasn't been sourced.
-if [[ -d "$HOME/.nix-profile/bin" && ":$PATH:" != *":$HOME/.nix-profile/bin:"* ]]; then
-    export PATH="$HOME/.nix-profile/bin:$PATH"
-fi
-if [[ -d "$HOME/.npm-global/bin" && ":$PATH:" != *":$HOME/.npm-global/bin:"* ]]; then
-    export PATH="$HOME/.npm-global/bin:$PATH"
-fi
+
+path_prepend_if_dir() {
+    local dir="$1"
+    [[ -d "$dir" ]] || return 0
+    if [[ ":$PATH:" != *":$dir:"* ]]; then
+        export PATH="$dir:$PATH"
+    fi
+}
+
+source_nix_profile_env() {
+    local candidates=(
+        "/nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh"
+        "$HOME/.nix-profile/etc/profile.d/nix.sh"
+    )
+
+    local candidate
+    for candidate in "${candidates[@]}"; do
+        if [[ -f "$candidate" ]]; then
+            # shellcheck disable=SC1090
+            . "$candidate" >/dev/null 2>&1 || true
+        fi
+    done
+}
+
+# Best-effort PATH bootstrap for non-interactive script shells.
+# Safe to call many times; once bootstrapped in this shell, it becomes a no-op.
+bootstrap_node_tooling_path() {
+    if [[ "${DOTFILES_NODE_TOOLING_BOOTSTRAPPED:-0}" == "1" ]]; then
+        return 0
+    fi
+
+    path_prepend_if_dir "$HOME/.nix-profile/bin"
+    path_prepend_if_dir "$HOME/.npm-global/bin"
+
+    if command -v node &>/dev/null || command -v npm &>/dev/null; then
+        DOTFILES_NODE_TOOLING_BOOTSTRAPPED=1
+        export DOTFILES_NODE_TOOLING_BOOTSTRAPPED
+        return 0
+    fi
+
+    source_nix_profile_env
+    path_prepend_if_dir "$HOME/.nix-profile/bin"
+    path_prepend_if_dir "$HOME/.npm-global/bin"
+
+    if command -v node &>/dev/null || command -v npm &>/dev/null; then
+        DOTFILES_NODE_TOOLING_BOOTSTRAPPED=1
+        export DOTFILES_NODE_TOOLING_BOOTSTRAPPED
+        return 0
+    fi
+
+    return 1
+}
+
+ensure_node() {
+    bootstrap_node_tooling_path || return 1
+    command -v node &>/dev/null
+}
+
+# Wrapper to make install scripts read naturally.
+ensure_npm() {
+    bootstrap_node_tooling_path || return 1
+    command -v npm &>/dev/null
+}
+
+# Configure a per-user npm prefix and ensure its bin dir is on PATH.
+# Usage: setup_npm_global_prefix [prefix]
+setup_npm_global_prefix() {
+    local prefix="${1:-$HOME/.npm-global}"
+
+    ensure_npm || return 1
+
+    mkdir -p "$prefix"
+    npm config set prefix "$prefix"
+    path_prepend_if_dir "$prefix/bin"
+}
+
+# Make node/npm globals visible even when the user's shell rc hasn't been sourced.
+bootstrap_node_tooling_path >/dev/null 2>&1 || true

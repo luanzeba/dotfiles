@@ -13,8 +13,8 @@
       in {
         # Single profile bundling Phase 1 tools.
         # Install:  nix profile install ~/dotfiles/nix
-        # Upgrade:  nix profile upgrade dotfiles-phase1
-        # Remove:   nix profile remove dotfiles-phase1
+        # Upgrade:  nix profile upgrade nix
+        # Remove:   nix profile remove nix
         packages.default = pkgs.buildEnv {
           name = "dotfiles-phase1";
           paths = with pkgs; [
