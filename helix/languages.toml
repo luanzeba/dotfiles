@@ -1,0 +1,12 @@
+# Helix language overrides.
+# Keep this file focused on settings that differ from Helix defaults.
+
+[language-server.astro-ls]
+command = "astro-ls"
+args = ["--stdio"]
+config = { typescript = { tsdk = "node_modules/typescript/lib" }, environment = "node" }
+
+[[language]]
+name = "astro"
+roots = ["package.json", "astro.config.mjs", "astro.config.ts", "astro.config.js", ".git"]
+language-servers = ["astro-ls"]

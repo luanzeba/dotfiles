@@ -10,7 +10,7 @@ check_installed() {
 }
 
 check_configured() {
-    [[ -L "$HOME/.config/helix/config.toml" ]]
+    [[ -L "$HOME/.config/helix/config.toml" ]] && [[ -L "$HOME/.config/helix/languages.toml" ]]
 }
 
 # Get the latest helix version from GitHub
@@ -89,6 +89,7 @@ install() {
 configure() {
     mkdir -p "$HELIX_CONFIG_DIR"
     ln -sf "$SCRIPT_DIR/config.toml" "$HELIX_CONFIG_DIR/config.toml"
+    ln -sf "$SCRIPT_DIR/languages.toml" "$HELIX_CONFIG_DIR/languages.toml"
 }
 
 apply() {
