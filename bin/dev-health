@@ -467,25 +467,68 @@ fix_ui_commands_generated() {
   ok "generated ui-commands metadata"
 }
 
+web_status_http_code() {
+  curl -s -o /dev/null -w "%{http_code}" http://localhost:3000/status || true
+}
+
+web_status_healthy() {
+  [[ "$(web_status_http_code)" == "200" ]]
+}
+
+wait_for_web_status_healthy() {
+  local max_attempts="${1:-20}"
+  local attempt
+
+  for ((attempt = 1; attempt <= max_attempts; attempt += 1)); do
+    if web_status_healthy; then
+      return 0
+    fi
+
+    sleep 1
+  done
+
+  return 1
+}
+
+cleanup_overmind_sockets_and_listeners() {
+  rm -f /tmp/overmind.sock "$WORKSPACE_DIR/.overmind.sock"
+  kill_stale_listener_ports
+}
+
 fix_overmind_state() {
   local ui_expected="${1:-0}"
 
   if overmind_running; then
     if (( ui_expected == 1 )); then
       info "overmind is reachable; restarting key web + UI processes"
-      overmind restart js-assets css-assets ui-assets codeload ernicorn1 ernicorn2 ernicorn3 ernicorn4 ernicorn5 >/dev/null 2>&1 || true
+      overmind restart web js-assets css-assets ui-assets codeload ernicorn1 ernicorn2 ernicorn3 ernicorn4 ernicorn5 >/dev/null 2>&1 || true
     else
       info "overmind is reachable; restarting key Rails processes"
-      overmind restart codeload ernicorn1 ernicorn2 ernicorn3 ernicorn4 ernicorn5 >/dev/null 2>&1 || true
+      overmind restart web codeload ernicorn1 ernicorn2 ernicorn3 ernicorn4 ernicorn5 >/dev/null 2>&1 || true
     fi
 
     ok "requested overmind restarts for key processes"
+
+    info "waiting for web status endpoint to become healthy"
+    if wait_for_web_status_healthy; then
+      return
+    fi
+
+    warn "web status endpoint is still unhealthy after overmind restart; resetting overmind state"
+    overmind quit >/dev/null 2>&1 || true
+    cleanup_overmind_sockets_and_listeners
+
+    if (( ui_expected == 1 )); then
+      warn "overmind is still down. Start server again (recommended: script/server --ui --vite)"
+    else
+      warn "overmind is still down. Start server again (recommended: script/server)"
+    fi
+
     return
   fi
 
   info "overmind is not reachable; cleaning stale sockets and listeners"
-  rm -f /tmp/overmind.sock "$WORKSPACE_DIR/.overmind.sock"
-  kill_stale_listener_ports
+  cleanup_overmind_sockets_and_listeners
 
   if (( ui_expected == 1 )); then
     warn "overmind is still down. Start server again (recommended: script/server --ui --vite)"
