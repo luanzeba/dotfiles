@@ -1,29 +1,32 @@
-# Neovim Configuration
+# Neovim (minimal reset)
 
-This is my personal Neovim configuration.
+This is a barebones Neovim config built on top of **lazy.nvim**.
 
-## Features
+## Principles
 
-- Plugin management with [lazy.nvim](https://github.com/folke/lazy.nvim)
-- LSP support with proper configuration
-- Treesitter integration for better syntax highlighting
-- Code formatting and linting
-- UI enhancements and customizations
+- Keep Neovim defaults unless there is a real pain point.
+- One plugin per file in `lua/plugins/`.
+- One language per file in `lua/plugins/lsp/`.
+- Plugin setup and keymaps stay together in the same file.
 
-## License
+## Structure
 
-Portions of this configuration are derived from [LazyVim](https://github.com/LazyVim/LazyVim).
-
-Copyright 2023 LazyVim
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License. 
+```text
+nvim/
+  init.lua                    # entrypoint, loads core modules
+  install                     # install/update script used by dot
+  lazy-lock.json              # locked plugin commits from lazy.nvim
+  lua/
+    core/
+      options.lua             # leader and global editor options
+      keymaps.lua             # global keymaps only
+      autocmds.lua            # global automations (autocmds)
+      lazy.lua                # lazy.nvim bootstrap and setup
+    plugins/
+      which-key.lua           # which-key setup (helix preset)
+      lsp.lua                 # imports files from plugins/lsp/
+      lsp/
+        core.lua              # base mason + lsp wiring
+        ruby.lua              # ruby_lsp server config
+        _template.lua.example # template for new languages
+```

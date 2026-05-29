@@ -1,0 +1,2 @@
+-- Keep this file for global/editor-level mappings only.
+-- Plugin-specific mappings should live with each plugin config.

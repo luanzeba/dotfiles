@@ -1,0 +1,27 @@
+-- Copy this file when adding a new language server.
+-- Example: `cp _template.lua.example go.lua` and replace placeholders.
+
+return {
+  {
+    "williamboman/mason-lspconfig.nvim",
+    opts = function(_, opts)
+      opts.ensure_installed = opts.ensure_installed or {}
+      local server_name = "<lsp_server_name>"
+
+      if not vim.tbl_contains(opts.ensure_installed, server_name) then
+        table.insert(opts.ensure_installed, server_name)
+      end
+    end,
+  },
+
+  {
+    "neovim/nvim-lspconfig",
+    opts = {
+      servers = {
+        ["<lsp_server_name>"] = {
+          -- server-specific settings
+        },
+      },
+    },
+  },
+}

@@ -113,16 +113,9 @@ configure() {
     local nvim_path
     nvim_path=$(command -v nvim)
 
-    # Install plugins
+    # Install plugins and required language tooling
     "$nvim_path" --headless "+Lazy! sync" +qa 2>/dev/null || true
-    "$nvim_path" --headless +"MasonInstallAll" +qa 2>/dev/null || true
-
-    # Accept Copilot license
-    mkdir -p ~/.config/github-copilot
-    echo '{"luanzeba":{"version":"2021-10-14"}}' > ~/.config/github-copilot/terms.json
-
-    # Install treesitter parsers
-    "$nvim_path" --headless +"TSInstall! go ruby" +qa 2>/dev/null || true
+    "$nvim_path" --headless "+MasonInstall ruby-lsp" +qa 2>/dev/null || true
 }
 
 apply() {
@@ -152,12 +145,10 @@ update() {
     new_version=$(nvim --version | head -1)
     echo "Updated: ${current_version:-not installed} -> $new_version"
 
-    # Update plugins
+    # Update plugins and language tooling
     if command -v nvim &>/dev/null; then
-        echo "Updating Neovim plugins..."
-        nvim --headless "+Lazy! update" +qa 2>/dev/null || true
+        nvim --headless "+Lazy! sync" +qa 2>/dev/null || true
         nvim --headless "+MasonUpdate" +qa 2>/dev/null || true
-        nvim --headless "+TSUpdate" +qa 2>/dev/null || true
     fi
 }
 
