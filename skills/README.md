@@ -28,16 +28,14 @@ skills/
 │   ├── SKILL.md
 │   └── references/
 └── external/            # Downloaded/cloned skills (gitignored)
-    ├── pi-skills/       # From badlogic/pi-skills (gccli skill)
     └── private/         # From luanzeba/private-dotfiles repo
 ```
 
 ## How It Works
 
 The `install` script:
-1. Clones [badlogic/pi-skills](https://github.com/badlogic/pi-skills) and links the `gccli` skill on local machines (skipped in Codespaces)
-2. Clones private skills from a private repo (if accessible)
-3. Symlinks all skills to global locations:
+1. Clones private skills from a private repo (if accessible)
+2. Symlinks all skills to global locations:
    - `~/.claude/skills/<name>` (Claude Code)
    - `~/.pi/agent/skills/<name>` (Pi)
 
@@ -88,4 +86,3 @@ dotfiles install skills
 ~/dotfiles/skills/install
 ```
 
-`gccli` from badlogic/pi-skills is intentionally linked only on local machines (macOS/Arch), not in Codespaces.

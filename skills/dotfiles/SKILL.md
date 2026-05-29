@@ -42,7 +42,6 @@ See [references/tool-template.md](references/tool-template.md) for the install s
 | Go | `go/` | N/A | Yes (Go tools: gopls, gofumpt, etc.) |
 | Node | `node/` | N/A | Yes (Nix flake: node + TypeScript tools) |
 | Hunk | `hunk/` | `~/.config/hunk/config.toml`, git aliases (`hdiff`, `hshow`) | Yes |
-| gccli | `gccli/` | `~/.gccli/` | Yes (local-only Google Calendar CLI setup) |
 | Bin | `bin/` | `~/.local/bin` | Yes (custom scripts) |
 | jj | `jj/` | `~/.jjconfig.toml` | Yes (Jujutsu VCS) |
 | gh | `gh/` | `~/.local/gh`, `~/.local/bin/gh` | Yes (GitHub CLI + extensions) |
@@ -215,7 +214,6 @@ Key locations:
 ~/dotfiles/zsh/install.zsh
 ~/dotfiles/skills/install
 ~/dotfiles/node/install
-~/dotfiles/gccli/install
 ~/dotfiles/rust/install
 ~/dotfiles/go/install
 ~/dotfiles/jj/install
