@@ -175,6 +175,50 @@ configured_image() {
   fi
 }
 
+# devcontainers CLI occasionally leaves behind an attached `docker run`
+# client process after `up` returns. The container keeps running, but the
+# orphan process can continue streaming container logs into the terminal.
+find_attached_devcontainer_docker_run_clients() {
+  local workspace="$1"
+  local config_abs="$workspace/$CONFIG_REL"
+
+  ps -axo pid=,ppid=,command= | awk -v ws="$workspace" -v cfg="$config_abs" '
+    index($0, "docker run --sig-proxy=false -a STDOUT -a STDERR") &&
+    index($0, "devcontainer.local_folder=" ws) &&
+    index($0, "devcontainer.config_file=" cfg) {
+      print $1 "|" $2
+    }
+  '
+}
+
+cleanup_orphaned_devcontainer_docker_run_clients() {
+  local workspace="$1"
+  local killed_any=0
+  local pass
+
+  # Retry briefly to catch processes that get re-parented to PID 1
+  # just after `devcontainer up` exits.
+  for pass in 1 2 3 4 5; do
+    local killed_this_pass=0
+
+    while IFS='|' read -r pid ppid; do
+      [[ -n "$pid" ]] || continue
+      [[ "$ppid" == "1" ]] || continue
+
+      kill -9 "$pid" 2>/dev/null || true
+      killed_this_pass=1
+      killed_any=1
+    done < <(find_attached_devcontainer_docker_run_clients "$workspace")
+
+    (( killed_this_pass == 1 )) || break
+    sleep 0.2
+  done
+
+  if (( killed_any == 1 )); then
+    echo "Cleaned up orphaned devcontainer docker client process(es)."
+  fi
+}
+
 pull_latest_image() {
   local workspace="$1"
   local image
@@ -648,13 +692,27 @@ rebuild_cmd() {
   fi
 
   echo "Rebuilding devcontainer for $workspace"
+
+  # Clear any stale orphaned `docker run` clients from prior rebuilds so
+  # they do not keep streaming logs into the user's terminal.
+  cleanup_orphaned_devcontainer_docker_run_clients "$workspace"
+
+  local rebuild_status=0
   (
     cd "$workspace"
     npx @devcontainers/cli up \
       --workspace-folder . \
       --config "$CONFIG_REL" \
       --remove-existing-container
-  )
+  ) || rebuild_status=$?
+
+  # Defensive cleanup for a known devcontainers-cli behavior where `up`
+  # exits successfully but leaves an attached `docker run` client orphaned.
+  cleanup_orphaned_devcontainer_docker_run_clients "$workspace"
+
+  if (( rebuild_status != 0 )); then
+    return "$rebuild_status"
+  fi
 
   if [[ "$skip_postcreate" == "1" ]]; then
     echo "Skipping post-create sync (--skip-postcreate)"
