@@ -20,6 +20,11 @@ return {
             formatter = "auto",
           },
         },
+        sorbet = {
+          -- Ruby LSP intentionally defers some typed Ruby navigation to Sorbet.
+          -- Devcontainers usually don't run watchman, so disable it for LSP mode.
+          cmd = { "bin/srb", "tc", "--lsp", "--disable-watchman" },
+        },
       },
     },
   },
