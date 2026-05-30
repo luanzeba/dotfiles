@@ -24,6 +24,7 @@ nvim/
       lazy.lua                # lazy.nvim bootstrap and setup
     plugins/
       which-key.lua           # which-key setup (helix preset)
+      treesitter.lua          # nvim-treesitter (ruby parser only)
       lsp.lua                 # imports files from plugins/lsp/
       lsp/
         core.lua              # base mason + lsp wiring
