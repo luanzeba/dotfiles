@@ -1,0 +1,44 @@
+#!/bin/bash
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck disable=SC1091
+source "$SCRIPT_DIR/../lib/nix.sh"
+
+check_installed() {
+    command -v zig &>/dev/null
+}
+
+check_configured() {
+    command -v zls &>/dev/null
+}
+
+get_installed_version() {
+    if command -v zig &>/dev/null; then
+        zig version
+    fi
+}
+
+install() {
+    # Zig and zls are installed from the shared dotfiles nix profile.
+    if check_installed && check_configured; then
+        echo "Zig tooling already available via nix profile"
+        return 0
+    fi
+
+    nix_profile_sync
+}
+
+configure() {
+    # Nothing extra to configure; binaries come from nix profile.
+    :
+}
+
+update() {
+    nix_profile_sync
+}
+
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    install
+    configure
+fi

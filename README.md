@@ -50,13 +50,15 @@ It is configured with:
 
 ## Nix adoption (Phase 1)
 
-Node and core Node-based tooling are managed by the dotfiles Nix flake (`nix/flake.nix`) via `node/install`:
+Node and Zig tooling are managed by the dotfiles Nix flake (`nix/flake.nix`) via the shared profile sync used by `node/install` and `zig/install`:
 
 - `nodejs_22`
 - `typescript` (`tsc`)
 - `typescript-language-server`
 - `prettier`
 - `tree-sitter`
+- `zig` (from `mitchellh/zig-overlay` `master`, for Ziglings/dev builds)
+- `zls`
 
 `hunk` still installs via `npm install -g hunkdiff` because `hunkdiff` is not in nixpkgs.
 The npm runtime comes from the same Nix profile, and globals use `~/.npm-global`.
