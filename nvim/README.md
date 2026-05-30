@@ -26,6 +26,7 @@ nvim/
       everforest.lua          # everforest theme (soft background)
       which-key.lua           # which-key setup (helix preset)
       treesitter.lua          # nvim-treesitter (ruby parser only)
+      fzf.lua                 # file/buffer/grep pickers (fzf-lua)
       lsp.lua                 # imports files from plugins/lsp/
       lsp/
         core.lua              # base mason + lsp wiring
