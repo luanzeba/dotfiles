@@ -23,6 +23,7 @@ nvim/
       autocmds.lua            # global automations (autocmds)
       lazy.lua                # lazy.nvim bootstrap and setup
     plugins/
+      everforest.lua          # everforest theme (soft background)
       which-key.lua           # which-key setup (helix preset)
       treesitter.lua          # nvim-treesitter (ruby parser only)
       lsp.lua                 # imports files from plugins/lsp/
