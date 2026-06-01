@@ -21,11 +21,7 @@ get_installed_version() {
 
 install() {
     # Zig and zls are installed from the shared dotfiles nix profile.
-    if check_installed && check_configured; then
-        echo "Zig tooling already available via nix profile"
-        return 0
-    fi
-
+    # Always sync so flake package changes are applied even when binaries exist.
     nix_profile_sync
 }
 

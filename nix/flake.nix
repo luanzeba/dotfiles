@@ -5,9 +5,10 @@
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
     flake-utils.url = "github:numtide/flake-utils";
     zig.url = "github:mitchellh/zig-overlay";
+    zls.url = "github:zigtools/zls";
   };
 
-  outputs = { nixpkgs, flake-utils, zig, ... }:
+  outputs = { nixpkgs, flake-utils, zig, zls, ... }:
     flake-utils.lib.eachDefaultSystem (system:
       let
         pkgs = nixpkgs.legacyPackages.${system};
@@ -31,7 +32,10 @@
             # Zig tooling
             # ziglings tracks Zig dev builds, so use zig-overlay's latest master.
             (zig.packages.${system}.master)
-            zls
+
+            # Use zls from zigtools/zls (default branch) so it tracks Zig dev.
+            # nixpkgs' tagged zls releases can warn on Zig nightlies.
+            (zls.packages.${system}.default)
 
             # NOTE: `hunk`/`hunkdiff` is not in nixpkgs, so it stays as an
             # `npm install -g hunkdiff` in hunk/install — but now using the
