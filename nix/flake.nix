@@ -1,5 +1,5 @@
 {
-  description = "luan's dotfiles toolchain (nix profile: node + zig tooling)";
+  description = "luan's dotfiles toolchain (nix profile: node + zig + bat tooling)";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
@@ -12,35 +12,52 @@
     flake-utils.lib.eachDefaultSystem (system:
       let
         pkgs = nixpkgs.legacyPackages.${system};
-      in {
-        # Single profile bundling dotfiles-managed tools.
-        # Install:  nix profile install ~/dotfiles/nix
-        # Upgrade:  nix profile upgrade nix
-        # Remove:   nix profile remove nix
-        packages.default = pkgs.buildEnv {
-          name = "dotfiles-toolchain";
+      in
+      let
+        nodeRuntime = pkgs.nodejs_22;
+
+        nodeToolchain = pkgs.buildEnv {
+          name = "dotfiles-node-toolchain";
           paths = with pkgs; [
             # Node runtime (replaces fnm + manual LTS install)
-            nodejs_22
+            nodeRuntime
 
             # Node-based dev tools (replace `npm install -g ...`)
             typescript                              # tsc
             typescript-language-server              # tsserver for editors
             prettier
             tree-sitter
+          ];
+        };
 
-            # Zig tooling
+        zigToolchain = pkgs.buildEnv {
+          name = "dotfiles-zig-toolchain";
+          paths = [
             # ziglings tracks Zig dev builds, so use zig-overlay's latest master.
             (zig.packages.${system}.master)
 
             # Use zls from zigtools/zls (default branch) so it tracks Zig dev.
             # nixpkgs' tagged zls releases can warn on Zig nightlies.
             (zls.packages.${system}.default)
-
-            # NOTE: `hunk`/`hunkdiff` is not in nixpkgs, so it stays as an
-            # `npm install -g hunkdiff` in hunk/install — but now using the
-            # nix-provided npm, so no more fnm/arch shenanigans.
           ];
+        };
+      in {
+        packages = {
+          # Individual packages used by tool-specific install scripts.
+          node = nodeToolchain;
+          nodeRuntime = nodeRuntime;
+          zig = zigToolchain;
+          bat = pkgs.bat;
+
+          # Optional catch-all bundle for one-shot installs.
+          # Install: nix profile install ~/dotfiles/nix
+          default = pkgs.buildEnv {
+            name = "dotfiles-toolchain";
+            paths = [ nodeToolchain zigToolchain pkgs.bat ];
+          };
+
+          # NOTE: `hunk`/`hunkdiff` is not in nixpkgs, so it stays as an
+          # `npm install -g hunkdiff` in hunk/install (using nix-provided npm).
         };
       });
 }

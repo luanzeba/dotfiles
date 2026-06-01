@@ -6,27 +6,30 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/../lib/nix.sh"
 
 check_installed() {
-    command -v node &>/dev/null
+    nix_profile_has_entry "$NIX_NODE_PROFILE_NAME"
 }
 
 check_configured() {
-    command -v tsc &>/dev/null \
+    _source_nix_env || true
+    command -v node &>/dev/null \
+        && command -v npm &>/dev/null \
+        && command -v tsc &>/dev/null \
         && command -v typescript-language-server &>/dev/null \
         && command -v prettier &>/dev/null \
         && command -v tree-sitter &>/dev/null
 }
 
 install() {
-    nix_profile_sync
+    nix_profile_sync_node
 }
 
 configure() {
-    # All node-based tools come from the same nix profile; install() handles them.
+    # Node runtime + tooling come from nix profile entry "node".
     :
 }
 
 update() {
-    nix_profile_sync
+    nix_profile_sync_node
 }
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then

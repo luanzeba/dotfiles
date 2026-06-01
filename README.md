@@ -50,18 +50,20 @@ It is configured with:
 
 ## Nix adoption (Phase 1)
 
-Node and Zig tooling are managed by the dotfiles Nix flake (`nix/flake.nix`) via the shared profile sync used by `node/install` and `zig/install`:
+Node, Zig, and bat are managed by the dotfiles Nix flake (`nix/flake.nix`) as separate installables:
 
-- `nodejs_22`
-- `typescript` (`tsc`)
-- `typescript-language-server`
-- `prettier`
-- `tree-sitter`
-- `zig` (from `mitchellh/zig-overlay` `master`, for Ziglings/dev builds)
-- `zls`
+- `node/install` → `path:~/dotfiles/nix#node`
+  - `nodejs_22`, `typescript` (`tsc`), `typescript-language-server`, `prettier`, `tree-sitter`
+- `zig/install` → `path:~/dotfiles/nix#zig`
+  - `zig` (from `mitchellh/zig-overlay` `master`, for Ziglings/dev builds), `zls`
+- `bat/install` → `path:~/dotfiles/nix#bat`
+  - `bat` (used by fzf-lua previews)
+
+This keeps `dot install <tool>` scoped to that tool while still using one flake source.
 
 `hunk` still installs via `npm install -g hunkdiff` because `hunkdiff` is not in nixpkgs.
-The npm runtime comes from the same Nix profile, and globals are pinned to `~/.local` (binaries in `~/.local/bin`).
+For `dot install hunk`, if the full `node` toolchain is not installed, dotfiles syncs a minimal `nodeRuntime` Nix package (node+npm only) first.
+npm globals are pinned to `~/.local` (binaries in `~/.local/bin`).
 
 ## dotfiles CLI
 

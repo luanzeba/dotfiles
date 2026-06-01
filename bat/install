@@ -1,0 +1,40 @@
+#!/bin/bash
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck disable=SC1091
+source "$SCRIPT_DIR/../lib/nix.sh"
+
+check_installed() {
+    # Exit 0 if the dotfiles-managed Nix profile entry "bat" exists.
+    # Example match in `nix profile list`: "Name: bat"
+    nix_profile_has_entry "$NIX_BAT_PROFILE_NAME"
+}
+
+check_configured() {
+    # Best effort: load Nix env for this non-interactive shell.
+    # `|| true` means "don't fail this check just because sourcing failed".
+    _source_nix_env || true
+
+    # Exit 0 if the `bat` binary is resolvable on PATH.
+    # `&>/dev/null` suppresses command output during health checks.
+    command -v bat &>/dev/null
+}
+
+install() {
+    nix_profile_sync_bat
+}
+
+configure() {
+    # Nothing extra to configure for bat.
+    :
+}
+
+update() {
+    nix_profile_sync_bat
+}
+
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    install
+    configure
+fi

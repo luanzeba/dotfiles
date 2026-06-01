@@ -3,10 +3,12 @@
 # Nix bootstrap and profile management helpers.
 #
 # Source this file (it will source lib/common.sh if not already loaded) and
-# call:
-#   ensure_nix              - install Nix if missing (one-time, may sudo)
-#   nix_profile_sync        - install/upgrade the dotfiles flake profile
-#   nix_profile_installed   - returns true if the profile is present
+# call one of:
+#   ensure_nix                   - install Nix if missing (one-time, may sudo)
+#   nix_profile_sync_node        - install/upgrade dotfiles flake #node package
+#   nix_profile_sync_node_runtime- install/upgrade dotfiles flake #nodeRuntime package
+#   nix_profile_sync_zig         - install/upgrade dotfiles flake #zig package
+#   nix_profile_sync_bat         - install/upgrade dotfiles flake #bat package
 #
 
 # Locate dotfiles dir without requiring common.sh to be sourced first.
@@ -20,9 +22,20 @@ if ! declare -F log_info >/dev/null 2>&1; then
 fi
 
 NIX_FLAKE_DIR="$DOTFILES_ROOT/nix"
-# Nix names profile entries by the last path component of the flake URL,
-# so `path:.../dotfiles/nix` becomes the entry name `nix`.
+NIX_EXPERIMENTAL_FEATURES="nix-command flakes"
+
+# Nix profile entry names used by dotfiles scripts.
 NIX_PROFILE_NAME="nix"
+NIX_NODE_PROFILE_NAME="node"
+NIX_NODE_RUNTIME_PROFILE_NAME="nodeRuntime"
+NIX_ZIG_PROFILE_NAME="zig"
+NIX_BAT_PROFILE_NAME="bat"
+
+# Installables exported by nix/flake.nix.
+NIX_PROFILE_NODE_INSTALLABLE="path:$NIX_FLAKE_DIR#node"
+NIX_PROFILE_NODE_RUNTIME_INSTALLABLE="path:$NIX_FLAKE_DIR#nodeRuntime"
+NIX_PROFILE_ZIG_INSTALLABLE="path:$NIX_FLAKE_DIR#zig"
+NIX_PROFILE_BAT_INSTALLABLE="path:$NIX_FLAKE_DIR#bat"
 
 # Source nix into PATH for the current shell, if installed.
 _source_nix_env() {
@@ -76,7 +89,7 @@ _ensure_nix_daemon_running() {
 
     if pgrep -f 'determinate-nixd daemon' >/dev/null 2>&1 \
        || pgrep -x nix-daemon >/dev/null 2>&1; then
-        # Already started, just give it a moment
+        # Already started, just give it a moment.
         sleep 1
         _nix_daemon_ready && return 0
     fi
@@ -91,6 +104,7 @@ _ensure_nix_daemon_running() {
         log_error "No nix-daemon binary found"
         return 1
     fi
+
     # Redirect must happen inside sudo so /var/log is writable.
     sudo sh -c "nohup $daemon_cmd >/var/log/nix-daemon.log 2>&1 </dev/null &"
 
@@ -100,35 +114,75 @@ _ensure_nix_daemon_running() {
         sleep 1
         _nix_daemon_ready && return 0
     done
+
     log_error "nix-daemon did not become ready in time"
     return 1
 }
 
-nix_profile_installed() {
-    _source_nix_env || return 1
-    # Match the flake URL rather than the entry name; more robust if the
-    # flake dir is ever renamed.
-    nix --extra-experimental-features 'nix-command flakes' profile list 2>/dev/null \
-        | grep -q "Original flake URL:.*path:$NIX_FLAKE_DIR"
+_nix_profile_list_plain() {
+    nix --extra-experimental-features "$NIX_EXPERIMENTAL_FEATURES" profile list 2>/dev/null \
+        | sed -E 's/\x1B\[[0-9;]*[mK]//g'
 }
 
-# Install or upgrade the dotfiles flake's default package into the user profile.
-# Idempotent: safe to call repeatedly.
-nix_profile_sync() {
+nix_profile_has_entry() {
+    local entry_name="$1"
+    _source_nix_env || return 1
+
+    _nix_profile_list_plain | awk -v entry="$entry_name" '
+        $1 == "Name:" && $2 == entry { found = 1 }
+        END { exit(found ? 0 : 1) }
+    '
+}
+
+_nix_profile_add_installable() {
+    local entry_name="$1"
+    local installable="$2"
+
+    local add_args=()
+    if [[ "$entry_name" != "$NIX_PROFILE_NAME" ]] && nix_profile_has_entry "$NIX_PROFILE_NAME"; then
+        # Allow per-tool entries to coexist with a legacy catch-all `nix` entry.
+        add_args+=(--priority 6)
+    fi
+
+    if [[ "$entry_name" == "$NIX_NODE_RUNTIME_PROFILE_NAME" ]]; then
+        # Runtime fallback for hunk should never shadow full node toolchains.
+        add_args+=(--priority 6)
+    fi
+
+    nix --extra-experimental-features "$NIX_EXPERIMENTAL_FEATURES" \
+        profile add "${add_args[@]}" "$installable"
+}
+
+# Generic helper to sync a specific profile entry.
+# Usage: nix_profile_sync_installable <entry_name> <installable>
+nix_profile_sync_installable() {
+    local entry_name="$1"
+    local installable="$2"
+
     ensure_nix || return 1
 
-    if nix_profile_installed; then
-        # Profile entry name is the basename of the flake URL path.
-        local entry_name
-        entry_name="$(basename "$NIX_FLAKE_DIR")"
+    if nix_profile_has_entry "$entry_name"; then
         log_info "Upgrading nix profile entry '$entry_name'..."
-        nix --extra-experimental-features 'nix-command flakes' \
+        nix --extra-experimental-features "$NIX_EXPERIMENTAL_FEATURES" \
             profile upgrade "$entry_name" 2>&1 || true
     else
-        log_info "Installing nix profile from $NIX_FLAKE_DIR..."
-        nix --extra-experimental-features 'nix-command flakes' \
-            profile add \
-            "path:$NIX_FLAKE_DIR" \
-        || return 1
+        log_info "Installing nix profile entry '$entry_name' from $installable..."
+        _nix_profile_add_installable "$entry_name" "$installable" || return 1
     fi
+}
+
+nix_profile_sync_node() {
+    nix_profile_sync_installable "$NIX_NODE_PROFILE_NAME" "$NIX_PROFILE_NODE_INSTALLABLE"
+}
+
+nix_profile_sync_node_runtime() {
+    nix_profile_sync_installable "$NIX_NODE_RUNTIME_PROFILE_NAME" "$NIX_PROFILE_NODE_RUNTIME_INSTALLABLE"
+}
+
+nix_profile_sync_zig() {
+    nix_profile_sync_installable "$NIX_ZIG_PROFILE_NAME" "$NIX_PROFILE_ZIG_INSTALLABLE"
+}
+
+nix_profile_sync_bat() {
+    nix_profile_sync_installable "$NIX_BAT_PROFILE_NAME" "$NIX_PROFILE_BAT_INSTALLABLE"
 }

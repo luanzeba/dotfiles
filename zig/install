@@ -6,11 +6,12 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/../lib/nix.sh"
 
 check_installed() {
-    command -v zig &>/dev/null
+    nix_profile_has_entry "$NIX_ZIG_PROFILE_NAME"
 }
 
 check_configured() {
-    command -v zls &>/dev/null
+    _source_nix_env || true
+    command -v zig &>/dev/null && command -v zls &>/dev/null
 }
 
 get_installed_version() {
@@ -20,9 +21,8 @@ get_installed_version() {
 }
 
 install() {
-    # Zig and zls are installed from the shared dotfiles nix profile.
-    # Always sync so flake package changes are applied even when binaries exist.
-    nix_profile_sync
+    # Zig and zls are installed from nix profile entry "zig".
+    nix_profile_sync_zig
 }
 
 configure() {
@@ -31,7 +31,7 @@ configure() {
 }
 
 update() {
-    nix_profile_sync
+    nix_profile_sync_zig
 }
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then

@@ -29,13 +29,19 @@ check_configured() {
 }
 
 install() {
-    # Make sure node/npm are present (from the nix flake profile).
-    nix_profile_sync
     _source_nix_env || true
     bootstrap_node_tooling_path >/dev/null 2>&1 || true
 
+    # If full node toolchain isn't installed, install only minimal node runtime
+    # needed for npm-based hunk installation.
+    if ! nix_profile_has_entry "$NIX_NODE_PROFILE_NAME"; then
+        nix_profile_sync_node_runtime
+        _source_nix_env || true
+        bootstrap_node_tooling_path >/dev/null 2>&1 || true
+    fi
+
     if ! command -v npm &>/dev/null; then
-        echo "npm not on PATH after nix sync — something is wrong"
+        echo "npm not on PATH after node runtime sync"
         return 1
     fi
 
@@ -62,9 +68,14 @@ configure() {
 }
 
 update() {
-    nix_profile_sync
     _source_nix_env || true
     bootstrap_node_tooling_path >/dev/null 2>&1 || true
+
+    if ! nix_profile_has_entry "$NIX_NODE_PROFILE_NAME"; then
+        nix_profile_sync_node_runtime
+        _source_nix_env || true
+        bootstrap_node_tooling_path >/dev/null 2>&1 || true
+    fi
 
     if command -v npm &>/dev/null; then
         setup_npm_global_prefix "$HUNK_NPM_PREFIX"
