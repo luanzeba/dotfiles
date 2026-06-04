@@ -307,7 +307,7 @@ bootstrap_node_tooling_path() {
     fi
 
     path_prepend_if_dir "$HOME/.nix-profile/bin"
-    path_prepend_if_dir "$HOME/.npm-global/bin"
+    path_prepend_if_dir "$HOME/.local/bin"
 
     if command -v node &>/dev/null || command -v npm &>/dev/null; then
         DOTFILES_NODE_TOOLING_BOOTSTRAPPED=1
@@ -317,7 +317,7 @@ bootstrap_node_tooling_path() {
 
     source_nix_profile_env
     path_prepend_if_dir "$HOME/.nix-profile/bin"
-    path_prepend_if_dir "$HOME/.npm-global/bin"
+    path_prepend_if_dir "$HOME/.local/bin"
 
     if command -v node &>/dev/null || command -v npm &>/dev/null; then
         DOTFILES_NODE_TOOLING_BOOTSTRAPPED=1
@@ -340,9 +340,12 @@ ensure_npm() {
 }
 
 # Configure a per-user npm prefix and ensure its bin dir is on PATH.
+# We pin npm globals to ~/.local (=> ~/.local/bin) because npm may come from
+# different runtimes (repo-vendored Node vs Nix), whose default global prefixes
+# are not stable/writable in this environment.
 # Usage: setup_npm_global_prefix [prefix]
 setup_npm_global_prefix() {
-    local prefix="${1:-$HOME/.npm-global}"
+    local prefix="${1:-$HOME/.local}"
 
     ensure_npm || return 1
 

@@ -61,7 +61,7 @@ Node and Zig tooling are managed by the dotfiles Nix flake (`nix/flake.nix`) via
 - `zls`
 
 `hunk` still installs via `npm install -g hunkdiff` because `hunkdiff` is not in nixpkgs.
-The npm runtime comes from the same Nix profile, and globals use `~/.npm-global`.
+The npm runtime comes from the same Nix profile, and globals are pinned to `~/.local` (binaries in `~/.local/bin`).
 
 ## dotfiles CLI
 

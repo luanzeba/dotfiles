@@ -69,11 +69,6 @@ export PATH="$HOME/.opencode/bin:$PATH"
 if [[ -d "$HOME/.nix-profile/bin" ]]; then
     export PATH="$HOME/.nix-profile/bin:$PATH"
 fi
-# Per-user npm global prefix (paired with the nix-provided npm)
-if [[ -d "$HOME/.npm-global/bin" ]]; then
-    export PATH="$HOME/.npm-global/bin:$PATH"
-fi
-
 # fnm (Fast Node Manager) — legacy, only used if nix isn't installed
 if [[ ! -d "$HOME/.nix-profile/bin" && -d "$HOME/.local/share/fnm" ]]; then
     export PATH="$HOME/.local/share/fnm:$PATH"

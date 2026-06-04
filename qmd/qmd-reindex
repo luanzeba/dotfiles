@@ -29,8 +29,8 @@ else
     if [[ -d "$HOME/.nix-profile/bin" && ":$PATH:" != *":$HOME/.nix-profile/bin:"* ]]; then
         export PATH="$HOME/.nix-profile/bin:$PATH"
     fi
-    if [[ -d "$HOME/.npm-global/bin" && ":$PATH:" != *":$HOME/.npm-global/bin:"* ]]; then
-        export PATH="$HOME/.npm-global/bin:$PATH"
+    if [[ -d "$HOME/.local/bin" && ":$PATH:" != *":$HOME/.local/bin:"* ]]; then
+        export PATH="$HOME/.local/bin:$PATH"
     fi
 fi
 
