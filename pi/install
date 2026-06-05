@@ -7,6 +7,7 @@ PI_CONFIG_DIR="$HOME/.pi/agent"
 # Use a user-writable npm prefix. npm may resolve to either repo-vendored
 # Node or Nix Node, whose default global prefixes are not stable/writable.
 PI_NPM_PREFIX="$HOME/.local"
+PI_NPM_PACKAGE="@earendil-works/pi-coding-agent"
 PI_BIN="$PI_NPM_PREFIX/bin/pi"
 
 # shellcheck disable=SC1091
@@ -136,6 +137,10 @@ bootstrap_auth_from_env() {
     echo "Bootstrapped: $auth_path from environment secret"
 }
 
+pi_package_installed() {
+    npm ls -g --depth=0 "$PI_NPM_PACKAGE" >/dev/null 2>&1
+}
+
 # Install pi coding agent via npm
 install() {
     # Ensure npm is available.
@@ -146,13 +151,15 @@ install() {
 
     setup_npm_global_prefix "$PI_NPM_PREFIX"
 
-    if [[ -x "$PI_BIN" ]]; then
+    if pi_package_installed && [[ -x "$PI_BIN" ]]; then
         echo "pi already installed"
         return 0
     fi
 
-    echo "Installing pi coding agent..."
-    npm install -g @mariozechner/pi-coding-agent
+    echo "Installing pi coding agent ($PI_NPM_PACKAGE)..."
+    # --force handles migration from the deprecated @mariozechner scope,
+    # which owns the same `pi` binary path.
+    npm install -g --force "$PI_NPM_PACKAGE"
 }
 
 # Symlink pi configuration
@@ -205,8 +212,8 @@ update() {
 
     setup_npm_global_prefix "$PI_NPM_PREFIX"
 
-    echo "Updating pi coding agent..."
-    npm update -g @mariozechner/pi-coding-agent
+    echo "Updating pi coding agent ($PI_NPM_PACKAGE)..."
+    npm update -g "$PI_NPM_PACKAGE"
 }
 
 # Main (only run when executed directly, not when sourced)
