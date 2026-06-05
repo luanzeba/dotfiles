@@ -33,7 +33,7 @@ Quando o usuário ou a pesquisa introduzir conceitos não presentes no capítulo
 
 Extrair o capítulo da coleção Fonte Viva com:
 ```bash
-python3 SKILL_DIR/../spiritist_reflection_preparation/scripts/extrair_capitulo.py "<livro>" <numero>
+python3 SKILL_DIR/../spiritist-reflection-preparation/scripts/extrair_capitulo.py "<livro>" <numero>
 ```
 
 Se a extração falhar, solicitar o texto do capítulo ao usuário.
