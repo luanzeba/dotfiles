@@ -25,11 +25,10 @@ ERROR_LOG="$ERROR_LOG_DIR/errors.log"
 # =============================================================================
 
 # Get the dotfiles directory path
+# Canonical location is ~/dotfiles across environments.
 dotfiles_dir() {
     if [[ -n "$DOTFILES_DIR" ]]; then
         echo "$DOTFILES_DIR"
-    elif [[ -n "$CODESPACES" ]]; then
-        echo "/workspaces/.codespaces/.persistedshare/dotfiles"
     else
         echo "$HOME/dotfiles"
     fi
