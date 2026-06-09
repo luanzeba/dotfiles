@@ -153,6 +153,7 @@ log_info "Configuring tools"
 run_step "git/install" bash "$SCRIPT_DIR/git/install"
 run_step "tmux/install" bash "$SCRIPT_DIR/tmux/install"
 run_step "bin/install" bash "$SCRIPT_DIR/bin/install"
+run_step "jj/install" bash "$SCRIPT_DIR/jj/install"
 run_step "gh/install" bash "$SCRIPT_DIR/gh/install"
 run_step "skills/install" bash "$SCRIPT_DIR/skills/install"
 
