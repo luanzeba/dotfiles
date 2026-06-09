@@ -16,12 +16,13 @@ Responda em português, tom acolhedor e conversacional.
 - Fidelidade ao capítulo: evite temas fora do texto.
 - Traga pelo menos um exemplo cotidiano.
 - Alvo final: ~2 minutos (250–350 palavras), quando houver versão final.
+- Ao salvar no Obsidian, **sempre incluir o texto original completo do capítulo** antes da reflexão.
 
 ## Fluxo
 
 1. **Definir fonte**
    - Confirmar livro e capítulo.
-   - Se necessário, extrair com:
+   - Extraia o texto do capítulo para usar como fonte e para salvar na nota:
      ```bash
      python3 scripts/extrair_capitulo.py "<livro>" <capitulo>
      ```
@@ -37,18 +38,38 @@ Responda em português, tom acolhedor e conversacional.
 4. **Salvar no Obsidian (quando pedido)**
    - Arquivo: `<Livro> - <capitulo> - <titulo>.md`
    - Pasta: `~/Obsidian/Personal/Notes/`
-   - Frontmatter:
-     ```yaml
+   - Usar o padrão das reflexões recentes:
+     ```markdown
      ---
      category:
        - "[[Categories/Espiritismo|Espiritismo]]"
      book: "[[<Livro>]]"
      chapter: "<capitulo>"
      themes:
+       - <tema-1>
+       - <tema-2>
      tags:
        - espiritismo
      date: <YYYY-MM-DD>
      ---
+
+     # Capítulo <capitulo> — <Título>
+
+     ## Texto do capítulo
+
+     > **“<epígrafe>”**
+     >
+     > — <autoria/referência>
+
+     <texto original completo do capítulo>
+
+     ---
+
+     ## Reflexão de abertura (~2 minutos)
+
+     <reflexão>
      ```
+   - Preserve o texto original no corpo da nota; não substitua por anexo PDF ou embed.
+   - Preencha `themes` com 3–6 temas curtos quando forem claros. Se não forem claros, deixe vazio.
 
 Leia `references/diretrizes_reflexao.md` antes de conduzir a reflexão.
