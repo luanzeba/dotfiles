@@ -1,5 +1,5 @@
 {
-  description = "luan's dotfiles toolchain (nix profile: node + zig + bat tooling)";
+  description = "luan's dotfiles toolchain (nix profile: base + node + zig + bat tooling)";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
@@ -15,6 +15,14 @@
       in
       let
         nodeRuntime = pkgs.nodejs_22;
+
+        baseTools = pkgs.buildEnv {
+          name = "dotfiles-base-tools";
+          paths = with pkgs; [
+            # fzf-lua requires fzf >= 0.36; distro packages can lag behind.
+            fzf
+          ];
+        };
 
         nodeToolchain = pkgs.buildEnv {
           name = "dotfiles-node-toolchain";
@@ -43,6 +51,9 @@
         };
       in {
         packages = {
+          # Core utilities installed by platform installers.
+          base = baseTools;
+
           # Individual packages used by tool-specific install scripts.
           node = nodeToolchain;
           nodeRuntime = nodeRuntime;
@@ -53,7 +64,7 @@
           # Install: nix profile install ~/dotfiles/nix
           default = pkgs.buildEnv {
             name = "dotfiles-toolchain";
-            paths = [ nodeToolchain zigToolchain pkgs.bat ];
+            paths = [ baseTools nodeToolchain zigToolchain pkgs.bat ];
           };
 
           # NOTE: `hunk`/`hunkdiff` is not in nixpkgs, so it stays as an

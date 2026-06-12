@@ -65,7 +65,10 @@ fi
 # opencode
 export PATH="$HOME/.opencode/bin:$PATH"
 
-# Nix profile (dotfiles Phase 1: node, typescript, prettier, tree-sitter, ...)
+# Nix profiles (dotfiles-managed base tools and language toolchains)
+if [[ -d "/nix/var/nix/profiles/default/bin" ]]; then
+    export PATH="/nix/var/nix/profiles/default/bin:$PATH"
+fi
 if [[ -d "$HOME/.nix-profile/bin" ]]; then
     export PATH="$HOME/.nix-profile/bin:$PATH"
 fi

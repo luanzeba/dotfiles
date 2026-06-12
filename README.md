@@ -50,8 +50,10 @@ It is configured with:
 
 ## Nix adoption (Phase 1)
 
-Node, Zig, and bat are managed by the dotfiles Nix flake (`nix/flake.nix`) as separate installables:
+Base utilities, Node, Zig, and bat are managed by the dotfiles Nix flake (`nix/flake.nix`) as separate installables:
 
+- Platform installers → `path:~/dotfiles/nix#base`
+  - `fzf` (required by fzf-lua; installed through Nix because distro packages can lag behind)
 - `node/install` → `path:~/dotfiles/nix#node`
   - `nodejs_22`, `typescript` (`tsc`), `typescript-language-server`, `prettier`, `tree-sitter`
 - `zig/install` → `path:~/dotfiles/nix#zig`
@@ -59,7 +61,7 @@ Node, Zig, and bat are managed by the dotfiles Nix flake (`nix/flake.nix`) as se
 - `bat/install` → `path:~/dotfiles/nix#bat`
   - `bat` (used by fzf-lua previews)
 
-This keeps `dot install <tool>` scoped to that tool while still using one flake source.
+Base utilities are installed by the platform installers rather than exposed as separate dotfiles tool directories. Tool-specific install scripts stay scoped to that tool while still using one flake source.
 
 `hunk` still installs via `npm install -g hunkdiff` because `hunkdiff` is not in nixpkgs.
 For `dot install hunk`, if the full `node` toolchain is not installed, dotfiles syncs a minimal `nodeRuntime` Nix package (node+npm only) first.

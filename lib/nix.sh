@@ -5,6 +5,7 @@
 # Source this file (it will source lib/common.sh if not already loaded) and
 # call one of:
 #   ensure_nix                   - install Nix if missing (one-time, may sudo)
+#   nix_profile_sync_base        - install/upgrade dotfiles flake #base package
 #   nix_profile_sync_node        - install/upgrade dotfiles flake #node package
 #   nix_profile_sync_node_runtime- install/upgrade dotfiles flake #nodeRuntime package
 #   nix_profile_sync_zig         - install/upgrade dotfiles flake #zig package
@@ -26,12 +27,14 @@ NIX_EXPERIMENTAL_FEATURES="nix-command flakes"
 
 # Nix profile entry names used by dotfiles scripts.
 NIX_PROFILE_NAME="nix"
+NIX_BASE_PROFILE_NAME="base"
 NIX_NODE_PROFILE_NAME="node"
 NIX_NODE_RUNTIME_PROFILE_NAME="nodeRuntime"
 NIX_ZIG_PROFILE_NAME="zig"
 NIX_BAT_PROFILE_NAME="bat"
 
 # Installables exported by nix/flake.nix.
+NIX_PROFILE_BASE_INSTALLABLE="path:$NIX_FLAKE_DIR#base"
 NIX_PROFILE_NODE_INSTALLABLE="path:$NIX_FLAKE_DIR#node"
 NIX_PROFILE_NODE_RUNTIME_INSTALLABLE="path:$NIX_FLAKE_DIR#nodeRuntime"
 NIX_PROFILE_ZIG_INSTALLABLE="path:$NIX_FLAKE_DIR#zig"
@@ -52,6 +55,12 @@ _source_nix_env() {
         # shellcheck disable=SC1090
         [[ -f "$f" ]] && . "$f" && break
     done
+
+    # Determinate Nix can install the nix CLI into the system profile without
+    # making it visible to non-login shells in devcontainers.
+    if ! command -v nix &>/dev/null && [[ -x /nix/var/nix/profiles/default/bin/nix ]]; then
+        export PATH="/nix/var/nix/profiles/default/bin:$PATH"
+    fi
 
     command -v nix &>/dev/null
 }
@@ -169,6 +178,10 @@ nix_profile_sync_installable() {
         log_info "Installing nix profile entry '$entry_name' from $installable..."
         _nix_profile_add_installable "$entry_name" "$installable" || return 1
     fi
+}
+
+nix_profile_sync_base() {
+    nix_profile_sync_installable "$NIX_BASE_PROFILE_NAME" "$NIX_PROFILE_BASE_INSTALLABLE"
 }
 
 nix_profile_sync_node() {

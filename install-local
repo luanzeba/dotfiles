@@ -2,19 +2,19 @@
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$SCRIPT_DIR/lib/common.sh"
+source "$SCRIPT_DIR/lib/nix.sh"
 
 FAILED_STEPS=()
 
 # Install basic tools via package manager
 # - fd: fast file finder (alternative to find)
 # - ffmpeg: audio/video processing
-# - fzf: fuzzy finder
 # - poppler: PDF utilities (provides pdftotext)
 install_basic_tools() {
     echo "Installing basic tools..."
 
     if is_macos; then
-        brew install azure-cli fd ffmpeg fzf poppler
+        brew install azure-cli fd ffmpeg poppler
         return 0
     fi
 
@@ -23,7 +23,6 @@ install_basic_tools() {
 
         command -v fd &>/dev/null || missing_packages+=("fd")
         command -v ffmpeg &>/dev/null || missing_packages+=("ffmpeg")
-        command -v fzf &>/dev/null || missing_packages+=("fzf")
         command -v pdftotext &>/dev/null || missing_packages+=("poppler")
 
         if [[ ${#missing_packages[@]} -eq 0 ]]; then
@@ -89,6 +88,7 @@ echo '🚀 Starting local machine setup.'
 log_info "Phase 1: Installing core tools (direct downloads)"
 run_step "git/install" bash "$SCRIPT_DIR/git/install"
 run_step "bin/install" bash "$SCRIPT_DIR/bin/install"
+run_step "base tools" nix_profile_sync_base
 run_step "go/install" bash "$SCRIPT_DIR/go/install"
 run_step "rust/install" bash "$SCRIPT_DIR/rust/install"
 run_step "node/install" bash "$SCRIPT_DIR/node/install"

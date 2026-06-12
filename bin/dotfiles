@@ -33,6 +33,7 @@ while [[ -L "$REAL_SCRIPT" ]]; do
 done
 SCRIPT_DIR="$(cd -P "$(dirname "$REAL_SCRIPT")/.." && pwd)"
 source "$SCRIPT_DIR/lib/common.sh"
+source "$SCRIPT_DIR/lib/nix.sh"
 
 # Helper for verbose logging
 log_verbose() {
@@ -435,6 +436,20 @@ cmd_update() {
             log_warn "Homebrew update failed"
         }
     fi
+
+    log_info "Updating base tools..."
+    local base_output
+    local base_exit_code
+    set +e
+    base_output=$(nix_profile_sync_base 2>&1)
+    base_exit_code=$?
+    set -e
+    if [[ $base_exit_code -ne 0 ]]; then
+        log_error_persistent "update" "base" "$base_exit_code" "$base_output"
+        failed_tools+=("base")
+        log_warn "Failed to update base tools"
+    fi
+    [[ -n "$base_output" ]] && echo "$base_output"
     
     # Call update() for each tool that has it
     local dir
@@ -1010,8 +1025,11 @@ dot update - Update installed tools
 Usage:
   dot update [-h|--help]
 
-Updates all installed tools that have an update() function defined.
+Updates base tools from the Nix flake plus all installed tools that have an update() function defined.
 On macOS, also runs 'brew update && brew upgrade'.
+
+Always-updated base tools:
+  base (Nix flake #base)
 
 Tools with update functions:
 $(
