@@ -19,7 +19,7 @@ check_installed() {
 }
 
 check_configured() {
-    [[ -L "$PI_CONFIG_DIR/settings.json" ]]
+    [[ -L "$PI_CONFIG_DIR/settings.json" && -L "$PI_CONFIG_DIR/AGENTS.md" ]]
 }
 
 warn() {
@@ -171,6 +171,13 @@ configure() {
         rm -f "$PI_CONFIG_DIR/settings.json"
         ln -s "$SCRIPT_DIR/settings.json" "$PI_CONFIG_DIR/settings.json"
         echo "Linked: $PI_CONFIG_DIR/settings.json"
+    fi
+
+    # Symlink AGENTS.md
+    if [[ -f "$SCRIPT_DIR/AGENTS.md" ]]; then
+        rm -f "$PI_CONFIG_DIR/AGENTS.md"
+        ln -s "$SCRIPT_DIR/AGENTS.md" "$PI_CONFIG_DIR/AGENTS.md"
+        echo "Linked: $PI_CONFIG_DIR/AGENTS.md"
     fi
 
     # Create skills directory (will be populated by skills/install)
