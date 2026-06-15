@@ -65,6 +65,11 @@ rules:
           - .subject.state == "closed"
           - .updated_at | fromdate < now - 604800
       action: done
+    - name: mark closed issues and closed or merged PRs from team notifications as done
+      filters:
+          - ((.subject.type == "PullRequest") and ((.subject.state == "closed") or ((.merged_by.login // "") != ""))) or ((.subject.type == "Issue") and (.subject.state == "closed"))
+          - (.reason == "team_mention") or ((.reason == "review_requested") and (((.requested_reviewers // []) | map(.login) | index("luanzeba")) == null))
+      action: done
     - name: mark pull requests merged by yourself as done
       filters:
           - .merged_by.login == "luanzeba"
