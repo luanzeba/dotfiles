@@ -1,0 +1,82 @@
+#!/bin/bash
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck disable=SC1091
+source "$SCRIPT_DIR/../lib/nix.sh"
+
+BASE_COMMANDS=(fzf az fd ffmpeg pdftotext)
+
+bootstrap_base_path() {
+    _source_nix_env || true
+    if [[ -d "$HOME/.nix-profile/bin" ]]; then
+        export PATH="$HOME/.nix-profile/bin:$PATH"
+    fi
+}
+
+check_installed() {
+    nix_profile_has_entry "$NIX_BASE_PROFILE_NAME"
+}
+
+check_configured() {
+    bootstrap_base_path
+
+    local cmd
+    for cmd in "${BASE_COMMANDS[@]}"; do
+        command -v "$cmd" &>/dev/null || return 1
+    done
+}
+
+get_installed_version() {
+    bootstrap_base_path
+
+    local parts=()
+
+    if command -v fzf &>/dev/null; then
+        parts+=("fzf $(fzf --version 2>/dev/null | awk '{print $1}')")
+    fi
+
+    if command -v az &>/dev/null; then
+        parts+=("az $(az --version 2>/dev/null | awk '/^azure-cli/ {print $2; exit}')")
+    fi
+
+    if command -v fd &>/dev/null; then
+        parts+=("fd $(fd --version 2>/dev/null | awk '{print $2}')")
+    fi
+
+    if command -v ffmpeg &>/dev/null; then
+        parts+=("ffmpeg $(ffmpeg -version 2>/dev/null | head -1 | awk '{print $3}')")
+    fi
+
+    if command -v pdftotext &>/dev/null; then
+        parts+=("pdftotext $(pdftotext -v 2>&1 | head -1 | awk '{print $3}')")
+    fi
+
+    local joined=""
+    local part
+    for part in "${parts[@]}"; do
+        if [[ -n "$joined" ]]; then
+            joined+=", "
+        fi
+        joined+="$part"
+    done
+    echo "$joined"
+}
+
+install() {
+    nix_profile_sync_base
+}
+
+configure() {
+    # No config files; binaries come from the Nix profile.
+    :
+}
+
+update() {
+    nix_profile_sync_base
+}
+
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    install
+    configure
+fi

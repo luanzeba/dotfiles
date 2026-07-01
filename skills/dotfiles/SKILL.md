@@ -40,7 +40,7 @@ See [references/tool-template.md](references/tool-template.md) for the install s
 | Skills | `skills/` | `~/.claude/skills/`, `~/.pi/agent/skills/` | Yes |
 | Rust | `rust/` | N/A | Yes (rustup) |
 | Go | `go/` | N/A | Yes (Go tools: gopls, gofumpt, etc.) |
-| Base utilities | N/A | N/A | Installed by platform installers via Nix flake `#base` (currently fzf) |
+| Base utilities | `base/` | N/A | Yes (Nix flake: fzf, azure-cli, fd, ffmpeg, poppler-utils) |
 | Node | `node/` | N/A | Yes (Nix flake: node + TypeScript tools) |
 | Hunk | `hunk/` | `~/.config/hunk/config.toml`, git aliases (`hdiff`, `hshow`) | Yes |
 | Bin | `bin/` | `~/.local/bin` | Yes (custom scripts) |
@@ -115,7 +115,7 @@ This uses `gh cs cp` to transfer a patch file, authenticating through GitHub's C
 ### Installation Preference Hierarchy
 
 1. **Direct GitHub releases** - Preferred for tools with prebuilt binaries (nvim, jj, gh, helix)
-2. **Nix flake profile** - Preferred for shared language runtimes/toolchains and base utilities managed in dotfiles (currently base/fzf, Node + TypeScript tools, Zig, bat)
+2. **Nix flake profile** - Preferred for shared language runtimes/toolchains and base utilities managed in dotfiles (currently base utilities, Node + TypeScript tools, Zig, bat)
 3. **Package managers** - Only when no prebuilt binaries or Nix packages fit (tmux via brew, system tools via apt/pacman)
 
 Homebrew is installed lazily in Phase 3 of `install-local`, only when needed for brew-dependent tools.
@@ -164,11 +164,10 @@ Scripts should produce the same result whether run once or many times:
 The `dot` command (symlinked to `~/.local/bin/` from `bin/dotfiles`) provides easy management:
 
 ```bash
-dotfiles status   # Show VCS status of dotfiles repo
+dotfiles status   # Check install/config health
 dotfiles pull     # Pull latest and apply changes (skipped on Omarchy)
 dotfiles edit     # Open dotfiles in $EDITOR
 dotfiles update   # Update tools (brew, nvim plugins, rustup, etc.)
-dotfiles doctor   # Check if everything is set up correctly
 ```
 
 The CLI uses jj (Jujutsu) if available, falling back to git.
@@ -183,7 +182,7 @@ The CLI uses jj (Jujutsu) if available, falling back to git.
    - `configure()` - Symlink configs, set up environment
    - `apply()` (optional) - Reload config after `dotfiles pull`, or handle migrations
    - `update()` (optional) - Update tool for `dotfiles update`
-   - `check_installed()` / `check_configured()` - For `dot doctor` health checks
+   - `check_installed()` / `check_configured()` - For `dot status` health checks
 3. Add config files to the directory
 4. Test on each platform
 5. Optionally integrate with `install-local` in the appropriate phase
@@ -211,6 +210,7 @@ Key locations:
 ~/dotfiles/install-local        # macOS and Arch
 
 # Tool-specific installs
+~/dotfiles/base/install
 ~/dotfiles/nvim/install
 ~/dotfiles/zsh/install.zsh
 ~/dotfiles/skills/install

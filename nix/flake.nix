@@ -21,6 +21,13 @@
           paths = with pkgs; [
             # fzf-lua requires fzf >= 0.36; distro packages can lag behind.
             fzf
+
+            # Shared local-machine basics previously installed through
+            # Homebrew/pacman by install-local.
+            azure-cli
+            fd
+            ffmpeg
+            poppler-utils # pdftotext
           ];
         };
 

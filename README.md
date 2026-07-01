@@ -52,8 +52,9 @@ It is configured with:
 
 Base utilities, Node, Zig, and bat are managed by the dotfiles Nix flake (`nix/flake.nix`) as separate installables:
 
-- Platform installers → `path:~/dotfiles/nix#base`
+- `base/install` → `path:~/dotfiles/nix#base`
   - `fzf` (required by fzf-lua; installed through Nix because distro packages can lag behind)
+  - `azure-cli` (`az`), `fd`, `ffmpeg`, `poppler-utils` (`pdftotext`)
 - `node/install` → `path:~/dotfiles/nix#node`
   - `nodejs_22`, `typescript` (`tsc`), `typescript-language-server`, `prettier`, `tree-sitter`
 - `zig/install` → `path:~/dotfiles/nix#zig`
@@ -61,7 +62,7 @@ Base utilities, Node, Zig, and bat are managed by the dotfiles Nix flake (`nix/f
 - `bat/install` → `path:~/dotfiles/nix#bat`
   - `bat` (used by fzf-lua previews)
 
-Base utilities are installed by the platform installers rather than exposed as separate dotfiles tool directories. Tool-specific install scripts stay scoped to that tool while still using one flake source.
+Base utilities are exposed through `dot install base` and are also installed by the platform installers. Tool-specific install scripts stay scoped to that tool while still using one flake source.
 
 `hunk` still installs via `npm install -g hunkdiff` because `hunkdiff` is not in nixpkgs.
 For `dot install hunk`, if the full `node` toolchain is not installed, dotfiles syncs a minimal `nodeRuntime` Nix package (node+npm only) first.
@@ -73,20 +74,19 @@ After installation, use the `dotfiles` (or `dot`) command:
 
 | Command | Description |
 |---------|-------------|
-| `dot status` | Show repo status |
+| `dot status` | Show install/config health |
 | `dot pull` | Pull latest (Omarchy skips apply by default; use `--apply`) |
 | `dot install` | Run full install |
-| `dot install <tool>` | Install specific tool(s) |
+| `dot install <tool>` | Install specific tool(s), e.g. `dot install base` |
 | `dot install todo` | Interactive todo installer (server/client + local/remote) |
 | `dot install -f <tool>` | Force reinstall (skip install check) |
 | `dot update` | Update tools (brew, nvim plugins, etc.) |
-| `dot doctor` | Check setup health |
 | `dot logs` | View recent errors |
 | `dot edit` | Open in editor |
 
 All commands support `-h/--help` for usage information.
 
-### dot doctor
+### dot status
 
 Shows a table of all tools with their installation and configuration status:
 
