@@ -27,6 +27,10 @@
             azure-cli
             fd
             ffmpeg
+            jq
+            eza
+            ripgrep
+            tmux
             poppler-utils # pdftotext
           ];
         };

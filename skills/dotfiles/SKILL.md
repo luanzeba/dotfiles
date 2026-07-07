@@ -40,7 +40,7 @@ See [references/tool-template.md](references/tool-template.md) for the install s
 | Skills | `skills/` | `~/.claude/skills/`, `~/.pi/agent/skills/` | Yes |
 | Rust | `rust/` | N/A | Yes (rustup) |
 | Go | `go/` | N/A | Yes (Go tools: gopls, gofumpt, etc.) |
-| Base utilities | `base/` | N/A | Yes (Nix flake: fzf, azure-cli, fd, ffmpeg, poppler-utils) |
+| Base utilities | `base/` | N/A | Yes (Nix flake: fzf, azure-cli, fd, ffmpeg, jq, eza, ripgrep, tmux, poppler-utils) |
 | Node | `node/` | N/A | Yes (Nix flake: node + TypeScript tools) |
 | Hunk | `hunk/` | `~/.config/hunk/config.toml`, git aliases (`hdiff`, `hshow`) | Yes |
 | Bin | `bin/` | `~/.local/bin` | Yes (custom scripts) |

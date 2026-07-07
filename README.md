@@ -54,7 +54,7 @@ Base utilities, Node, Zig, and bat are managed by the dotfiles Nix flake (`nix/f
 
 - `base/install` → `path:~/dotfiles/nix#base`
   - `fzf` (required by fzf-lua; installed through Nix because distro packages can lag behind)
-  - `azure-cli` (`az`), `fd`, `ffmpeg`, `poppler-utils` (`pdftotext`)
+  - `azure-cli` (`az`), `fd`, `ffmpeg`, `jq`, `eza`, `ripgrep` (`rg`), `tmux`, `poppler-utils` (`pdftotext`)
 - `node/install` → `path:~/dotfiles/nix#node`
   - `nodejs_22`, `typescript` (`tsc`), `typescript-language-server`, `prettier`, `tree-sitter`
 - `zig/install` → `path:~/dotfiles/nix#zig`

@@ -120,6 +120,8 @@ install_apt_packages() {
     echo "Installing apt packages..."
     sudo apt-get update
 
+    # Keep apt coverage for common CLIs in Codespaces as a bootstrap/fallback
+    # path even when the same tools are also available from the Nix base profile.
     local packages=(
         build-essential
         python3-venv
