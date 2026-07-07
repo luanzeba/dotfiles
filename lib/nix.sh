@@ -8,6 +8,7 @@
 #   nix_profile_sync_base        - install/upgrade dotfiles flake #base package
 #   nix_profile_sync_node        - install/upgrade dotfiles flake #node package
 #   nix_profile_sync_node_runtime- install/upgrade dotfiles flake #nodeRuntime package
+#   nix_profile_sync_go          - install/upgrade dotfiles flake #go package
 #   nix_profile_sync_zig         - install/upgrade dotfiles flake #zig package
 #   nix_profile_sync_bat         - install/upgrade dotfiles flake #bat package
 #
@@ -30,6 +31,7 @@ NIX_PROFILE_NAME="nix"
 NIX_BASE_PROFILE_NAME="base"
 NIX_NODE_PROFILE_NAME="node"
 NIX_NODE_RUNTIME_PROFILE_NAME="nodeRuntime"
+NIX_GO_PROFILE_NAME="go"
 NIX_ZIG_PROFILE_NAME="zig"
 NIX_BAT_PROFILE_NAME="bat"
 
@@ -37,6 +39,7 @@ NIX_BAT_PROFILE_NAME="bat"
 NIX_PROFILE_BASE_INSTALLABLE="path:$NIX_FLAKE_DIR#base"
 NIX_PROFILE_NODE_INSTALLABLE="path:$NIX_FLAKE_DIR#node"
 NIX_PROFILE_NODE_RUNTIME_INSTALLABLE="path:$NIX_FLAKE_DIR#nodeRuntime"
+NIX_PROFILE_GO_INSTALLABLE="path:$NIX_FLAKE_DIR#go"
 NIX_PROFILE_ZIG_INSTALLABLE="path:$NIX_FLAKE_DIR#zig"
 NIX_PROFILE_BAT_INSTALLABLE="path:$NIX_FLAKE_DIR#bat"
 
@@ -190,6 +193,10 @@ nix_profile_sync_node() {
 
 nix_profile_sync_node_runtime() {
     nix_profile_sync_installable "$NIX_NODE_RUNTIME_PROFILE_NAME" "$NIX_PROFILE_NODE_RUNTIME_INSTALLABLE"
+}
+
+nix_profile_sync_go() {
+    nix_profile_sync_installable "$NIX_GO_PROFILE_NAME" "$NIX_PROFILE_GO_INSTALLABLE"
 }
 
 nix_profile_sync_zig() {

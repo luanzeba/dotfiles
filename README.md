@@ -50,13 +50,15 @@ It is configured with:
 
 ## Nix adoption (Phase 1)
 
-Base utilities, Node, Zig, and bat are managed by the dotfiles Nix flake (`nix/flake.nix`) as separate installables:
+Base utilities, Node, Go, Zig, and bat are managed by the dotfiles Nix flake (`nix/flake.nix`) as separate installables:
 
 - `base/install` → `path:~/dotfiles/nix#base`
   - `fzf` (required by fzf-lua; installed through Nix because distro packages can lag behind)
   - `azure-cli` (`az`), `fd`, `ffmpeg`, `jq`, `eza`, `ripgrep` (`rg`), `tmux`, `poppler-utils` (`pdftotext`)
 - `node/install` → `path:~/dotfiles/nix#node`
   - `nodejs_22`, `typescript` (`tsc`), `typescript-language-server`, `prettier`, `tree-sitter`
+- `go/install` → `path:~/dotfiles/nix#go`
+  - `go`, `gopls`, `gofumpt`, `goimports-reviser`
 - `zig/install` → `path:~/dotfiles/nix#zig`
   - `zig` (from `mitchellh/zig-overlay` `master`, for Ziglings/dev builds), `zls`
 - `bat/install` → `path:~/dotfiles/nix#bat`
