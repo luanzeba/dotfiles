@@ -1,38 +1,85 @@
 #!/bin/bash
 set -e
 
-check_installed() {
-    command -v cargo &>/dev/null
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck disable=SC1091
+source "$SCRIPT_DIR/../lib/nix.sh"
+
+RUST_COMMANDS=(rustc cargo rustfmt cargo-clippy clippy-driver rust-analyzer)
+
+bootstrap_rust_path() {
+    _source_nix_env || true
+    if [[ -d "$HOME/.nix-profile/bin" ]]; then
+        export PATH="$HOME/.nix-profile/bin:$PATH"
+    fi
 }
 
-check_configured() {
-    # Rust has no dotfiles config, just the toolchain
-    return 0
+rust_commands_available() {
+    bootstrap_rust_path
+
+    local cmd
+    for cmd in "${RUST_COMMANDS[@]}"; do
+        command -v "$cmd" &>/dev/null || return 1
+    done
+}
+
+check_installed() {
+    if ! nix_profile_has_entry "$NIX_RUST_PROFILE_NAME"; then
+        return 1
+    fi
+
+    rust_commands_available
+}
+
+get_installed_version() {
+    bootstrap_rust_path
+
+    local parts=()
+
+    if command -v rustc &>/dev/null; then
+        parts+=("$(rustc --version 2>/dev/null | awk '{print $1 " " $2}')")
+    fi
+
+    if command -v cargo &>/dev/null; then
+        parts+=("$(cargo --version 2>/dev/null | awk '{print $1 " " $2}')")
+    fi
+
+    if command -v rustfmt &>/dev/null; then
+        parts+=("$(rustfmt --version 2>/dev/null | awk '{print $1 " " $2}')")
+    fi
+
+    if command -v cargo-clippy &>/dev/null; then
+        parts+=("clippy $(cargo clippy --version 2>/dev/null | awk '{print $2; exit}')")
+    fi
+
+    if command -v rust-analyzer &>/dev/null; then
+        parts+=("rust-analyzer $(rust-analyzer --version 2>/dev/null | awk '{print $2; exit}')")
+    fi
+
+    local joined=""
+    local part
+    for part in "${parts[@]}"; do
+        if [[ -n "$joined" ]]; then
+            joined+=", "
+        fi
+        joined+="$part"
+    done
+    echo "$joined"
 }
 
 install() {
-    if command -v rustc &>/dev/null && command -v cargo &>/dev/null; then
-        echo "Rust already installed: $(rustc --version)"
-        return
-    fi
-
-    echo "Installing Rust via rustup..."
-    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+    nix_profile_sync_rust
 }
 
 configure() {
-    # PATH managed in shell config (~/.cargo/bin is added by rustup)
+    # No config files; binaries come from the Nix profile.
     :
 }
 
 update() {
-    if command -v rustup &>/dev/null; then
-        echo "Updating Rust toolchain..."
-        rustup update
-    fi
+    nix_profile_sync_rust
 }
 
-# Main (only run when executed directly, not when sourced)
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     install
     configure

@@ -38,7 +38,7 @@ See [references/tool-template.md](references/tool-template.md) for the install s
 | Helix | `helix/` | `~/.config/helix` | Yes |
 | Whisper | `whisper/` | N/A | Yes (macOS/Arch only) |
 | Skills | `skills/` | `~/.claude/skills/`, `~/.pi/agent/skills/` | Yes |
-| Rust | `rust/` | N/A | Yes (rustup) |
+| Rust | `rust/` | N/A | Yes (Nix flake: rustc, cargo, rustfmt, clippy, rust-analyzer) |
 | Go | `go/` | N/A | Yes (Nix flake: go, gopls, gofumpt, goimports-reviser) |
 | Base utilities | `base/` | N/A | Yes (Nix flake: fzf, azure-cli, fd, ffmpeg, jq, eza, ripgrep, tmux, poppler-utils) |
 | Node | `node/` | N/A | Yes (Nix flake: node + TypeScript tools) |
@@ -115,7 +115,7 @@ This uses `gh cs cp` to transfer a patch file, authenticating through GitHub's C
 ### Installation Preference Hierarchy
 
 1. **Direct GitHub releases** - Preferred for tools with prebuilt binaries (nvim, jj, gh, helix)
-2. **Nix flake profile** - Preferred for shared language runtimes/toolchains and base utilities managed in dotfiles (currently base utilities, Node + TypeScript tools, Go, Zig, bat)
+2. **Nix flake profile** - Preferred for shared language runtimes/toolchains and base utilities managed in dotfiles (currently base utilities, Node + TypeScript tools, Go, Rust, Zig, bat)
 3. **Package managers** - Only when no prebuilt binaries or Nix packages fit (tmux via brew, system tools via apt/pacman)
 
 Homebrew is installed lazily in Phase 3 of `install-local`, only when needed for brew-dependent tools.
@@ -167,7 +167,7 @@ The `dot` command (symlinked to `~/.local/bin/` from `bin/dotfiles`) provides ea
 dotfiles status   # Check install/config health
 dotfiles pull     # Pull latest and apply changes (skipped on Omarchy)
 dotfiles edit     # Open dotfiles in $EDITOR
-dotfiles update   # Update tools (brew, nvim plugins, rustup, etc.)
+dotfiles update   # Update tools (brew, Nix profiles, nvim plugins, etc.)
 ```
 
 The CLI uses jj (Jujutsu) if available, falling back to git.

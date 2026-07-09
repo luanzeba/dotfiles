@@ -1,6 +1,3 @@
-# zlogin happens after sourcing ~/.zshrc so it's safer to append to the path at this point
-export PATH="$PATH:$HOME/.cargo/bin"
-
 # Extra configs for github/github codespace
 if [[ -d /workspaces/github ]]; then
   # For some reason, the Ruby version used in the monolith is not set in the path
