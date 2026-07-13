@@ -1,111 +1,77 @@
 #!/bin/bash
 set -e
 
-check_installed() {
-    # Prefer Homebrew Ruby on macOS (keg-only)
-    if [[ "$(uname -s)" == "Darwin" ]]; then
-        local brew_ruby=""
-        if [[ -x "/opt/homebrew/opt/ruby/bin/ruby" ]]; then
-            brew_ruby="/opt/homebrew/opt/ruby/bin/ruby"
-        elif [[ -x "/usr/local/opt/ruby/bin/ruby" ]]; then
-            brew_ruby="/usr/local/opt/ruby/bin/ruby"
-        fi
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck disable=SC1091
+source "$SCRIPT_DIR/../lib/nix.sh"
 
-        if [[ -z "$brew_ruby" ]]; then
-            return 1
-        fi
+RUBY_COMMANDS=(ruby gem bundle)
 
-        local major
-        major=$($brew_ruby -e 'print RUBY_VERSION.split(".").first' 2>/dev/null || echo 0)
-        [[ "$major" -ge 3 ]]
-        return
+bootstrap_ruby_path() {
+    _source_nix_env || true
+    if [[ -d "$HOME/.nix-profile/bin" ]]; then
+        export PATH="$HOME/.nix-profile/bin:$PATH"
     fi
+}
 
-    if ! command -v ruby &>/dev/null; then
+ruby_commands_available() {
+    bootstrap_ruby_path
+
+    local cmd
+    for cmd in "${RUBY_COMMANDS[@]}"; do
+        command -v "$cmd" &>/dev/null || return 1
+    done
+}
+
+check_installed() {
+    if ! nix_profile_has_entry "$NIX_RUBY_PROFILE_NAME"; then
         return 1
     fi
 
-    # Treat Ruby 3+ as "installed" for modern toolchains
-    local major
-    major=$(ruby -e 'print RUBY_VERSION.split(".").first' 2>/dev/null || echo 0)
-    [[ "$major" -ge 3 ]]
-}
-
-check_configured() {
-    if [[ "$(uname -s)" == "Darwin" ]]; then
-        # brew ruby is keg-only
-        [[ -x "/opt/homebrew/opt/ruby/bin/ruby" ]]
-    else
-        command -v ruby &>/dev/null
-    fi
+    ruby_commands_available
 }
 
 get_installed_version() {
-    if [[ "$(uname -s)" == "Darwin" && -x "/opt/homebrew/opt/ruby/bin/ruby" ]]; then
-        /opt/homebrew/opt/ruby/bin/ruby -v 2>/dev/null || true
-    elif [[ "$(uname -s)" == "Darwin" && -x "/usr/local/opt/ruby/bin/ruby" ]]; then
-        /usr/local/opt/ruby/bin/ruby -v 2>/dev/null || true
-    else
-        ruby -v 2>/dev/null || true
+    bootstrap_ruby_path
+
+    local parts=()
+
+    if command -v ruby &>/dev/null; then
+        parts+=("$(ruby -v 2>/dev/null | awk '{print $1 " " $2}')")
     fi
+
+    if command -v gem &>/dev/null; then
+        parts+=("gem $(gem --version 2>/dev/null | head -1)")
+    fi
+
+    if command -v bundle &>/dev/null; then
+        parts+=("$(bundle -v 2>/dev/null)")
+    fi
+
+    local joined=""
+    local part
+    for part in "${parts[@]}"; do
+        if [[ -n "$joined" ]]; then
+            joined+=", "
+        fi
+        joined+="$part"
+    done
+    echo "$joined"
 }
 
 install() {
-    if check_installed; then
-        echo "Ruby already installed: $(get_installed_version)"
-        return 0
-    fi
-
-    case "$(uname -s)" in
-        Darwin)
-            if ! command -v brew &>/dev/null; then
-                echo "Homebrew is required to install Ruby on macOS"
-                return 1
-            fi
-            brew install ruby
-            ;;
-        Linux)
-            if command -v pacman &>/dev/null; then
-                sudo pacman -S --noconfirm ruby
-            elif command -v apt-get &>/dev/null; then
-                sudo apt-get update
-                sudo apt-get install -y ruby-full
-            else
-                echo "Unsupported Linux package manager for Ruby install"
-                return 1
-            fi
-            ;;
-        *)
-            echo "Unsupported OS: $(uname -s)"
-            return 1
-            ;;
-    esac
+    nix_profile_sync_ruby
 }
 
 configure() {
-    echo "Ruby installed."
-    if [[ "$(uname -s)" == "Darwin" ]]; then
-        echo "Make sure /opt/homebrew/opt/ruby/bin is in PATH (configured in zsh/.zshrc)."
-    fi
+    # No config files; binaries come from the Nix profile.
+    :
 }
 
 update() {
-    case "$(uname -s)" in
-        Darwin)
-            brew upgrade ruby
-            ;;
-        Linux)
-            if command -v pacman &>/dev/null; then
-                sudo pacman -S --noconfirm ruby
-            elif command -v apt-get &>/dev/null; then
-                sudo apt-get update
-                sudo apt-get install -y ruby-full
-            fi
-            ;;
-    esac
+    nix_profile_sync_ruby
 }
 
-# Main (only run when executed directly, not when sourced)
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     install
     configure

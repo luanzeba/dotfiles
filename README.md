@@ -50,7 +50,7 @@ It is configured with:
 
 ## Nix adoption (Phase 1)
 
-Base utilities, Node, Go, Rust, Zig, and bat are managed by the dotfiles Nix flake (`nix/flake.nix`) as separate installables:
+Base utilities, Node, Go, Rust, Ruby, Zig, and bat are managed by the dotfiles Nix flake (`nix/flake.nix`) as separate installables:
 
 - `base/install` → `path:~/dotfiles/nix#base`
   - `fzf` (required by fzf-lua; installed through Nix because distro packages can lag behind)
@@ -61,6 +61,8 @@ Base utilities, Node, Go, Rust, Zig, and bat are managed by the dotfiles Nix fla
   - `go`, `gopls`, `gofumpt`, `goimports-reviser`
 - `rust/install` → `path:~/dotfiles/nix#rust`
   - `rustc`, `cargo`, `rustfmt`, `clippy`, `rust-analyzer`
+- `ruby/install` → `path:~/dotfiles/nix#ruby`
+  - `ruby_3_4` (`ruby`, `gem`, `bundle`)
 - `zig/install` → `path:~/dotfiles/nix#zig`
   - `zig` (from `mitchellh/zig-overlay` `master`, for Ziglings/dev builds), `zls`
 - `bat/install` → `path:~/dotfiles/nix#bat`

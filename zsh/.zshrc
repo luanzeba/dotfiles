@@ -4,11 +4,6 @@ export COLORTERM=truecolor
 # Add ~/.local/bin to PATH for user-installed binaries
 export PATH="$HOME/.local/bin:$PATH"
 
-# Prefer Homebrew Ruby over macOS system Ruby when available
-if [[ -x "/opt/homebrew/opt/ruby/bin/ruby" ]]; then
-  export PATH="/opt/homebrew/opt/ruby/bin:$PATH"
-fi
-
 # Codespaces-specific configuration
 if [[ -n "$CODESPACES" ]]; then
     # Playwright must run headless in Codespaces (no display available)
