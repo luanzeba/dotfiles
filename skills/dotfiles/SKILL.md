@@ -46,7 +46,7 @@ See [references/tool-template.md](references/tool-template.md) for the install s
 | Hunk | `hunk/` | `~/.config/hunk/config.toml`, git aliases (`hdiff`, `hshow`) | Yes |
 | Bin | `bin/` | `~/.local/bin` | Yes (custom scripts) |
 | jj | `jj/` | N/A | Yes (Nix flake: Jujutsu VCS) |
-| gh | `gh/` | `~/.local/gh`, `~/.local/bin/gh` | Yes (GitHub CLI + extensions) |
+| gh | `gh/` | `~/.config/gh-not`, launchd agent | Yes (binary from Nix + extensions/config) |
 
 ## Platform Support
 
@@ -115,8 +115,8 @@ This uses `gh cs cp` to transfer a patch file, authenticating through GitHub's C
 
 ### Installation Preference Hierarchy
 
-1. **Direct GitHub releases** - Preferred for tools with prebuilt binaries not yet managed by Nix (gh)
-2. **Nix flake profile** - Preferred for shared language runtimes/toolchains and base utilities managed in dotfiles (currently base utilities, Node + TypeScript tools, Go, Rust, Ruby, Neovim, Helix, jj, Zig, bat)
+1. **Direct GitHub releases** - Preferred for tools with prebuilt binaries not yet managed by Nix
+2. **Nix flake profile** - Preferred for shared language runtimes/toolchains and base utilities managed in dotfiles (currently base utilities, Node + TypeScript tools, Go, Rust, Ruby, Neovim, Helix, jj, gh, Zig, bat)
 3. **Package managers** - Only when no prebuilt binaries or Nix packages fit (system tools via apt/pacman, GUI apps via brew casks)
 
 Homebrew is installed lazily in Phase 3 of `install-local`, only when needed for brew-dependent tools.
