@@ -35,7 +35,7 @@ See [references/tool-template.md](references/tool-template.md) for the install s
 | Zsh | `zsh/` | `~/.zshrc`, `~/.zsh/` | Yes (`install.zsh`) |
 | Git | `git/` | `~/.gitconfig` | Yes |
 | Ghostty | `ghostty/` | `~/.config/ghostty` | No |
-| Helix | `helix/` | `~/.config/helix` | Yes |
+| Helix | `helix/` | `~/.config/helix` | Yes (binary from Nix + config symlinks) |
 | Whisper | `whisper/` | N/A | Yes (macOS/Arch only) |
 | Skills | `skills/` | `~/.claude/skills/`, `~/.pi/agent/skills/` | Yes |
 | Rust | `rust/` | N/A | Yes (Nix flake: rustc, cargo, rustfmt, clippy, rust-analyzer) |
@@ -115,8 +115,8 @@ This uses `gh cs cp` to transfer a patch file, authenticating through GitHub's C
 
 ### Installation Preference Hierarchy
 
-1. **Direct GitHub releases** - Preferred for tools with prebuilt binaries not yet managed by Nix (jj, gh, helix)
-2. **Nix flake profile** - Preferred for shared language runtimes/toolchains and base utilities managed in dotfiles (currently base utilities, Node + TypeScript tools, Go, Rust, Ruby, Neovim, Zig, bat)
+1. **Direct GitHub releases** - Preferred for tools with prebuilt binaries not yet managed by Nix (jj, gh)
+2. **Nix flake profile** - Preferred for shared language runtimes/toolchains and base utilities managed in dotfiles (currently base utilities, Node + TypeScript tools, Go, Rust, Ruby, Neovim, Helix, Zig, bat)
 3. **Package managers** - Only when no prebuilt binaries or Nix packages fit (system tools via apt/pacman, GUI apps via brew casks)
 
 Homebrew is installed lazily in Phase 3 of `install-local`, only when needed for brew-dependent tools.

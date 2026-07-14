@@ -50,7 +50,7 @@ It is configured with:
 
 ## Nix adoption (Phase 1)
 
-Base utilities, Node, Go, Rust, Ruby, Neovim, Zig, and bat are managed by the dotfiles Nix flake (`nix/flake.nix`) as separate installables:
+Base utilities, Node, Go, Rust, Ruby, Neovim, Helix, Zig, and bat are managed by the dotfiles Nix flake (`nix/flake.nix`) as separate installables:
 
 - `base/install` → `path:~/dotfiles/nix#base`
   - `fzf` (required by fzf-lua; installed through Nix because distro packages can lag behind)
@@ -66,6 +66,9 @@ Base utilities, Node, Go, Rust, Ruby, Neovim, Zig, and bat are managed by the do
 - `nvim/install` → `path:~/dotfiles/nix#nvim`
   - `neovim`
   - config symlink, Lazy plugin sync, and Mason tooling are still managed by `nvim/install`
+- `helix/install` → `path:~/dotfiles/nix#helix`
+  - `helix` (`hx`)
+  - config symlinks are still managed by `helix/install`
 - `zig/install` → `path:~/dotfiles/nix#zig`
   - `zig` (from `mitchellh/zig-overlay` `master`, for Ziglings/dev builds), `zls`
 - `bat/install` → `path:~/dotfiles/nix#bat`

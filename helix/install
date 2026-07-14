@@ -2,154 +2,96 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-HELIX_INSTALL_DIR="$HOME/.local/helix"
 HELIX_CONFIG_DIR="$HOME/.config/helix"
+OLD_HELIX_INSTALL_DIR="$HOME/.local/helix"
+
+# shellcheck disable=SC1091
+source "$SCRIPT_DIR/../lib/nix.sh"
+
+bootstrap_helix_path() {
+    _source_nix_env || true
+    if [[ -d "$HOME/.nix-profile/bin" ]]; then
+        export PATH="$HOME/.nix-profile/bin:$PATH"
+    fi
+}
 
 check_installed() {
+    if ! nix_profile_has_entry "$NIX_HELIX_PROFILE_NAME"; then
+        return 1
+    fi
+
+    bootstrap_helix_path
     command -v hx &>/dev/null
 }
 
 check_configured() {
-    [[ -L "$HOME/.config/helix/config.toml" ]] && [[ -L "$HOME/.config/helix/languages.toml" ]]
+    [[ -L "$HELIX_CONFIG_DIR/config.toml" ]] \
+        && [[ -L "$HELIX_CONFIG_DIR/languages.toml" ]] \
+        && [[ -L "$HELIX_CONFIG_DIR/runtime" ]] \
+        && [[ -d "$HELIX_CONFIG_DIR/runtime" ]]
 }
 
-# Get the latest helix version from GitHub
-get_latest_version() {
-    curl -sL https://api.github.com/repos/helix-editor/helix/releases/latest | \
-        grep '"tag_name"' | cut -d'"' -f4
-}
-
-# Get currently installed version
 get_installed_version() {
+    bootstrap_helix_path
     if command -v hx &>/dev/null; then
-        hx --version 2>/dev/null | awk '{print $2}'
+        hx --version 2>/dev/null
     fi
 }
 
 install() {
-    if command -v hx &>/dev/null; then
-        echo "Helix already installed: $(hx --version)"
+    nix_profile_sync_helix
+}
+
+helix_runtime_path() {
+    bootstrap_helix_path
+
+    command -v strings &>/dev/null || return 1
+
+    local hx_path
+    hx_path="$(command -v hx 2>/dev/null)" || return 1
+
+    strings "$hx_path" 2>/dev/null | sed -n 's/^HELIX_RUNTIME=//p' | head -1
+}
+
+configure_runtime_symlink() {
+    local runtime_link="$HELIX_CONFIG_DIR/runtime"
+    local runtime_path=""
+    runtime_path="$(helix_runtime_path || true)"
+
+    if [[ -n "$runtime_path" && -d "$runtime_path" ]]; then
+        ln -sfn "$runtime_path" "$runtime_link"
         return 0
     fi
 
-    echo "Installing Helix..."
-
-    local os arch
-    case "$(uname -s)" in
-        Darwin) os="macos" ;;
-        Linux) os="linux" ;;
-        *) echo "Unsupported OS: $(uname -s)"; return 1 ;;
-    esac
-
-    case "$(uname -m)" in
-        x86_64) arch="x86_64" ;;
-        arm64|aarch64) arch="aarch64" ;;
-        *) echo "Unsupported architecture: $(uname -m)"; return 1 ;;
-    esac
-
-    # Get latest version
-    local version
-    version=$(get_latest_version)
-
-    if [[ -z "$version" ]]; then
-        echo "Error: Failed to fetch latest Helix version"
-        return 1
+    # Old direct-release installs linked runtime to ~/.local/helix/runtime.
+    # If we cannot determine the Nix runtime, at least remove stale old links.
+    if [[ -L "$runtime_link" ]]; then
+        local target
+        target="$(readlink "$runtime_link")"
+        if [[ "$target" == "$OLD_HELIX_INSTALL_DIR/runtime" || ! -e "$runtime_link" ]]; then
+            rm -f "$runtime_link"
+            echo "Removed stale Helix runtime symlink: $runtime_link"
+        fi
     fi
-
-    local url="https://github.com/helix-editor/helix/releases/download/${version}/helix-${version}-${arch}-${os}.tar.xz"
-
-    echo "Downloading Helix ${version} from $url..."
-    curl -fsSL "$url" -o /tmp/helix.tar.xz
-
-    if [[ ! -s /tmp/helix.tar.xz ]]; then
-        echo "Error: Failed to download Helix"
-        return 1
-    fi
-
-    # Clean up old installation if exists
-    [[ -d "$HELIX_INSTALL_DIR" ]] && rm -rf "$HELIX_INSTALL_DIR"
-
-    # Extract - helix tarball contains helix-VERSION/ directory with bin and runtime
-    mkdir -p "$HOME/.local"
-    tar -xJf /tmp/helix.tar.xz -C "$HOME/.local"
-    mv "$HOME/.local/helix-${version}-${arch}-${os}" "$HELIX_INSTALL_DIR"
-    rm /tmp/helix.tar.xz
-
-    # Symlink binary to ~/.local/bin
-    mkdir -p "$HOME/.local/bin"
-    ln -sf "$HELIX_INSTALL_DIR/hx" "$HOME/.local/bin/hx"
-
-    # Symlink runtime to config directory
-    mkdir -p "$HELIX_CONFIG_DIR"
-    ln -sfn "$HELIX_INSTALL_DIR/runtime" "$HELIX_CONFIG_DIR/runtime"
-
-    echo "Helix installed: $(hx --version)"
 }
 
 configure() {
     mkdir -p "$HELIX_CONFIG_DIR"
     ln -sf "$SCRIPT_DIR/config.toml" "$HELIX_CONFIG_DIR/config.toml"
     ln -sf "$SCRIPT_DIR/languages.toml" "$HELIX_CONFIG_DIR/languages.toml"
+    configure_runtime_symlink
 }
 
 apply() {
-    # Helix reads config on startup, nothing to reload
+    # Helix reads config on startup, nothing to reload.
     :
 }
 
 update() {
-    echo "Checking for Helix updates..."
-
-    local latest installed
-    latest=$(get_latest_version)
-    installed=$(get_installed_version)
-
-    if [[ -z "$latest" ]]; then
-        echo "Error: Failed to fetch latest Helix version"
-        return 1
-    fi
-
-    if [[ "$installed" == "$latest" ]]; then
-        echo "Helix is already up to date: $installed"
-        return 0
-    fi
-
-    echo "Updating Helix from ${installed:-'not installed'} to $latest..."
-
-    local os arch
-    case "$(uname -s)" in
-        Darwin) os="macos" ;;
-        Linux) os="linux" ;;
-        *) echo "Unsupported OS"; return 1 ;;
-    esac
-
-    case "$(uname -m)" in
-        x86_64) arch="x86_64" ;;
-        arm64|aarch64) arch="aarch64" ;;
-        *) echo "Unsupported architecture"; return 1 ;;
-    esac
-
-    local url="https://github.com/helix-editor/helix/releases/download/${latest}/helix-${latest}-${arch}-${os}.tar.xz"
-
-    curl -fsSL "$url" -o /tmp/helix.tar.xz
-
-    [[ -d "$HELIX_INSTALL_DIR" ]] && rm -rf "$HELIX_INSTALL_DIR"
-
-    mkdir -p "$HOME/.local"
-    tar -xJf /tmp/helix.tar.xz -C "$HOME/.local"
-    mv "$HOME/.local/helix-${latest}-${arch}-${os}" "$HELIX_INSTALL_DIR"
-    rm /tmp/helix.tar.xz
-
-    mkdir -p "$HOME/.local/bin"
-    ln -sf "$HELIX_INSTALL_DIR/hx" "$HOME/.local/bin/hx"
-
-    mkdir -p "$HELIX_CONFIG_DIR"
-    ln -sfn "$HELIX_INSTALL_DIR/runtime" "$HELIX_CONFIG_DIR/runtime"
-
-    echo "Helix updated: $(hx --version)"
+    nix_profile_sync_helix
+    configure
 }
 
-# Main (only run when executed directly, not when sourced)
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     install
     configure
