@@ -68,7 +68,7 @@ Base utilities, Node, Go, Rust, Ruby, Zig, and bat are managed by the dotfiles N
 - `bat/install` → `path:~/dotfiles/nix#bat`
   - `bat` (used by fzf-lua previews)
 
-Base utilities are exposed through `dot install base` and are also installed by the platform installers. Tool-specific install scripts stay scoped to that tool while still using one flake source.
+Base utilities are exposed through `dot install base` and are also installed by the platform installers. Tool-specific install scripts stay scoped to that tool while still using one flake source; for example, `tmux/install` ensures the Nix base profile exists and then manages `~/.tmux.conf`.
 
 `hunk` still installs via `npm install -g hunkdiff` because `hunkdiff` is not in nixpkgs.
 For `dot install hunk`, if the full `node` toolchain is not installed, dotfiles syncs a minimal `nodeRuntime` Nix package (node+npm only) first.
