@@ -13,6 +13,7 @@
 #   nix_profile_sync_ruby        - install/upgrade dotfiles flake #ruby package
 #   nix_profile_sync_nvim        - install/upgrade dotfiles flake #nvim package
 #   nix_profile_sync_helix       - install/upgrade dotfiles flake #helix package
+#   nix_profile_sync_jj          - install/upgrade dotfiles flake #jj package
 #   nix_profile_sync_zig         - install/upgrade dotfiles flake #zig package
 #   nix_profile_sync_bat         - install/upgrade dotfiles flake #bat package
 #
@@ -40,6 +41,7 @@ NIX_RUST_PROFILE_NAME="rust"
 NIX_RUBY_PROFILE_NAME="ruby"
 NIX_NVIM_PROFILE_NAME="nvim"
 NIX_HELIX_PROFILE_NAME="helix"
+NIX_JJ_PROFILE_NAME="jj"
 NIX_ZIG_PROFILE_NAME="zig"
 NIX_BAT_PROFILE_NAME="bat"
 
@@ -52,6 +54,7 @@ NIX_PROFILE_RUST_INSTALLABLE="path:$NIX_FLAKE_DIR#rust"
 NIX_PROFILE_RUBY_INSTALLABLE="path:$NIX_FLAKE_DIR#ruby"
 NIX_PROFILE_NVIM_INSTALLABLE="path:$NIX_FLAKE_DIR#nvim"
 NIX_PROFILE_HELIX_INSTALLABLE="path:$NIX_FLAKE_DIR#helix"
+NIX_PROFILE_JJ_INSTALLABLE="path:$NIX_FLAKE_DIR#jj"
 NIX_PROFILE_ZIG_INSTALLABLE="path:$NIX_FLAKE_DIR#zig"
 NIX_PROFILE_BAT_INSTALLABLE="path:$NIX_FLAKE_DIR#bat"
 
@@ -225,6 +228,10 @@ nix_profile_sync_nvim() {
 
 nix_profile_sync_helix() {
     nix_profile_sync_installable "$NIX_HELIX_PROFILE_NAME" "$NIX_PROFILE_HELIX_INSTALLABLE"
+}
+
+nix_profile_sync_jj() {
+    nix_profile_sync_installable "$NIX_JJ_PROFILE_NAME" "$NIX_PROFILE_JJ_INSTALLABLE"
 }
 
 nix_profile_sync_zig() {

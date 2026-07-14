@@ -2,146 +2,53 @@
 set -e
 
 # jj (Jujutsu) - A Git-compatible VCS
-# https://github.com/martinvonz/jj
+# https://github.com/jj-vcs/jj
 
-JJ_INSTALL_DIR="$HOME/.local/bin"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck disable=SC1091
+source "$SCRIPT_DIR/../lib/nix.sh"
+
+bootstrap_jj_path() {
+    _source_nix_env || true
+    if [[ -d "$HOME/.nix-profile/bin" ]]; then
+        export PATH="$HOME/.nix-profile/bin:$PATH"
+    fi
+}
 
 check_installed() {
+    if ! nix_profile_has_entry "$NIX_JJ_PROFILE_NAME"; then
+        return 1
+    fi
+
+    bootstrap_jj_path
     command -v jj &>/dev/null
 }
 
 check_configured() {
-    # jj uses git for auth, no dotfiles config needed
+    # jj uses git for auth, no dotfiles config needed.
     return 0
 }
 
-# Get the latest jj version from GitHub
-get_latest_version() {
-    curl -sL https://api.github.com/repos/martinvonz/jj/releases/latest | \
-        grep '"tag_name"' | cut -d'"' -f4
-}
-
-# Get currently installed version
 get_installed_version() {
+    bootstrap_jj_path
     if command -v jj &>/dev/null; then
-        jj --version 2>/dev/null | awk '{print "v" $2}'
+        jj --version 2>/dev/null
     fi
 }
 
 install() {
-    if command -v jj &>/dev/null; then
-        echo "jj already installed: $(jj --version)"
-        return 0
-    fi
-
-    echo "Installing jj..."
-
-    local os arch
-    case "$(uname -s)" in
-        Darwin) os="apple-darwin" ;;
-        Linux) os="unknown-linux-musl" ;;
-        *) echo "Unsupported OS: $(uname -s)"; return 1 ;;
-    esac
-
-    case "$(uname -m)" in
-        x86_64) arch="x86_64" ;;
-        arm64|aarch64) arch="aarch64" ;;
-        *) echo "Unsupported architecture: $(uname -m)"; return 1 ;;
-    esac
-
-    # Get latest version
-    local version
-    version=$(get_latest_version)
-
-    if [[ -z "$version" ]]; then
-        echo "Error: Failed to fetch latest jj version"
-        return 1
-    fi
-
-    local url="https://github.com/martinvonz/jj/releases/download/${version}/jj-${version}-${arch}-${os}.tar.gz"
-
-    echo "Downloading jj ${version} from $url..."
-    curl -fsSL "$url" -o /tmp/jj.tar.gz
-
-    if [[ ! -s /tmp/jj.tar.gz ]]; then
-        echo "Error: Failed to download jj"
-        return 1
-    fi
-
-    # Extract - jj tarball contains just the binary
-    tar -xzf /tmp/jj.tar.gz -C /tmp 2>/dev/null || true
-
-    if [[ ! -f /tmp/jj ]]; then
-        echo "Error: Failed to extract jj binary"
-        return 1
-    fi
-
-    # Install to ~/.local/bin
-    mkdir -p "$JJ_INSTALL_DIR"
-    mv /tmp/jj "$JJ_INSTALL_DIR/"
-    chmod +x "$JJ_INSTALL_DIR/jj"
-    rm -f /tmp/jj.tar.gz
-
-    echo "jj installed: $("$JJ_INSTALL_DIR/jj" --version)"
+    nix_profile_sync_jj
 }
 
 configure() {
-    # jj uses git for auth, so no additional config needed
-    # User can customize ~/.jjconfig.toml if desired
+    # jj uses git for auth, so no additional config needed.
     :
 }
 
 update() {
-    echo "Checking for jj updates..."
-
-    local latest installed
-    latest=$(get_latest_version)
-    installed=$(get_installed_version)
-
-    if [[ -z "$latest" ]]; then
-        echo "Error: Failed to fetch latest jj version"
-        return 1
-    fi
-
-    if [[ "$installed" == "$latest" ]]; then
-        echo "jj is already up to date: $installed"
-        return 0
-    fi
-
-    echo "Updating jj from ${installed:-'not installed'} to $latest..."
-
-    local os arch
-    case "$(uname -s)" in
-        Darwin) os="apple-darwin" ;;
-        Linux) os="unknown-linux-musl" ;;
-        *) echo "Unsupported OS"; return 1 ;;
-    esac
-
-    case "$(uname -m)" in
-        x86_64) arch="x86_64" ;;
-        arm64|aarch64) arch="aarch64" ;;
-        *) echo "Unsupported architecture"; return 1 ;;
-    esac
-
-    local url="https://github.com/martinvonz/jj/releases/download/${latest}/jj-${latest}-${arch}-${os}.tar.gz"
-
-    curl -fsSL "$url" -o /tmp/jj.tar.gz
-    tar -xzf /tmp/jj.tar.gz -C /tmp 2>/dev/null || true
-
-    if [[ ! -f /tmp/jj ]]; then
-        echo "Error: Failed to extract jj binary"
-        return 1
-    fi
-
-    mkdir -p "$JJ_INSTALL_DIR"
-    mv /tmp/jj "$JJ_INSTALL_DIR/"
-    chmod +x "$JJ_INSTALL_DIR/jj"
-    rm -f /tmp/jj.tar.gz
-
-    echo "jj updated: $("$JJ_INSTALL_DIR/jj" --version)"
+    nix_profile_sync_jj
 }
 
-# Main (only run when executed directly, not when sourced)
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     install
     configure
