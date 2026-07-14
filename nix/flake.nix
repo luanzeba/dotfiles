@@ -1,5 +1,5 @@
 {
-  description = "luan's dotfiles toolchain (nix profile: base + node + go + rust + ruby + zig + bat tooling)";
+  description = "luan's dotfiles toolchain (nix profile: base + node + go + rust + ruby + nvim + zig + bat tooling)";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
@@ -77,6 +77,13 @@
           ];
         };
 
+        nvimToolchain = pkgs.buildEnv {
+          name = "dotfiles-nvim-toolchain";
+          paths = with pkgs; [
+            neovim
+          ];
+        };
+
         zigToolchain = pkgs.buildEnv {
           name = "dotfiles-zig-toolchain";
           paths = [
@@ -99,6 +106,7 @@
           go = goToolchain;
           rust = rustToolchain;
           ruby = rubyToolchain;
+          nvim = nvimToolchain;
           zig = zigToolchain;
           bat = pkgs.bat;
 
@@ -106,7 +114,7 @@
           # Install: nix profile install ~/dotfiles/nix
           default = pkgs.buildEnv {
             name = "dotfiles-toolchain";
-            paths = [ baseTools nodeToolchain goToolchain rustToolchain rubyToolchain zigToolchain pkgs.bat ];
+            paths = [ baseTools nodeToolchain goToolchain rustToolchain rubyToolchain nvimToolchain zigToolchain pkgs.bat ];
           };
 
           # NOTE: `hunk`/`hunkdiff` is not in nixpkgs, so it stays as an

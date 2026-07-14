@@ -30,7 +30,7 @@ See [references/tool-template.md](references/tool-template.md) for the install s
 
 | Tool | Directory | Config Location | Has Install Script |
 |------|-----------|-----------------|-------------------|
-| Neovim | `nvim/` | `~/.config/nvim` | Yes |
+| Neovim | `nvim/` | `~/.config/nvim` | Yes (binary from Nix + config/plugin setup) |
 | Tmux | `tmux/` | `~/.tmux.conf` | Yes (binary from Nix base + config symlink) |
 | Zsh | `zsh/` | `~/.zshrc`, `~/.zsh/` | Yes (`install.zsh`) |
 | Git | `git/` | `~/.gitconfig` | Yes |
@@ -115,8 +115,8 @@ This uses `gh cs cp` to transfer a patch file, authenticating through GitHub's C
 
 ### Installation Preference Hierarchy
 
-1. **Direct GitHub releases** - Preferred for tools with prebuilt binaries (nvim, jj, gh, helix)
-2. **Nix flake profile** - Preferred for shared language runtimes/toolchains and base utilities managed in dotfiles (currently base utilities, Node + TypeScript tools, Go, Rust, Ruby, Zig, bat)
+1. **Direct GitHub releases** - Preferred for tools with prebuilt binaries not yet managed by Nix (jj, gh, helix)
+2. **Nix flake profile** - Preferred for shared language runtimes/toolchains and base utilities managed in dotfiles (currently base utilities, Node + TypeScript tools, Go, Rust, Ruby, Neovim, Zig, bat)
 3. **Package managers** - Only when no prebuilt binaries or Nix packages fit (system tools via apt/pacman, GUI apps via brew casks)
 
 Homebrew is installed lazily in Phase 3 of `install-local`, only when needed for brew-dependent tools.
@@ -126,7 +126,7 @@ Homebrew is installed lazily in Phase 3 of `install-local`, only when needed for
 | Purpose | Location | Example |
 |---------|----------|---------|
 | User binaries/scripts | `~/.local/bin/` | `dotfiles`, `dot` |
-| Tool extractions | `~/.local/<tool>/` | `~/.local/nvim/`, `~/.local/gh/` |
+| Tool extractions | `~/.local/<tool>/` | `~/.local/gh/`, `~/.local/helix/` |
 
 Scripts from `bin/` are symlinked individually to `~/.local/bin/`.
 

@@ -71,13 +71,13 @@ run_step "jj/install" bash "$SCRIPT_DIR/jj/install"
 run_step "gh/install" bash "$SCRIPT_DIR/gh/install"
 run_step "skills/install" bash "$SCRIPT_DIR/skills/install"
 
-# Phase 2: Editors (direct downloads)
+# Phase 2: Editors (Nix/direct downloads)
 log_info "Phase 2: Installing editors"
 if is_omarchy && [[ "${DOTFILES_INSTALL_NVIM_ON_OMARCHY:-0}" != "1" ]]; then
     log_info "Skipping nvim/install on Omarchy (preserving Omarchy Neovim setup)"
     log_info "Set DOTFILES_INSTALL_NVIM_ON_OMARCHY=1 to install dotfiles Neovim"
 else
-    run_step "nvim/install" zsh "$SCRIPT_DIR/nvim/install"
+    run_step "nvim/install" bash "$SCRIPT_DIR/nvim/install"
 fi
 run_step "helix/install" bash "$SCRIPT_DIR/helix/install"
 

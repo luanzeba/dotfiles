@@ -11,6 +11,7 @@
 #   nix_profile_sync_go          - install/upgrade dotfiles flake #go package
 #   nix_profile_sync_rust        - install/upgrade dotfiles flake #rust package
 #   nix_profile_sync_ruby        - install/upgrade dotfiles flake #ruby package
+#   nix_profile_sync_nvim        - install/upgrade dotfiles flake #nvim package
 #   nix_profile_sync_zig         - install/upgrade dotfiles flake #zig package
 #   nix_profile_sync_bat         - install/upgrade dotfiles flake #bat package
 #
@@ -36,6 +37,7 @@ NIX_NODE_RUNTIME_PROFILE_NAME="nodeRuntime"
 NIX_GO_PROFILE_NAME="go"
 NIX_RUST_PROFILE_NAME="rust"
 NIX_RUBY_PROFILE_NAME="ruby"
+NIX_NVIM_PROFILE_NAME="nvim"
 NIX_ZIG_PROFILE_NAME="zig"
 NIX_BAT_PROFILE_NAME="bat"
 
@@ -46,6 +48,7 @@ NIX_PROFILE_NODE_RUNTIME_INSTALLABLE="path:$NIX_FLAKE_DIR#nodeRuntime"
 NIX_PROFILE_GO_INSTALLABLE="path:$NIX_FLAKE_DIR#go"
 NIX_PROFILE_RUST_INSTALLABLE="path:$NIX_FLAKE_DIR#rust"
 NIX_PROFILE_RUBY_INSTALLABLE="path:$NIX_FLAKE_DIR#ruby"
+NIX_PROFILE_NVIM_INSTALLABLE="path:$NIX_FLAKE_DIR#nvim"
 NIX_PROFILE_ZIG_INSTALLABLE="path:$NIX_FLAKE_DIR#zig"
 NIX_PROFILE_BAT_INSTALLABLE="path:$NIX_FLAKE_DIR#bat"
 
@@ -211,6 +214,10 @@ nix_profile_sync_rust() {
 
 nix_profile_sync_ruby() {
     nix_profile_sync_installable "$NIX_RUBY_PROFILE_NAME" "$NIX_PROFILE_RUBY_INSTALLABLE"
+}
+
+nix_profile_sync_nvim() {
+    nix_profile_sync_installable "$NIX_NVIM_PROFILE_NAME" "$NIX_PROFILE_NVIM_INSTALLABLE"
 }
 
 nix_profile_sync_zig() {

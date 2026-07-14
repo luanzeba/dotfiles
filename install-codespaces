@@ -173,7 +173,7 @@ run_step "ensure zsh default" ensure_zsh_default
 run_step "zsh/install.zsh" zsh "$SCRIPT_DIR/zsh/install.zsh"
 
 log_info "Setting up editors"
-run_step "nvim/install" zsh "$SCRIPT_DIR/nvim/install"
+run_step "nvim/install" bash "$SCRIPT_DIR/nvim/install"
 run_step "helix/install" bash "$SCRIPT_DIR/helix/install"
 
 log_info "Codespaces-specific setup"
