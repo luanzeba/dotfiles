@@ -9,6 +9,7 @@ skills/
 ├── install              # Downloads external skills, symlinks all to global locations
 ├── skill-creator/       # Guide for creating new skills (forked from anthropics/skills)
 ├── dotfiles/            # Custom skill for managing this dotfiles repo
+├── ponytail*/           # Local copies of Ponytail's lazy/simplify coding skills
 ├── github-prs/          # Draft/open concise PRs with template + demo guidance
 │   ├── SKILL.md
 │   └── references/
@@ -40,6 +41,8 @@ The `install` script:
    - `~/.pi/agent/skills/<name>` (Pi)
 
 Note: `skill-creator` was originally from [anthropics/skills](https://github.com/anthropics/skills) but is now maintained locally with dotfiles-specific additions.
+
+The `ponytail*` skills are local, manually maintained copies of the skill files from [DietrichGebert/ponytail](https://github.com/DietrichGebert/ponytail). Only the skill prompts are vendored; upstream plugins, slash-command wrappers, hooks, MCP server, and other harness-specific files are intentionally omitted. Each copied skill records its upstream source commit for attribution and future update checks.
 
 ## Adding a New Skill
 
