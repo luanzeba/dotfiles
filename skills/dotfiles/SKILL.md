@@ -33,7 +33,7 @@ See [references/tool-template.md](references/tool-template.md) for the install s
 | Neovim | `nvim/` | `~/.config/nvim` | Yes (binary from Nix + config/plugin setup) |
 | Tmux | `tmux/` | `~/.tmux.conf` | Yes (binary from Nix base + config symlink) |
 | Zsh | `zsh/` | `~/.zshrc`, `~/.zsh/` | Yes (`install.zsh`) |
-| Git | `git/` | `~/.gitconfig` | Yes |
+| Git | `git/` | `~/.gitconfig` | Yes (binary from Nix + config symlinks) |
 | Ghostty | `ghostty/` | `~/.config/ghostty` | No |
 | Helix | `helix/` | `~/.config/helix` | Yes (binary from Nix + config symlinks) |
 | Whisper | `whisper/` | N/A | Yes (Nix flake: openai-whisper, opt-in) |
@@ -117,7 +117,7 @@ This uses `gh cs cp` to transfer a patch file, authenticating through GitHub's C
 ### Installation Preference Hierarchy
 
 1. **Direct GitHub releases** - Preferred for tools with prebuilt binaries not yet managed by Nix
-2. **Nix flake profile** - Preferred for shared language runtimes/toolchains and base utilities managed in dotfiles (currently base utilities, Node + TypeScript tools, Go, Rust, Ruby, Neovim, Helix, jj, gh, 1Password CLI, Whisper, Zig, bat)
+2. **Nix flake profile** - Preferred for shared language runtimes/toolchains and base utilities managed in dotfiles (currently base utilities, Node + TypeScript tools, Go, Rust, Ruby, Neovim, Helix, jj, gh, Git, 1Password CLI, Whisper, Zig, bat)
 3. **Package managers** - Only when no prebuilt binaries or Nix packages fit (system tools via apt/pacman, GUI apps via brew casks)
 
 Homebrew is installed lazily in Phase 3 of `install-local`, only when needed for brew-dependent tools.

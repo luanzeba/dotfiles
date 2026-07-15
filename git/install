@@ -2,21 +2,43 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck disable=SC1091
+source "$SCRIPT_DIR/../lib/nix.sh"
 
-install() {
-    # Git comes pre-installed on all target systems
-    :
+bootstrap_git_path() {
+    _source_nix_env || true
+    if [[ -d "$HOME/.nix-profile/bin" ]]; then
+        export PATH="$HOME/.nix-profile/bin:$PATH"
+    fi
 }
 
 check_installed() {
+    if ! nix_profile_has_entry "$NIX_GIT_PROFILE_NAME"; then
+        return 1
+    fi
+
+    bootstrap_git_path
     command -v git &>/dev/null
+}
+
+get_installed_version() {
+    bootstrap_git_path
+    if command -v git &>/dev/null; then
+        git --version 2>/dev/null
+    fi
 }
 
 check_configured() {
     [[ -L "$HOME/.gitconfig" ]]
 }
 
+install() {
+    nix_profile_sync_git
+}
+
 configure() {
+    bootstrap_git_path
+
     ln -sf "$SCRIPT_DIR/.gitconfig" ~/.gitconfig
     ln -sf "$SCRIPT_DIR/.gitignore_global" ~/.gitignore_global
     ln -sfn "$SCRIPT_DIR/.git_template" ~/.git_template
@@ -31,6 +53,10 @@ configure() {
 apply() {
     # Git config is read on each command, nothing to reload
     :
+}
+
+update() {
+    nix_profile_sync_git
 }
 
 # Main (only run when executed directly, not when sourced)

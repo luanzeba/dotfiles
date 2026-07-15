@@ -50,7 +50,7 @@ It is configured with:
 
 ## Nix adoption (Phase 1)
 
-Base utilities, Node, Go, Rust, Ruby, Neovim, Helix, jj, gh, 1Password CLI, Whisper, Zig, and bat are managed by the dotfiles Nix flake (`nix/flake.nix`) as separate installables:
+Base utilities, Node, Go, Rust, Ruby, Neovim, Helix, jj, gh, Git, 1Password CLI, Whisper, Zig, and bat are managed by the dotfiles Nix flake (`nix/flake.nix`) as separate installables:
 
 - `base/install` → `path:~/dotfiles/nix#base`
   - `fzf` (required by fzf-lua; installed through Nix because distro packages can lag behind)
@@ -74,6 +74,9 @@ Base utilities, Node, Go, Rust, Ruby, Neovim, Helix, jj, gh, 1Password CLI, Whis
 - `gh/install` → `path:~/dotfiles/nix#gh`
   - `gh`
   - extensions, `gh-not` config, and launchd agent are still managed by `gh/install`
+- `git/install` → `path:~/dotfiles/nix#git`
+  - `git`
+  - `~/.gitconfig`, `~/.gitignore_global`, and `~/.git_template` are still managed by `git/install`
 - `1password/install` → `path:~/dotfiles/nix#1password`
   - `1password-cli` (`op`; unfree package allowed explicitly for this package)
   - app integration is still configured in the 1Password app

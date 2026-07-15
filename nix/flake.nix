@@ -1,5 +1,5 @@
 {
-  description = "luan's dotfiles toolchain (nix profile: base + node + go + rust + ruby + nvim + helix + jj + gh + 1password + whisper + zig + bat tooling)";
+  description = "luan's dotfiles toolchain (nix profile: base + node + go + rust + ruby + nvim + helix + jj + gh + git + 1password + whisper + zig + bat tooling)";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
@@ -113,6 +113,13 @@
           ];
         };
 
+        gitToolchain = pkgs.buildEnv {
+          name = "dotfiles-git-toolchain";
+          paths = with pkgs; [
+            git
+          ];
+        };
+
         onePasswordCli =
           let
             unfreePkgs = pkgsAllowingUnfree [ "1password-cli" ];
@@ -164,6 +171,7 @@
           helix = helixToolchain;
           jj = jjToolchain;
           gh = ghToolchain;
+          git = gitToolchain;
           "1password" = onePasswordCli;
           whisper = whisperToolchain;
           zig = zigToolchain;
@@ -174,7 +182,7 @@
           # Excludes heavyweight opt-in tools such as Whisper.
           default = pkgs.buildEnv {
             name = "dotfiles-toolchain";
-            paths = [ baseTools nodeToolchain goToolchain rustToolchain rubyToolchain nvimToolchain helixToolchain jjToolchain ghToolchain onePasswordCli zigToolchain pkgs.bat ];
+            paths = [ baseTools nodeToolchain goToolchain rustToolchain rubyToolchain nvimToolchain helixToolchain jjToolchain ghToolchain gitToolchain onePasswordCli zigToolchain pkgs.bat ];
           };
 
           # NOTE: `hunk`/`hunkdiff` is not in nixpkgs, so it stays as an
