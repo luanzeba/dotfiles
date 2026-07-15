@@ -1,5 +1,5 @@
 {
-  description = "luan's dotfiles toolchain (nix profile: base + node + go + rust + ruby + nvim + helix + jj + gh + 1password + zig + bat tooling)";
+  description = "luan's dotfiles toolchain (nix profile: base + node + go + rust + ruby + nvim + helix + jj + gh + 1password + whisper + zig + bat tooling)";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
@@ -123,6 +123,21 @@
             ];
           };
 
+        whisperToolchain =
+          let
+            whisper = pkgs.openai-whisper.overridePythonAttrs (old: {
+              # The nixpkgs package's audio fixture test currently fails on
+              # local Darwin builds even though the CLI and patched ffmpeg
+              # runtime work.
+              disabledTests = (old.disabledTests or []) ++ [ "test_audio" ];
+            });
+          in pkgs.buildEnv {
+            name = "dotfiles-whisper-toolchain";
+            paths = [
+              whisper
+            ];
+          };
+
         zigToolchain = pkgs.buildEnv {
           name = "dotfiles-zig-toolchain";
           paths = [
@@ -150,11 +165,13 @@
           jj = jjToolchain;
           gh = ghToolchain;
           "1password" = onePasswordCli;
+          whisper = whisperToolchain;
           zig = zigToolchain;
           bat = pkgs.bat;
 
-          # Optional catch-all bundle for one-shot installs.
+          # Optional core bundle for one-shot installs.
           # Install: nix profile install ~/dotfiles/nix
+          # Excludes heavyweight opt-in tools such as Whisper.
           default = pkgs.buildEnv {
             name = "dotfiles-toolchain";
             paths = [ baseTools nodeToolchain goToolchain rustToolchain rubyToolchain nvimToolchain helixToolchain jjToolchain ghToolchain onePasswordCli zigToolchain pkgs.bat ];

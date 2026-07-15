@@ -6,10 +6,10 @@ Audio transcription using [OpenAI Whisper](https://github.com/openai/whisper).
 
 ```bash
 cd ~/dotfiles
-zsh whisper/install
+dot install whisper
 ```
 
-Supports macOS and Arch Linux only. Not installed automatically by the main `install` script.
+Whisper is installed from the dotfiles Nix flake (`path:~/dotfiles/nix#whisper`) and is intentionally opt-in because the Python/ML dependency closure is large.
 
 ## Usage
 
