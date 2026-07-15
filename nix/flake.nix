@@ -1,5 +1,5 @@
 {
-  description = "luan's dotfiles toolchain (nix profile: base + node + go + rust + ruby + nvim + helix + jj + gh + zig + bat tooling)";
+  description = "luan's dotfiles toolchain (nix profile: base + node + go + rust + ruby + nvim + helix + jj + gh + 1password + zig + bat tooling)";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
@@ -12,6 +12,14 @@
     flake-utils.lib.eachDefaultSystem (system:
       let
         pkgs = nixpkgs.legacyPackages.${system};
+
+        # Keep the default package set free-only. Packages that need unfree
+        # software must opt in explicitly with their allowed package names.
+        pkgsAllowingUnfree = allowedNames: import nixpkgs {
+          inherit system;
+          config.allowUnfreePredicate = pkg:
+            builtins.elem (nixpkgs.lib.getName pkg) allowedNames;
+        };
       in
       let
         nodeRuntime = pkgs.nodejs_22;
@@ -105,6 +113,16 @@
           ];
         };
 
+        onePasswordCli =
+          let
+            unfreePkgs = pkgsAllowingUnfree [ "1password-cli" ];
+          in pkgs.buildEnv {
+            name = "dotfiles-1password-cli";
+            paths = [
+              unfreePkgs._1password-cli
+            ];
+          };
+
         zigToolchain = pkgs.buildEnv {
           name = "dotfiles-zig-toolchain";
           paths = [
@@ -131,6 +149,7 @@
           helix = helixToolchain;
           jj = jjToolchain;
           gh = ghToolchain;
+          "1password" = onePasswordCli;
           zig = zigToolchain;
           bat = pkgs.bat;
 
@@ -138,7 +157,7 @@
           # Install: nix profile install ~/dotfiles/nix
           default = pkgs.buildEnv {
             name = "dotfiles-toolchain";
-            paths = [ baseTools nodeToolchain goToolchain rustToolchain rubyToolchain nvimToolchain helixToolchain jjToolchain ghToolchain zigToolchain pkgs.bat ];
+            paths = [ baseTools nodeToolchain goToolchain rustToolchain rubyToolchain nvimToolchain helixToolchain jjToolchain ghToolchain onePasswordCli zigToolchain pkgs.bat ];
           };
 
           # NOTE: `hunk`/`hunkdiff` is not in nixpkgs, so it stays as an

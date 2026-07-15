@@ -2,38 +2,45 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "$SCRIPT_DIR/../lib/common.sh"
+# shellcheck disable=SC1091
+source "$SCRIPT_DIR/../lib/nix.sh"
+
+bootstrap_onepassword_path() {
+    _source_nix_env || true
+    if [[ -d "$HOME/.nix-profile/bin" ]]; then
+        export PATH="$HOME/.nix-profile/bin:$PATH"
+    fi
+}
 
 check_installed() {
+    if ! nix_profile_has_entry "$NIX_ONEPASSWORD_PROFILE_NAME"; then
+        return 1
+    fi
+
+    bootstrap_onepassword_path
     command -v op &>/dev/null
 }
 
 check_configured() {
-    # 1Password config is done in the app, not via dotfiles
+    # 1Password app integration is configured inside the app, not via dotfiles.
     return 0
 }
 
-install() {
-    if check_installed; then
-        echo "1Password CLI already installed"
-        return 0
-    fi
-
-    if is_macos; then
-        echo "Installing 1Password CLI via Homebrew..."
-        brew install --cask 1password-cli
-    elif is_omarchy || is_arch; then
-        echo "Installing 1Password CLI via yay..."
-        yay -S --noconfirm 1password-cli
-    else
-        echo "Unsupported platform for 1Password CLI installation"
-        echo "Please install manually: https://developer.1password.com/docs/cli/get-started/"
-        return 1
+get_installed_version() {
+    bootstrap_onepassword_path
+    if command -v op &>/dev/null; then
+        op --version 2>/dev/null | awk '{print "op " $1}'
     fi
 }
 
+install() {
+    nix_profile_sync_onepassword
+}
+
 configure() {
-    if ! check_installed; then
+    bootstrap_onepassword_path
+
+    if ! command -v op &>/dev/null; then
         echo "1Password CLI not installed, skipping configuration"
         return 0
     fi
@@ -46,7 +53,10 @@ configure() {
     echo ""
 }
 
-# Main (only run when executed directly, not when sourced)
+update() {
+    nix_profile_sync_onepassword
+}
+
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     install
     configure
