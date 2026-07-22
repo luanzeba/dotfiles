@@ -1,0 +1,56 @@
+{
+  "$schema": "https://vicinae.com/schemas/config.json",
+
+  // Keep this personal launcher local by default.
+  "telemetry": {
+    "system_info": false
+  },
+
+  // Keep the launcher predictable: every invocation starts from Root Search.
+  "pop_to_root_on_close": true,
+
+  // File search remains available as a dedicated command. We can add file
+  // results to Root Search later if they prove useful rather than noisy.
+  "search_files_in_root": false,
+
+  // Match the currently selected Everforest Omarchy palette. The teal selected
+  // row is intentionally high contrast for keyboard and mouse navigation.
+  "theme": {
+    "dark": {
+      "name": "everforest"
+    }
+  },
+
+  // Needed for clipboard-history paste and snippet expansion. On non-NixOS
+  // Linux, vicinae/setup-input-server installs the privileged helper.
+  "input_server": {
+    "enabled": true
+  },
+
+  // Vicinae otherwise defaults this command to Copy when it starts before the
+  // input helper reports ready. Keep Copy in its Action Panel, but make Enter
+  // paste the selected history item into the previously focused application.
+  "providers": {
+    "clipboard": {
+      "entrypoints": {
+        "history": {
+          "preferences": {
+            "defaultAction": "paste"
+          }
+        }
+      }
+    }
+  },
+
+  "launcher_window": {
+    "layer_shell": {
+      "enabled": true,
+
+      // Vicinae documents that exclusive interactivity can break Action Panel
+      // mouse behavior on Hyprland. On-demand still focuses the launcher when
+      // toggled while avoiding that issue.
+      "keyboard_interactivity": "on_demand",
+      "layer": "top"
+    }
+  }
+}

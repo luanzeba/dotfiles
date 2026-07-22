@@ -20,6 +20,7 @@
 #   nix_profile_sync_whisper     - install/upgrade dotfiles flake #whisper package
 #   nix_profile_sync_zig         - install/upgrade dotfiles flake #zig package
 #   nix_profile_sync_bat         - install/upgrade dotfiles flake #bat package
+#   nix_profile_sync_vicinae     - install/upgrade dotfiles flake #vicinae package
 #
 
 # Locate dotfiles dir without requiring common.sh to be sourced first.
@@ -52,6 +53,7 @@ NIX_ONEPASSWORD_PROFILE_NAME="1password"
 NIX_WHISPER_PROFILE_NAME="whisper"
 NIX_ZIG_PROFILE_NAME="zig"
 NIX_BAT_PROFILE_NAME="bat"
+NIX_VICINAE_PROFILE_NAME="vicinae"
 
 # Installables exported by nix/flake.nix.
 NIX_PROFILE_BASE_INSTALLABLE="path:$NIX_FLAKE_DIR#base"
@@ -69,6 +71,7 @@ NIX_PROFILE_ONEPASSWORD_INSTALLABLE="path:$NIX_FLAKE_DIR#1password"
 NIX_PROFILE_WHISPER_INSTALLABLE="path:$NIX_FLAKE_DIR#whisper"
 NIX_PROFILE_ZIG_INSTALLABLE="path:$NIX_FLAKE_DIR#zig"
 NIX_PROFILE_BAT_INSTALLABLE="path:$NIX_FLAKE_DIR#bat"
+NIX_PROFILE_VICINAE_INSTALLABLE="path:$NIX_FLAKE_DIR#vicinae"
 
 # Source nix into PATH for the current shell, if installed.
 _source_nix_env() {
@@ -268,4 +271,8 @@ nix_profile_sync_zig() {
 
 nix_profile_sync_bat() {
     nix_profile_sync_installable "$NIX_BAT_PROFILE_NAME" "$NIX_PROFILE_BAT_INSTALLABLE"
+}
+
+nix_profile_sync_vicinae() {
+    nix_profile_sync_installable "$NIX_VICINAE_PROFILE_NAME" "$NIX_PROFILE_VICINAE_INSTALLABLE"
 }

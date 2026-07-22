@@ -1,14 +1,19 @@
 {
-  description = "luan's dotfiles toolchain (nix profile: base + node + go + rust + ruby + nvim + helix + jj + gh + git + 1password + whisper + zig + bat tooling)";
+  description = "luan's dotfiles toolchain (nix profile: base + node + go + rust + ruby + nvim + helix + jj + gh + git + 1password + whisper + zig + bat + vicinae tooling)";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
     flake-utils.url = "github:numtide/flake-utils";
     zig.url = "github:mitchellh/zig-overlay";
     zls.url = "github:zigtools/zls";
+    vicinae.url = "github:vicinaehq/vicinae";
+    vicinaeExtensions = {
+      url = "github:vicinaehq/extensions";
+      inputs.vicinae.follows = "vicinae";
+    };
   };
 
-  outputs = { nixpkgs, flake-utils, zig, zls, ... }:
+  outputs = { nixpkgs, flake-utils, zig, zls, vicinae, vicinaeExtensions, ... }:
     flake-utils.lib.eachDefaultSystem (system:
       let
         pkgs = nixpkgs.legacyPackages.${system};
@@ -156,6 +161,27 @@
             (zls.packages.${system}.default)
           ];
         };
+
+        vicinaeExtensionBundle = pkgs.runCommand "dotfiles-vicinae-extensions" {} ''
+          mkdir -p "$out/share/vicinae/extensions"
+          ln -s ${vicinaeExtensions.packages.${system}."omarchy-menu"} \
+            "$out/share/vicinae/extensions/omarchy-menu"
+          ln -s ${vicinaeExtensions.packages.${system}.pulseaudio} \
+            "$out/share/vicinae/extensions/pulseaudio"
+        '';
+
+        vicinaeToolchain = pkgs.symlinkJoin {
+          name = "dotfiles-vicinae";
+          paths = [
+            vicinae.packages.${system}.default
+            vicinaeExtensionBundle
+          ];
+          nativeBuildInputs = [ pkgs.makeWrapper ];
+          postBuild = ''
+            wrapProgram "$out/bin/vicinae" \
+              --prefix XDG_DATA_DIRS : "$out/share"
+          '';
+        };
       in {
         packages = {
           # Core utilities installed by platform installers.
@@ -187,6 +213,9 @@
 
           # NOTE: `hunk`/`hunkdiff` is not in nixpkgs, so it stays as an
           # `npm install -g hunkdiff` in hunk/install (using nix-provided npm).
+        } // pkgs.lib.optionalAttrs pkgs.stdenv.isLinux {
+          # Vicinae is a Linux desktop application.
+          vicinae = vicinaeToolchain;
         };
       });
 }

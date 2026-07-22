@@ -50,7 +50,7 @@ It is configured with:
 
 ## Nix adoption (Phase 1)
 
-Base utilities, Node, Go, Rust, Ruby, Neovim, Helix, jj, gh, Git, 1Password CLI, Whisper, Zig, and bat are managed by the dotfiles Nix flake (`nix/flake.nix`) as separate installables:
+Base utilities, Node, Go, Rust, Ruby, Neovim, Helix, jj, gh, Git, 1Password CLI, Whisper, Zig, bat, and Vicinae are managed by the dotfiles Nix flake (`nix/flake.nix`) as separate installables:
 
 - `base/install` → `path:~/dotfiles/nix#base`
   - `fzf` (required by fzf-lua; installed through Nix because distro packages can lag behind)
@@ -87,6 +87,10 @@ Base utilities, Node, Go, Rust, Ruby, Neovim, Helix, jj, gh, Git, 1Password CLI,
   - `zig` (from `mitchellh/zig-overlay` `master`, for Ziglings/dev builds), `zls`
 - `bat/install` → `path:~/dotfiles/nix#bat`
   - `bat` (used by fzf-lua previews)
+- `vicinae/install` → `path:~/dotfiles/nix#vicinae` (Arch desktop only)
+  - Vicinae from its upstream flake, plus the community Omarchy Menu and PulseAudio extensions
+  - stable imported settings, mutable GUI settings, personal script commands, and a user service
+  - clipboard-history paste needs the one-time privileged setup documented in `vicinae/README.md`
 
 Base utilities are exposed through `dot install base` and are also installed by the platform installers. Tool-specific install scripts stay scoped to that tool while still using one flake source; for example, `tmux/install` ensures the Nix base profile exists and then manages `~/.tmux.conf`.
 

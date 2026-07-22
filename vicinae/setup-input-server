@@ -1,0 +1,90 @@
+#!/bin/bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+NON_INTERACTIVE=false
+
+if [[ "${1:-}" == "--non-interactive" ]]; then
+    NON_INTERACTIVE=true
+fi
+
+if [[ "$(uname -s)" != "Linux" ]]; then
+    echo "Vicinae input-server setup is only needed on Linux"
+    exit 0
+fi
+
+if [[ -d "$HOME/.nix-profile/bin" ]]; then
+    export PATH="$HOME/.nix-profile/bin:$PATH"
+fi
+
+vicinae_bin="$(command -v vicinae 2>/dev/null || true)"
+if [[ -z "$vicinae_bin" ]]; then
+    echo "Vicinae is not installed in the current Nix profile" >&2
+    exit 1
+fi
+
+vicinae_bin="$(readlink -f "$vicinae_bin")"
+vicinae_root="${vicinae_bin%/bin/vicinae}"
+# The public Nix path is a launcher which execs this binary. File capabilities
+# are dropped on that second exec, so grant the capability to the real helper.
+source_helper="$vicinae_root/libexec/vicinae/.vicinae-input-server-wrapped"
+destination_helper="/usr/local/libexec/vicinae-input-server"
+gc_root="$HOME/.local/state/nix/gcroots/vicinae-input-server"
+
+if [[ ! -x "$source_helper" ]]; then
+    echo "Vicinae input helper not found: $source_helper" >&2
+    exit 1
+fi
+
+if [[ -x /run/wrappers/bin/vicinae-input-server ]] \
+    && cmp -s "$source_helper" "$destination_helper" \
+    && getcap "$destination_helper" | grep -q 'cap_dac_override=ep'; then
+    exit 0
+fi
+
+if [[ "$NON_INTERACTIVE" == "true" ]] && ! sudo -n true 2>/dev/null; then
+    echo "Vicinae input helper still needs privileged setup."
+    echo "Run interactively: $SCRIPT_DIR/setup-input-server"
+    exit 0
+fi
+
+run_root() {
+    if [[ $EUID -eq 0 ]]; then
+        "$@"
+    elif [[ "$NON_INTERACTIVE" == "true" ]]; then
+        sudo -n "$@"
+    else
+        sudo "$@"
+    fi
+}
+
+# The copied Nix wrapper contains absolute store references. Keep its complete
+# package closure alive even after profile upgrades until this setup is rerun.
+mkdir -p "$(dirname "$gc_root")"
+rm -f "$gc_root"
+nix-store --add-root "$gc_root" --realise "$vicinae_root" >/dev/null
+
+run_root install -Dm0755 "$source_helper" "$destination_helper"
+run_root setcap cap_dac_override=ep "$destination_helper"
+run_root install -Dm0644 \
+    "$SCRIPT_DIR/vicinae.modules-load.conf" \
+    /etc/modules-load.d/vicinae.conf
+run_root install -Dm0644 \
+    "$SCRIPT_DIR/vicinae-input-server.tmpfiles.conf" \
+    /etc/tmpfiles.d/vicinae-input-server.conf
+run_root modprobe uinput
+run_root systemd-tmpfiles --create /etc/tmpfiles.d/vicinae-input-server.conf
+
+if [[ ! -x /run/wrappers/bin/vicinae-input-server ]]; then
+    echo "Vicinae input helper wrapper was not created" >&2
+    exit 1
+fi
+
+if ! getcap "$destination_helper" | grep -q 'cap_dac_override=ep'; then
+    echo "Vicinae input helper is missing cap_dac_override" >&2
+    exit 1
+fi
+
+systemctl --user try-restart vicinae.service 2>/dev/null || true
+
+echo "Vicinae input helper configured for clipboard paste and snippets"

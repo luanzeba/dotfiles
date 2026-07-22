@@ -1,0 +1,19 @@
+[Unit]
+Description=Vicinae Launcher Daemon
+Documentation=https://docs.vicinae.com
+After=graphical-session.target
+Requires=dbus.socket
+PartOf=graphical-session.target
+
+[Service]
+Type=simple
+# Nix GUI applications on non-NixOS do not automatically see the host Mesa
+# driver. Vicinae's small Qt Quick UI works reliably with software rendering.
+Environment=QT_QUICK_BACKEND=software
+ExecStart=%h/.nix-profile/bin/vicinae server --replace
+Restart=on-failure
+RestartSec=5
+KillMode=process
+
+[Install]
+WantedBy=graphical-session.target

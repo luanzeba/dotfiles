@@ -1,0 +1,12 @@
+[
+  {
+    "id": "sct_dotfiles_github_search",
+    "name": "Search GitHub",
+    "icon": "icon://builtin/github",
+    "url": "https://github.com/search?q={argument name=\"Query\"}",
+    "app": "chromium",
+    "openCount": 0,
+    "createdAt": 0,
+    "updatedAt": 0
+  }
+]

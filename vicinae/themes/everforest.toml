@@ -1,0 +1,24 @@
+[meta]
+name = "Everforest"
+description = "Current Omarchy Everforest palette with a high-contrast selection"
+variant = "dark"
+inherits = "vicinae-dark"
+
+[colors.core]
+accent = "#7fbbb3"
+accent_foreground = "#2d353b"
+background = "#2d353b"
+foreground = "#d3c6aa"
+secondary_background = "#343f44"
+border = "#475258"
+
+# ponytail: software rendering cannot draw Vicinae's custom row backgrounds;
+# use foreground cues until host GPU rendering works.
+[colors.list.item.hover]
+foreground = "#a7c080"
+secondary_foreground = "#a7c080"
+
+[colors.list.item.selection]
+background = "#7fbbb3"
+foreground = "#7fbbb3"
+secondary_foreground = "#d3c6aa"
