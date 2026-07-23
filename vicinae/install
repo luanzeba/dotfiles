@@ -13,6 +13,8 @@ VICINAE_EVERFOREST_THEME_LINK="$VICINAE_THEMES_DIR/everforest.toml"
 VICINAE_APPLICATIONS_DIR="$DATA_HOME/applications"
 VICINAE_SHORTCUTS_FILE="$DATA_HOME/vicinae/shortcuts/shortcuts.json"
 VICINAE_SERVICE_LINK="$HOME/.config/systemd/user/vicinae.service"
+HYPRLAND_CONFIG="$CONFIG_HOME/hypr/hyprland.conf"
+VICINAE_HYPRLAND_LINK="$CONFIG_HOME/hypr/vicinae.conf"
 
 # shellcheck disable=SC1091
 source "$SCRIPT_DIR/../lib/nix.sh"
@@ -42,6 +44,14 @@ input_helper_current() {
         && getcap /usr/local/libexec/vicinae-input-server | grep -q 'cap_dac_override=ep'
 }
 
+hyprland_bindings_configured() {
+    [[ ! -f "$HYPRLAND_CONFIG" ]] && return 0
+
+    [[ -L "$VICINAE_HYPRLAND_LINK" ]] \
+        && [[ "$(readlink -f "$VICINAE_HYPRLAND_LINK")" == "$SCRIPT_DIR/hyprland.conf" ]] \
+        && grep -Fqx "source = $VICINAE_HYPRLAND_LINK" "$HYPRLAND_CONFIG"
+}
+
 check_installed() {
     supported_platform || return 0
     nix_profile_has_entry "$NIX_VICINAE_PROFILE_NAME" || return 1
@@ -58,7 +68,8 @@ check_configured() {
         && [[ -f "$VICINAE_APPLICATIONS_DIR/vicinae.desktop" ]] \
         && [[ -f "$VICINAE_APPLICATIONS_DIR/vicinae-url-handler.desktop" ]] \
         && [[ -L "$VICINAE_SERVICE_LINK" ]] \
-        && input_helper_current
+        && input_helper_current \
+        && hyprland_bindings_configured
 }
 
 get_installed_version() {
@@ -191,6 +202,26 @@ configure_service() {
     systemctl --user enable --now vicinae.service
 }
 
+configure_hyprland_bindings() {
+    # Skip non-Hyprland Arch installations. On Hyprland, load this fragment
+    # after the user's bindings so it deliberately overrides Omarchy defaults.
+    [[ -f "$HYPRLAND_CONFIG" ]] || return 0
+
+    mkdir -p "$(dirname "$VICINAE_HYPRLAND_LINK")"
+    backup_real_path "$VICINAE_HYPRLAND_LINK"
+    ln -s "$SCRIPT_DIR/hyprland.conf" "$VICINAE_HYPRLAND_LINK"
+
+    local source_line="source = $VICINAE_HYPRLAND_LINK"
+    if ! grep -Fqx "$source_line" "$HYPRLAND_CONFIG"; then
+        cp "$HYPRLAND_CONFIG" "$HYPRLAND_CONFIG.backup.$(date +%s)"
+        {
+            echo
+            echo "# Managed by dotfiles/vicinae"
+            echo "$source_line"
+        } >>"$HYPRLAND_CONFIG"
+    fi
+}
+
 configure() {
     supported_platform || return 0
 
@@ -202,6 +233,7 @@ configure() {
     configure_theme
     configure_desktop_entries
     seed_initial_shortcuts
+    configure_hyprland_bindings
 
     chmod +x "$SCRIPT_DIR/scripts/"*.sh "$SCRIPT_DIR/setup-input-server"
 

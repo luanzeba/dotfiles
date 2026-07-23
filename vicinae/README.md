@@ -21,6 +21,7 @@ The installer:
 - registers Vicinae's desktop entries and URL handlers
 - disables anonymous system-info telemetry
 - enables the `vicinae.service` user service
+- on Hyprland, links and sources `hyprland.conf` after personal bindings
 
 ## Clipboard paste helper on Arch
 
@@ -53,11 +54,12 @@ The user service forces Qt Quick software rendering because Nix GUI packages on
 non-NixOS do not automatically see the host Mesa driver. This avoids an OpenGL
 startup crash while keeping the host graphics stack untouched.
 
-The existing Walker and Omarchy keybindings remain unchanged until Vicinae has
-passed the initial launcher and clipboard tests. During the trial, launch it
-from a terminal:
+## Hyprland bindings
 
-```bash
-vicinae toggle
-vicinae cmd launch clipboard:history
-```
+On a Hyprland installation, the installer links `hyprland.conf` into
+`~/.config/hypr/vicinae.conf` and sources it after personal bindings. It sets:
+
+- `Super+Space`: toggle Vicinae (replacing Omarchy's Walker launcher binding)
+- `Super+Return`: create a new Ghostty through Vicinae
+
+`Super+Alt+Space` remains Omarchy Menu.
