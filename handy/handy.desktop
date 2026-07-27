@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Handy
+Comment=Offline speech-to-text
+Exec=handy
+Icon=audio-input-microphone
+Categories=Utility;Accessibility;
+StartupNotify=true
+StartupWMClass=Handy

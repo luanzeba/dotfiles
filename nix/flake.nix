@@ -1,5 +1,5 @@
 {
-  description = "luan's dotfiles toolchain (nix profile: base + node + go + rust + ruby + nvim + helix + jj + gh + git + 1password + whisper + zig + bat + vicinae tooling)";
+  description = "luan's dotfiles toolchain (nix profile: base + node + go + rust + ruby + nvim + helix + jj + gh + git + 1password + whisper + zig + bat + vicinae + handy tooling)";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
@@ -7,13 +7,15 @@
     zig.url = "github:mitchellh/zig-overlay";
     zls.url = "github:zigtools/zls";
     vicinae.url = "github:vicinaehq/vicinae";
+    handy.url = "github:cjpais/Handy";
+    nixgl.url = "github:nix-community/nixGL";
     vicinaeExtensions = {
       url = "github:vicinaehq/extensions";
       inputs.vicinae.follows = "vicinae";
     };
   };
 
-  outputs = { nixpkgs, flake-utils, zig, zls, vicinae, vicinaeExtensions, ... }:
+  outputs = { nixpkgs, flake-utils, zig, zls, vicinae, handy, nixgl, vicinaeExtensions, ... }:
     flake-utils.lib.eachDefaultSystem (system:
       let
         pkgs = nixpkgs.legacyPackages.${system};
@@ -182,6 +184,21 @@
               --prefix XDG_DATA_DIRS : "$out/share"
           '';
         };
+
+        handyToolchain = pkgs.runCommand "dotfiles-handy" {
+          nativeBuildInputs = [ pkgs.makeWrapper ];
+        } ''
+          mkdir -p "$out/bin"
+          for path in ${handy.packages.${system}.default}/*; do
+            [[ "$path" == */bin ]] || ln -s "$path" "$out/"
+          done
+
+          # NixGL supplies Mesa to the Nix WebKit process on non-NixOS hosts.
+          # wtype is on PATH for Handy's direct Wayland text insertion.
+          makeWrapper ${nixgl.packages.${system}.nixGLIntel}/bin/nixGLIntel "$out/bin/handy" \
+            --prefix PATH : "${pkgs.wtype}/bin" \
+            --add-flags "${handy.packages.${system}.default}/bin/handy"
+        '';
       in {
         packages = {
           # Core utilities installed by platform installers.
@@ -214,8 +231,9 @@
           # NOTE: `hunk`/`hunkdiff` is not in nixpkgs, so it stays as an
           # `npm install -g hunkdiff` in hunk/install (using nix-provided npm).
         } // pkgs.lib.optionalAttrs pkgs.stdenv.isLinux {
-          # Vicinae is a Linux desktop application.
+          # Vicinae and Handy are Linux desktop applications.
           vicinae = vicinaeToolchain;
+          handy = handyToolchain;
         };
       });
 }

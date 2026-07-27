@@ -50,7 +50,7 @@ It is configured with:
 
 ## Nix adoption (Phase 1)
 
-Base utilities, Node, Go, Rust, Ruby, Neovim, Helix, jj, gh, Git, 1Password CLI, Whisper, Zig, bat, and Vicinae are managed by the dotfiles Nix flake (`nix/flake.nix`) as separate installables:
+Base utilities, Node, Go, Rust, Ruby, Neovim, Helix, jj, gh, Git, 1Password CLI, Whisper, Zig, bat, Vicinae, and Handy are managed by the dotfiles Nix flake (`nix/flake.nix`) as separate installables:
 
 - `base/install` → `path:~/dotfiles/nix#base`
   - `fzf` (required by fzf-lua; installed through Nix because distro packages can lag behind)
@@ -91,6 +91,9 @@ Base utilities, Node, Go, Rust, Ruby, Neovim, Helix, jj, gh, Git, 1Password CLI,
   - Vicinae from its upstream flake, plus the community Omarchy Menu and PulseAudio extensions
   - stable imported settings, mutable GUI settings, personal script commands, and a user service
   - clipboard-history paste needs the one-time privileged setup documented in `vicinae/README.md`
+- `handy/install` → `path:~/dotfiles/nix#handy` (Arch + Hyprland only)
+  - Handy from its upstream flake, wrapped with NixGL and `wtype` for direct Wayland text input
+  - an autostart user service and Omarchy's existing dictation bindings; initial model selection is manual
 
 Base utilities are exposed through `dot install base` and are also installed by the platform installers. Tool-specific install scripts stay scoped to that tool while still using one flake source; for example, `tmux/install` ensures the Nix base profile exists and then manages `~/.tmux.conf`.
 

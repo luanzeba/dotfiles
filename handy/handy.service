@@ -1,0 +1,15 @@
+[Unit]
+Description=Handy offline speech-to-text
+Documentation=https://handy.computer
+After=graphical-session.target
+Requires=dbus.socket
+PartOf=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=%h/.nix-profile/bin/handy --start-hidden
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=graphical-session.target

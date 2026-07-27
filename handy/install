@@ -1,0 +1,123 @@
+#!/bin/bash
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
+DATA_HOME="${XDG_DATA_HOME:-$HOME/.local/share}"
+HYPRLAND_CONFIG="$CONFIG_HOME/hypr/hyprland.conf"
+HANDY_HYPRLAND_LINK="$CONFIG_HOME/hypr/handy.conf"
+HANDY_SERVICE_LINK="$CONFIG_HOME/systemd/user/handy.service"
+HANDY_DESKTOP_ENTRY="$DATA_HOME/applications/handy.desktop"
+
+# shellcheck disable=SC1091
+source "$SCRIPT_DIR/../lib/nix.sh"
+
+supported_platform() {
+    is_arch
+}
+
+bootstrap_handy_path() {
+    _source_nix_env || true
+    export PATH="$HOME/.nix-profile/bin:$PATH"
+}
+
+hyprland_bindings_configured() {
+    [[ ! -f "$HYPRLAND_CONFIG" ]] && return 0
+
+    [[ -L "$HANDY_HYPRLAND_LINK" ]] \
+        && [[ "$(readlink -f "$HANDY_HYPRLAND_LINK")" == "$SCRIPT_DIR/hyprland.conf" ]] \
+        && grep -Fqx "source = $HANDY_HYPRLAND_LINK" "$HYPRLAND_CONFIG"
+}
+
+check_installed() {
+    supported_platform || return 0
+    nix_profile_has_entry "$NIX_HANDY_PROFILE_NAME" || return 1
+    bootstrap_handy_path
+    command -v handy &>/dev/null
+}
+
+check_configured() {
+    supported_platform || return 0
+    [[ -L "$HANDY_SERVICE_LINK" ]] \
+        && [[ -f "$HANDY_DESKTOP_ENTRY" ]] \
+        && hyprland_bindings_configured
+}
+
+install() {
+    supported_platform || return 0
+    nix_profile_sync_handy
+}
+
+backup_real_path() {
+    local path="$1"
+
+    if [[ -e "$path" && ! -L "$path" ]]; then
+        mv "$path" "${path}.backup.$(date +%s)"
+    else
+        rm -f "$path"
+    fi
+}
+
+configure_service() {
+    mkdir -p "$(dirname "$HANDY_SERVICE_LINK")"
+    backup_real_path "$HANDY_SERVICE_LINK"
+    ln -s "$SCRIPT_DIR/handy.service" "$HANDY_SERVICE_LINK"
+    systemctl --user daemon-reload
+    systemctl --user enable --now handy.service
+}
+
+configure_desktop_entry() {
+    mkdir -p "$(dirname "$HANDY_DESKTOP_ENTRY")"
+    if [[ -f "$HANDY_DESKTOP_ENTRY" ]] \
+        && ! grep -q 'Managed by dotfiles/handy' "$HANDY_DESKTOP_ENTRY"; then
+        backup_real_path "$HANDY_DESKTOP_ENTRY"
+    fi
+
+    sed \
+        -e '/^\[Desktop Entry\]$/a # Managed by dotfiles/handy' \
+        -e "s|^Exec=handy|Exec=$HOME/.nix-profile/bin/handy|" \
+        "$SCRIPT_DIR/handy.desktop" >"$HANDY_DESKTOP_ENTRY"
+
+    command -v update-desktop-database &>/dev/null \
+        && update-desktop-database "$(dirname "$HANDY_DESKTOP_ENTRY")"
+}
+
+configure_hyprland_bindings() {
+    [[ -f "$HYPRLAND_CONFIG" ]] || return 0
+
+    mkdir -p "$(dirname "$HANDY_HYPRLAND_LINK")"
+    backup_real_path "$HANDY_HYPRLAND_LINK"
+    ln -s "$SCRIPT_DIR/hyprland.conf" "$HANDY_HYPRLAND_LINK"
+
+    local source_line="source = $HANDY_HYPRLAND_LINK"
+    if ! grep -Fqx "$source_line" "$HYPRLAND_CONFIG"; then
+        cp "$HYPRLAND_CONFIG" "$HYPRLAND_CONFIG.backup.$(date +%s)"
+        {
+            echo
+            echo "# Managed by dotfiles/handy"
+            echo "$source_line"
+        } >>"$HYPRLAND_CONFIG"
+    fi
+}
+
+configure() {
+    supported_platform || return 0
+    configure_desktop_entry
+    configure_hyprland_bindings
+    configure_service
+}
+
+apply() {
+    configure
+    systemctl --user try-restart handy.service 2>/dev/null || true
+}
+
+update() {
+    install
+    configure
+}
+
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    install
+    configure
+fi
