@@ -1,0 +1,409 @@
+#!/usr/bin/env node
+
+/**
+ * Small client for Oryx's GraphQL API.
+ *
+ * Authentication uses a dedicated, visible Chromium profile rather than the
+ * user's primary browser. Oryx's JWT is saved outside the repo with 0600 mode.
+ */
+
+const { spawn, spawnSync } = require("node:child_process");
+const fs = require("node:fs");
+const os = require("node:os");
+const path = require("node:path");
+
+const API_URL = "https://oryx.zsa.io/graphql";
+const CONFIGURE_URL = "https://configure.zsa.io/sign-in";
+const CDP_PORT = Number(process.env.ORYX_CDP_PORT || 9223);
+const stateHome = process.env.XDG_STATE_HOME || path.join(os.homedir(), ".local", "state");
+const stateDir = path.join(stateHome, "oryx");
+const sessionFile = path.join(stateDir, "session.json");
+const browserProfile = path.join(stateDir, "browser-profile");
+
+const CURRENT_USER_QUERY = `query { currentUser { hashId name email } }`;
+const LAYOUT_QUERY = `
+  query getLayout($hashId: String!, $revisionId: String!, $geometry: String) {
+    layout(hashId: $hashId, geometry: $geometry, revisionId: $revisionId) {
+      hashId
+      title
+      geometry
+      revision {
+        hashId
+        title
+        md5
+        qmkVersion
+        layers { hashId position title keys }
+      }
+    }
+  }
+`;
+const UPDATE_KEY_MUTATION = `
+  mutation ($hashId: String!, $key: Json!, $position: Int!) {
+    updateKey(hashId: $hashId, keyData: $key, position: $position) { status }
+  }
+`;
+const COMPILE_MUTATION = `
+  mutation ($hashId: String!) {
+    compileRevision(hashId: $hashId) {
+      md5
+      altMd5
+      qmkVersion
+      qmkUptodate
+      buildErrorLog
+    }
+  }
+`;
+
+function usage() {
+  console.log(`Usage: oryx <command>
+
+Manage Oryx layouts through its GraphQL API.
+
+Commands:
+  auth login                         Open a dedicated Oryx sign-in browser
+  auth sync                          Save the authenticated browser session
+  auth status                        Verify the saved session
+  auth logout                        Remove the saved session token
+  layout show <layout-id>            Show a layout's revisions and layers
+  key show [options]                 Show one key assignment
+  key set [options] --apply          Replace one key assignment
+  compile <layout-id>                Compile the latest layout revision
+
+key set options:
+  --layout <id>                      Oryx layout hash ID (required)
+  --layer <position>                 Layer number (required)
+  --position <position>              Physical key position (required)
+  --code <QMK code>                  Keycode, e.g. KC_PSCR (required)
+  --apply                            Perform the mutation (otherwise dry-run)
+
+Examples:
+  oryx auth login
+  # Sign in in the dedicated Chromium window, then:
+  oryx auth sync
+  oryx layout show dMDGN
+  oryx key set --layout dMDGN --layer 1 --position 31 --code KC_PSCR --apply
+  oryx compile dMDGN
+
+Authentication is stored at ~/.local/state/oryx/session.json with mode 0600.
+The Chromium profile used for sign-in is isolated from your primary browser.`);
+}
+
+function commandExists(command) {
+  return spawnSync("sh", ["-c", `command -v ${shellQuote(command)}`], { stdio: "ignore" }).status === 0;
+}
+
+function shellQuote(value) {
+  return `'${String(value).replace(/'/g, `'\\''`)}'`;
+}
+
+function chromiumBinary() {
+  const candidates = [process.env.ORYX_CHROMIUM_BINARY, "chromium", "google-chrome", "google-chrome-stable"].filter(Boolean);
+  return candidates.find(commandExists);
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function cdpEndpointAvailable() {
+  try {
+    const response = await fetch(`http://127.0.0.1:${CDP_PORT}/json/version`);
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
+async function waitForCdp() {
+  for (let attempt = 0; attempt < 30; attempt += 1) {
+    if (await cdpEndpointAvailable()) return;
+    await sleep(500);
+  }
+  throw new Error(`Chromium did not expose CDP on port ${CDP_PORT}.`);
+}
+
+async function openCdpPage(url) {
+  const response = await fetch(`http://127.0.0.1:${CDP_PORT}/json/new?${encodeURIComponent(url)}`, {
+    method: "PUT",
+  });
+  if (!response.ok) throw new Error(`Could not open ${url} in the Oryx browser.`);
+}
+
+async function startAuthBrowser() {
+  if (await cdpEndpointAvailable()) {
+    await openCdpPage(CONFIGURE_URL);
+    return;
+  }
+
+  const binary = chromiumBinary();
+  if (!binary) throw new Error("Chromium or Google Chrome is required for browser authentication.");
+
+  fs.mkdirSync(browserProfile, { recursive: true, mode: 0o700 });
+  const child = spawn(binary, [
+    `--remote-debugging-port=${CDP_PORT}`,
+    "--remote-allow-origins=*",
+    `--user-data-dir=${browserProfile}`,
+    "--no-first-run",
+    "--disable-search-engine-choice-screen",
+    CONFIGURE_URL,
+  ], {
+    detached: true,
+    stdio: "ignore",
+  });
+  child.unref();
+  await waitForCdp();
+}
+
+async function cdpEvaluate(webSocketUrl, expression) {
+  return new Promise((resolve, reject) => {
+    const socket = new WebSocket(webSocketUrl);
+    const timer = setTimeout(() => {
+      socket.close();
+      reject(new Error("Timed out reading the Oryx browser session."));
+    }, 10_000);
+
+    const finish = (callback, value) => {
+      clearTimeout(timer);
+      socket.close();
+      callback(value);
+    };
+
+    socket.addEventListener("open", () => {
+      socket.send(JSON.stringify({
+        id: 1,
+        method: "Runtime.evaluate",
+        params: { expression, returnByValue: true },
+      }));
+    });
+    socket.addEventListener("message", (event) => {
+      let message;
+      try {
+        message = JSON.parse(String(event.data));
+      } catch {
+        return;
+      }
+      if (message.id !== 1) return;
+      if (message.error || message.result?.exceptionDetails) {
+        finish(reject, new Error(message.error?.message || message.result.exceptionDetails.text));
+        return;
+      }
+      finish(resolve, message.result?.result?.value);
+    });
+    socket.addEventListener("error", () => finish(reject, new Error("Could not connect to the Oryx browser.")));
+  });
+}
+
+async function browserToken() {
+  if (!(await cdpEndpointAvailable())) {
+    throw new Error("No Oryx authentication browser is running. Run `oryx auth login` first.");
+  }
+
+  const response = await fetch(`http://127.0.0.1:${CDP_PORT}/json/list`);
+  const targets = await response.json();
+  const target = targets.find((entry) => entry.type === "page" && entry.url.startsWith("https://configure.zsa.io/"));
+  if (!target?.webSocketDebuggerUrl) {
+    throw new Error("Open Oryx in the dedicated browser, complete sign-in, then run `oryx auth sync` again.");
+  }
+
+  const token = await cdpEvaluate(target.webSocketDebuggerUrl, "localStorage.getItem('jwtToken')");
+  if (typeof token !== "string" || token.length === 0) {
+    throw new Error("Oryx is not signed in in the dedicated browser yet.");
+  }
+  return token;
+}
+
+function readSession() {
+  try {
+    const session = JSON.parse(fs.readFileSync(sessionFile, "utf8"));
+    if (typeof session.token !== "string" || session.token.length === 0) throw new Error("invalid session");
+    return session;
+  } catch {
+    throw new Error("Not authenticated. Run `oryx auth login`, sign in, then run `oryx auth sync`.");
+  }
+}
+
+function saveSession(token, user) {
+  fs.mkdirSync(stateDir, { recursive: true, mode: 0o700 });
+  fs.writeFileSync(sessionFile, `${JSON.stringify({ token, user, savedAt: new Date().toISOString() }, null, 2)}\n`, { mode: 0o600 });
+  fs.chmodSync(sessionFile, 0o600);
+}
+
+async function graphql(query, variables = {}, token = null) {
+  const headers = { "content-type": "application/json" };
+  if (token) headers.authorization = `Bearer ${token}`;
+  const response = await fetch(API_URL, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ query, variables }),
+  });
+  const payload = await response.json();
+  if (!response.ok || payload.errors?.length) {
+    throw new Error(payload.errors?.map((error) => error.message).join("; ") || `Oryx API returned ${response.status}`);
+  }
+  return payload.data;
+}
+
+function option(args, name) {
+  const index = args.indexOf(name);
+  if (index === -1) return null;
+  const value = args[index + 1];
+  if (!value || value.startsWith("--")) throw new Error(`${name} requires a value.`);
+  return value;
+}
+
+function requiredOption(args, name) {
+  const value = option(args, name);
+  if (!value) throw new Error(`Missing required option: ${name}`);
+  return value;
+}
+
+async function authenticatedUser() {
+  const session = readSession();
+  const data = await graphql(CURRENT_USER_QUERY, {}, session.token);
+  if (!data.currentUser) throw new Error("The saved Oryx session expired. Run `oryx auth login` again.");
+  return { session, user: data.currentUser };
+}
+
+async function getLayout(layoutId, token) {
+  const data = await graphql(LAYOUT_QUERY, { hashId: layoutId, revisionId: "latest", geometry: "voyager" }, token);
+  if (!data.layout) throw new Error(`Layout '${layoutId}' was not found.`);
+  return data.layout;
+}
+
+function displayKey(key) {
+  if (!key) return "empty";
+  if (key.customLabel) return key.customLabel;
+  if (key.tap?.macro?.name) return key.tap.macro.name;
+  if (key.tap?.macro) return "macro";
+  return key.tap?.code || "empty";
+}
+
+async function authCommand(args) {
+  const subcommand = args[0];
+  if (subcommand === "login") {
+    await startAuthBrowser();
+    console.log("Opened a dedicated Oryx browser profile.");
+    console.log("Sign in there, then run: oryx auth sync");
+    return;
+  }
+  if (subcommand === "sync") {
+    const token = await browserToken();
+    const data = await graphql(CURRENT_USER_QUERY, {}, token);
+    if (!data.currentUser) throw new Error("The browser returned an invalid Oryx session.");
+    saveSession(token, data.currentUser);
+    console.log(`Authenticated as ${data.currentUser.name || data.currentUser.email || data.currentUser.hashId}.`);
+    return;
+  }
+  if (subcommand === "status") {
+    const { session, user } = await authenticatedUser();
+    console.log(`Authenticated as ${user.name || user.email || user.hashId}.`);
+    console.log(`Session saved: ${session.savedAt || "unknown"}`);
+    return;
+  }
+  if (subcommand === "logout") {
+    fs.rmSync(sessionFile, { force: true });
+    console.log("Removed saved Oryx session.");
+    return;
+  }
+  throw new Error("Usage: oryx auth <login|sync|status|logout>");
+}
+
+async function layoutCommand(args) {
+  if (args[0] !== "show" || !args[1]) throw new Error("Usage: oryx layout show <layout-id>");
+  const { session } = await authenticatedUser();
+  const layout = await getLayout(args[1], session.token);
+  console.log(JSON.stringify({
+    hashId: layout.hashId,
+    title: layout.title,
+    geometry: layout.geometry,
+    revision: {
+      hashId: layout.revision.hashId,
+      title: layout.revision.title,
+      layers: layout.revision.layers.map((layer) => ({
+        position: layer.position,
+        hashId: layer.hashId,
+        title: layer.title,
+      })),
+    },
+  }, null, 2));
+}
+
+async function keyCommand(args) {
+  const subcommand = args[0];
+  if (!new Set(["show", "set"]).has(subcommand)) {
+    throw new Error("Usage: oryx key <show|set> --layout <id> --layer <n> --position <n> [--code <QMK code> --apply]");
+  }
+  const layoutId = requiredOption(args, "--layout");
+  const layerPosition = Number(requiredOption(args, "--layer"));
+  const keyPosition = Number(requiredOption(args, "--position"));
+  if (!Number.isInteger(layerPosition) || !Number.isInteger(keyPosition)) throw new Error("Layer and key positions must be integers.");
+
+  const { session } = await authenticatedUser();
+  const layout = await getLayout(layoutId, session.token);
+  const layer = layout.revision.layers.find((entry) => entry.position === layerPosition);
+  if (!layer) throw new Error(`Layer ${layerPosition} was not found.`);
+  const currentKey = layer.keys[keyPosition];
+  if (!currentKey) throw new Error(`Key position ${keyPosition} was not found.`);
+
+  if (subcommand === "show") {
+    console.log(JSON.stringify({
+      layout: layout.title,
+      layer: { position: layer.position, title: layer.title },
+      position: keyPosition,
+      key: currentKey,
+    }, null, 2));
+    return;
+  }
+
+  const code = requiredOption(args, "--code");
+  const replacement = JSON.parse(JSON.stringify(currentKey));
+  replacement.tap = {
+    code,
+    color: null,
+    layer: null,
+    macro: null,
+    modifier: null,
+    modifiers: null,
+    description: null,
+  };
+  replacement.customLabel = null;
+
+  console.log(`${layout.title} → ${layer.title} ${layerPosition}, key ${keyPosition}: ${displayKey(currentKey)} → ${code}`);
+  if (!args.includes("--apply")) {
+    console.log("Dry run only. Add --apply to save this change.");
+    return;
+  }
+
+  const data = await graphql(UPDATE_KEY_MUTATION, {
+    hashId: layer.hashId,
+    key: replacement,
+    position: keyPosition,
+  }, session.token);
+  console.log(`Saved key change (${data.updateKey.status}).`);
+}
+
+async function compileCommand(args) {
+  const layoutId = args[0];
+  if (!layoutId) throw new Error("Usage: oryx compile <layout-id>");
+  const { session } = await authenticatedUser();
+  const layout = await getLayout(layoutId, session.token);
+  const data = await graphql(COMPILE_MUTATION, { hashId: layout.revision.hashId }, session.token);
+  const result = data.compileRevision;
+  if (result.buildErrorLog) throw new Error(`Oryx compilation failed:\n${result.buildErrorLog}`);
+  console.log(`Compiled ${layout.title}: ${result.md5}`);
+}
+
+async function main() {
+  const [command, ...args] = process.argv.slice(2);
+  if (!command || ["help", "--help", "-h"].includes(command)) return usage();
+  if (command === "auth") return authCommand(args);
+  if (command === "layout") return layoutCommand(args);
+  if (command === "key") return keyCommand(args);
+  if (command === "compile") return compileCommand(args);
+  throw new Error(`Unknown command: ${command}`);
+}
+
+main().catch((error) => {
+  console.error(`oryx: ${error.message}`);
+  process.exitCode = 1;
+});

@@ -154,6 +154,8 @@ dot logs --clear      # Clear error log
 
 ## Utilities
 
+- `oryx`: Oryx GraphQL wrapper for layout inspection, key updates, and compilation. `oryx auth login` uses an isolated visible Chromium profile; its session is stored outside the repository at `~/.local/state/oryx/session.json` with mode `0600`.
+- `zsa/install`: installs minimal Voyager-only udev rules and adds the user to `plugdev` for Oryx WebUSB flashing.
 - `tui-qa`: PTY-driven TUI smoke tests. Example:
   `tui-qa --cmd "./gh-csd tui" --keys "sleep:1,j,q" --assert "codespace\(s\)"`
 - `github-devcontainer-postcreate`: re-apply dotfiles and copy local Pi auth into the
