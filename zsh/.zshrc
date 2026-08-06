@@ -67,11 +67,6 @@ fi
 if [[ -d "$HOME/.nix-profile/bin" ]]; then
     export PATH="$HOME/.nix-profile/bin:$PATH"
 fi
-# fnm (Fast Node Manager) — legacy, only used if nix isn't installed
-if [[ ! -d "$HOME/.nix-profile/bin" && -d "$HOME/.local/share/fnm" ]]; then
-    export PATH="$HOME/.local/share/fnm:$PATH"
-    eval "$(fnm env)"
-fi
 
 # GitHub token for local dotcom devcontainer startup
 if [[ -z "$GITHUB_TOKEN" ]] && command -v gh >/dev/null 2>&1; then
