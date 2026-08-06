@@ -78,4 +78,6 @@ if [[ -z "$GITHUB_TOKEN" ]] && command -v gh >/dev/null 2>&1; then
   export GITHUB_TOKEN="$(gh auth token 2>/dev/null)"
 fi
 
-
+if [[ -f "$HOME/.config/beta/proxy.env" ]]; then
+  source "$HOME/.config/beta/proxy.env"
+fi
