@@ -1,5 +1,5 @@
 {
-  description = "luan's dotfiles toolchain (nix profile: base + node + go + rust + ruby + nvim + helix + jj + gh + git + 1password + whisper + zig + bat + vicinae + handy tooling)";
+  description = "luan's dotfiles toolchain (nix profile: base + node + go + rust + ruby + nvim + helix + jj + gh + glab + git + 1password + whisper + zig + bat + vicinae + handy tooling)";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
@@ -214,6 +214,7 @@
           helix = helixToolchain;
           jj = jjToolchain;
           gh = ghToolchain;
+          glab = pkgs.glab;
           git = gitToolchain;
           "1password" = onePasswordCli;
           whisper = whisperToolchain;

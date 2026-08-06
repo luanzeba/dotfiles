@@ -39,8 +39,8 @@ git clone https://github.com/luanzeba/dotfiles.git ~/dotfiles
 
 The main `install` script detects your platform and runs the appropriate setup.
 
-`todo` is intentionally opt-in and **not** included in default install phases.
-Use `dot install todo` when you want to set it up.
+`todo` and `glab` are intentionally opt-in and **not** included in default install phases.
+Use `dot install todo` or `dot install glab` when you want to set them up.
 
 `hunk` is included in default installs (macOS, Arch/Omarchy, and Codespaces).
 It is configured with:
@@ -50,7 +50,7 @@ It is configured with:
 
 ## Nix adoption (Phase 1)
 
-Base utilities, Node, Go, Rust, Ruby, Neovim, Helix, jj, gh, Git, 1Password CLI, Whisper, Zig, bat, Vicinae, and Handy are managed by the dotfiles Nix flake (`nix/flake.nix`) as separate installables:
+Base utilities, Node, Go, Rust, Ruby, Neovim, Helix, jj, gh, glab, Git, 1Password CLI, Whisper, Zig, bat, Vicinae, and Handy are managed by the dotfiles Nix flake (`nix/flake.nix`) as separate installables:
 
 - `base/install` → `path:~/dotfiles/nix#base`
   - `fzf` (required by fzf-lua; installed through Nix because distro packages can lag behind)
@@ -74,6 +74,9 @@ Base utilities, Node, Go, Rust, Ruby, Neovim, Helix, jj, gh, Git, 1Password CLI,
 - `gh/install` → `path:~/dotfiles/nix#gh`
   - `gh`
   - extensions, `gh-not` config, and launchd agent are still managed by `gh/install`
+- `glab/install` → `path:~/dotfiles/nix#glab`
+  - `glab`
+  - opt-in; excluded from platform installers and the default Nix bundle
 - `git/install` → `path:~/dotfiles/nix#git`
   - `git`
   - `~/.gitconfig`, `~/.gitignore_global`, and `~/.git_template` are still managed by `git/install`

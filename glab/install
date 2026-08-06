@@ -1,0 +1,55 @@
+#!/bin/bash
+set -e
+
+# GitLab CLI (glab)
+# https://gitlab.com/gitlab-org/cli
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck disable=SC1091
+source "$SCRIPT_DIR/../lib/nix.sh"
+
+bootstrap_glab_path() {
+    _source_nix_env || true
+    if [[ -d "$HOME/.nix-profile/bin" ]]; then
+        export PATH="$HOME/.nix-profile/bin:$PATH"
+    fi
+}
+
+check_installed() {
+    if ! nix_profile_has_entry "$NIX_GLAB_PROFILE_NAME"; then
+        return 1
+    fi
+
+    bootstrap_glab_path
+    command -v glab &>/dev/null
+}
+
+check_configured() {
+    # Authentication is machine-specific; no shared config is needed.
+    return 0
+}
+
+get_installed_version() {
+    bootstrap_glab_path
+    if command -v glab &>/dev/null; then
+        glab --version 2>/dev/null | head -1
+    fi
+}
+
+install() {
+    nix_profile_sync_glab
+}
+
+configure() {
+    :
+}
+
+update() {
+    nix_profile_has_entry "$NIX_GLAB_PROFILE_NAME" || return 0
+    nix_profile_sync_glab
+}
+
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    install
+    configure
+fi
