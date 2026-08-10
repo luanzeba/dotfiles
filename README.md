@@ -56,7 +56,7 @@ Base utilities, Node, Go, Rust, Ruby, Neovim, Helix, jj, gh, glab, Git, 1Passwor
   - `fzf` (required by fzf-lua; installed through Nix because distro packages can lag behind)
   - `azure-cli` (`az`), `fd`, `ffmpeg`, `jq`, `eza`, `ripgrep` (`rg`), `tmux`, `poppler-utils` (`pdftotext`)
 - `node/install` → `path:~/dotfiles/nix#node`
-  - `nodejs_22`, `typescript` (`tsc`), `typescript-language-server`, `prettier`, `tree-sitter`
+  - `nodejs_22`, Corepack-managed `pnpm`/`pnpx`, `typescript` (`tsc`), `typescript-language-server`, `prettier`, `tree-sitter`
 - `go/install` → `path:~/dotfiles/nix#go`
   - `go`, `gopls`, `gofumpt`, `goimports-reviser`
 - `rust/install` → `path:~/dotfiles/nix#rust`
