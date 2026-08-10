@@ -1,0 +1,10 @@
+#:schema https://docs.jj-vcs.dev/latest/config-schema.json
+
+[user]
+name = "Luan Vieira"
+email = "luanv@me.com"
+
+[[--scope]]
+--when.repositories = ["~/beta"]
+[--scope.user]
+email = "lvieira@beta.team"

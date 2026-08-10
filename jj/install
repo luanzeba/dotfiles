@@ -25,8 +25,7 @@ check_installed() {
 }
 
 check_configured() {
-    # jj uses git for auth, no dotfiles config needed.
-    return 0
+    [[ -L "$HOME/.config/jj/config.toml" ]]
 }
 
 get_installed_version() {
@@ -41,8 +40,8 @@ install() {
 }
 
 configure() {
-    # jj uses git for auth, so no additional config needed.
-    :
+    mkdir -p "$HOME/.config/jj"
+    ln -sf "$SCRIPT_DIR/config.toml" "$HOME/.config/jj/config.toml"
 }
 
 update() {

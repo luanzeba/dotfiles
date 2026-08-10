@@ -1,6 +1,6 @@
 [user]
   name = Luan Vieira
-  email = luanzeba@github.com
+  email = luanv@me.com
 [color]
   ui = always
 [push]
@@ -35,3 +35,5 @@
   rebase = true
 [include]
   path = ~/.gitconfig-macos
+[includeIf "gitdir:~/beta/"]
+  path = ~/.gitconfig-work
