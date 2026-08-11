@@ -16,3 +16,6 @@ nvim/lazy-lock.json
 # private-dotfiles clone populated by skills/install
 # (managed as its own git repo; keep it untracked in this repo)
 skills/external/private/
+
+# AWS account/profile metadata belongs in private-dotfiles.
+aws/config

@@ -1,5 +1,5 @@
 {
-  description = "luan's dotfiles toolchain (nix profile: base + node + go + rust + ruby + nvim + helix + jj + gh + glab + git + 1password + whisper + zig + bat + vicinae + handy tooling)";
+  description = "luan's dotfiles toolchain (nix profile: base + node + go + rust + ruby + nvim + helix + jj + gh + glab + aws + git + 1password + whisper + zig + bat + vicinae + handy tooling)";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
@@ -215,6 +215,7 @@
           jj = jjToolchain;
           gh = ghToolchain;
           glab = pkgs.glab;
+          aws = pkgs.awscli2;
           git = gitToolchain;
           "1password" = onePasswordCli;
           whisper = whisperToolchain;
@@ -223,7 +224,7 @@
 
           # Optional core bundle for one-shot installs.
           # Install: nix profile install ~/dotfiles/nix
-          # Excludes heavyweight opt-in tools such as Whisper.
+          # Excludes opt-in tools such as AWS CLI, glab, and Whisper.
           default = pkgs.buildEnv {
             name = "dotfiles-toolchain";
             paths = [ baseTools nodeToolchain goToolchain rustToolchain rubyToolchain nvimToolchain helixToolchain jjToolchain ghToolchain gitToolchain onePasswordCli zigToolchain pkgs.bat ];

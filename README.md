@@ -39,8 +39,8 @@ git clone https://github.com/luanzeba/dotfiles.git ~/dotfiles
 
 The main `install` script detects your platform and runs the appropriate setup.
 
-`todo` and `glab` are intentionally opt-in and **not** included in default install phases.
-Use `dot install todo` or `dot install glab` when you want to set them up.
+`todo`, `glab`, and `aws` are intentionally opt-in and **not** included in default install phases.
+Use `dot install <tool>` when you want to set one up.
 
 `hunk` is included in default installs (macOS, Arch/Omarchy, and Codespaces).
 It is configured with:
@@ -50,7 +50,7 @@ It is configured with:
 
 ## Nix adoption (Phase 1)
 
-Base utilities, Node, Go, Rust, Ruby, Neovim, Helix, jj, gh, glab, Git, 1Password CLI, Whisper, Zig, bat, Vicinae, and Handy are managed by the dotfiles Nix flake (`nix/flake.nix`) as separate installables:
+Base utilities, Node, Go, Rust, Ruby, Neovim, Helix, jj, gh, glab, AWS CLI, Git, 1Password CLI, Whisper, Zig, bat, Vicinae, and Handy are managed by the dotfiles Nix flake (`nix/flake.nix`) as separate installables:
 
 - `base/install` → `path:~/dotfiles/nix#base`
   - `fzf` (required by fzf-lua; installed through Nix because distro packages can lag behind)
@@ -77,6 +77,10 @@ Base utilities, Node, Go, Rust, Ruby, Neovim, Helix, jj, gh, glab, Git, 1Passwor
 - `glab/install` → `path:~/dotfiles/nix#glab`
   - `glab`
   - opt-in; excluded from platform installers and the default Nix bundle
+- `aws/install` → `path:~/dotfiles/nix#aws`
+  - AWS CLI v2 (`aws`)
+  - opt-in; links a private IAM Identity Center config when available
+  - SSO tokens remain machine-local under `~/.aws/sso/cache`
 - `git/install` → `path:~/dotfiles/nix#git`
   - `git`
   - `~/.gitconfig`, `~/.gitignore_global`, and `~/.git_template` are still managed by `git/install`
@@ -115,6 +119,7 @@ After installation, use the `dotfiles` (or `dot`) command:
 | `dot install` | Run full install |
 | `dot install <tool>` | Install specific tool(s), e.g. `dot install base` |
 | `dot install todo` | Interactive todo installer (server/client + local/remote) |
+| `dot install aws` | Install AWS CLI v2 and link private SSO profiles |
 | `dot install -f <tool>` | Force reinstall (skip install check) |
 | `dot update` | Update tools (brew, nvim plugins, etc.) |
 | `dot logs` | View recent errors |
