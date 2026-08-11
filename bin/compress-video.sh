@@ -15,6 +15,8 @@
 # @raycast.author luanzeba
 # @raycast.authorURL https://raycast.com/luanzeba
 
+export PATH="$HOME/.nix-profile/bin:$PATH"
+
 newest_mp4_path=$(find ~/Desktop -maxdepth 1 -type f -name "*.mp4" -print0 | xargs -0 stat -f "%m %N" | sort -rn | head -1 | cut -f2- -d' ')
 new_name="$1"
 new_path="$HOME/Desktop/${new_name}.mp4"
