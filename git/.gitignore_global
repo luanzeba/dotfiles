@@ -4,3 +4,5 @@
 .vscode
 *.tags
 tags
+
+**/.claude/settings.local.json
