@@ -38,8 +38,8 @@ Behavior:
 - Reuses an existing `:9222` debug instance when safe
 - Never uses headless mode
 - Never kills existing Chrome processes
-- Enforces **Work** profile semantics (display name + resolved profile directory)
-- Supports a canonical Pi debug profile store at `~/.cache/pi-chrome-profile`
+- Supports Home and Work windows in one multi-profile Chrome process
+- Uses the canonical Pi debug profile store at `~/.cache/pi-chrome-profile`
 - If Chrome is running without `:9222`, it fails fast and asks for a manual relaunch
 
 If needed, relaunch your debug session via:

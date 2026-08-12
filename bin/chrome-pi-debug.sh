@@ -10,7 +10,7 @@
 # @raycast.packageName Browser
 
 # Documentation:
-# @raycast.description Launch/reuse a visible Chrome debug session (:9222) on Work profile for Pi web-browser automation.
+# @raycast.description Instantly focus the Home Chrome profile used for browsing and Pi automation.
 # @raycast.author luanzeba
 # @raycast.authorURL https://raycast.com/luanzeba
 
@@ -24,7 +24,7 @@ fi
 # Hyper+B takes the native fast path. Explicit diagnostic flags retain the
 # slower CDP validation flow below for agents and troubleshooting.
 if [[ $# -eq 0 && -x "$HOME/.local/bin/chrome-router" ]]; then
-  exec "$HOME/.local/bin/chrome-router" open Work
+  exec "$HOME/.local/bin/chrome-router" open Home
 fi
 
 ENSURE_ONLY=0

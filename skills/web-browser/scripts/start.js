@@ -34,7 +34,7 @@ const invalidArg = [...args].find((arg) => !validArgs.has(arg));
 
 function printUsage(exitCode = 0) {
   console.log("Usage: start.js");
-  console.log("\nEnsures a visible debuggable Chrome session on :9222 using Work profile semantics.");
+  console.log("\nEnsures a visible debuggable multi-profile Chrome session on :9222.");
   console.log(`Uses the canonical Pi profile store at ${DEFAULT_ISOLATED_USER_DATA_DIR}.`);
   console.log("Never starts headless and never kills Chrome processes.");
   process.exit(exitCode);
@@ -94,7 +94,7 @@ try {
   }
 
   if (listener.isIsolated) {
-    console.log(`ℹ Using the Pi debug profile store at ${DEFAULT_ISOLATED_USER_DATA_DIR} (Work semantics).\n   This is the canonical session for browser + Pi automation.`);
+    console.log(`ℹ Using the multi-profile Pi debug store at ${DEFAULT_ISOLATED_USER_DATA_DIR}.\n   This is the canonical session for browser + Pi automation.`);
   }
 } catch (error) {
   console.error(`✗ ${error.message || String(error)}`);

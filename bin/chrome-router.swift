@@ -18,7 +18,7 @@ private struct RouterConfig: Codable {
     var rules: [Rule]
 
     static let defaults = RouterConfig(
-        profiles: ["Home": "Profile 1", "Work": "Default"],
+        profiles: ["Home": "", "Work": ""],
         rules: [
             Rule(host: "github.com", pathPrefix: "/github", profile: "Work"),
             Rule(host: "app.datadoghq.com", pathPrefix: nil, profile: "Work"),
@@ -69,6 +69,22 @@ private final class Router {
             return
         }
 
+        if url == nil {
+            if let profile, profile.lowercased() != "last" {
+                focusProfile(profile)
+            } else {
+                NSWorkspace.shared.openApplication(
+                    at: URL(fileURLWithPath: "/Applications/Google Chrome.app"),
+                    configuration: NSWorkspace.OpenConfiguration()
+                )
+            }
+            return
+        }
+
+        launchChrome(url: url, profile: profile)
+    }
+
+    private func launchChrome(url: URL?, profile: String?) {
         var arguments = [
             "--remote-debugging-port=\(debugPort)",
             "--remote-allow-origins=*",
@@ -76,13 +92,10 @@ private final class Router {
             "--disable-search-engine-choice-screen",
             "--no-first-run",
         ]
-
         if let profile, profile.lowercased() != "last" {
             arguments.append("--profile-directory=\(resolveProfileDirectory(profile))")
         }
-        if let url {
-            arguments.append(url.absoluteString)
-        }
+        if let url { arguments.append(url.absoluteString) }
 
         let process = Process()
         process.executableURL = URL(fileURLWithPath: chromePath)
@@ -95,6 +108,85 @@ private final class Router {
         } catch {
             showError("Could not open Chrome: \(error.localizedDescription)")
         }
+    }
+
+    private func focusProfile(_ profile: String) {
+        let profileName = canonicalProfile(profile)
+        if let windowID = windowState()[profileName], activateWindow(windowID) {
+            return
+        }
+
+        let marker = "http://127.0.0.1:9/chrome-router-focus/\(UUID().uuidString)"
+        launchChrome(url: URL(string: marker), profile: profileName)
+
+        let script = """
+        tell application "Google Chrome"
+          repeat 40 times
+            repeat with w in windows
+              set tabTotal to count tabs of w
+              repeat with tabNumber from 1 to tabTotal
+                set candidate to tab tabNumber of w
+                if URL of candidate is "\(marker)" then
+                  set active tab index of w to tabNumber
+                  set index of w to 1
+                  activate
+                  if tabTotal > 1 then
+                    close candidate
+                  else
+                    set URL of candidate to "chrome://newtab/"
+                  end if
+                  return id of w as text
+                end if
+              end repeat
+            end repeat
+            delay 0.05
+          end repeat
+          return ""
+        end tell
+        """
+
+        var error: NSDictionary?
+        if let result = NSAppleScript(source: script)?.executeAndReturnError(&error).stringValue,
+           let windowID = Int(result) {
+            var state = windowState()
+            state[profileName] = windowID
+            saveWindowState(state)
+        }
+    }
+
+    private func activateWindow(_ windowID: Int) -> Bool {
+        let script = """
+        tell application "Google Chrome"
+          try
+            set targetWindow to first window whose id is \(windowID)
+            set index of targetWindow to 1
+            activate
+            return "found"
+          on error
+            return "missing"
+          end try
+        end tell
+        """
+        var error: NSDictionary?
+        return NSAppleScript(source: script)?.executeAndReturnError(&error).stringValue == "found"
+    }
+
+    private func windowState() -> [String: Int] {
+        let url = windowStateURL()
+        guard let data = try? Data(contentsOf: url) else { return [:] }
+        return (try? JSONDecoder().decode([String: Int].self, from: data)) ?? [:]
+    }
+
+    private func saveWindowState(_ state: [String: Int]) {
+        let url = windowStateURL()
+        try? fileManager.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        if let data = try? JSONEncoder().encode(state) {
+            try? data.write(to: url, options: .atomic)
+        }
+    }
+
+    private func windowStateURL() -> URL {
+        URL(fileURLWithPath: NSString(string: "~/.cache/chrome-router/windows.json").expandingTildeInPath)
     }
 
     @discardableResult

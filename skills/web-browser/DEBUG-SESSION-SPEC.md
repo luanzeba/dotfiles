@@ -15,9 +15,9 @@ Use exactly one **main** Chrome experience for day-to-day browsing:
 2. Root process should use the canonical Pi debug profile store (`~/.cache/pi-chrome-profile`) so CDP remains stable.
 3. CDP endpoint `:9222` should be available on that same process.
 4. `Hyper+B` (`chrome-pi-debug.sh`) should:
-   - ensure debug readiness,
-   - bring the main Chrome process to front,
-   - never open a separate empty-profile Chrome instance.
+   - bring the existing Home profile window to front,
+   - launch Home only when no Home window exists,
+   - use the slower readiness check only for explicit diagnostic flags.
 5. Chrome Router should open links into that same canonical Chrome process (no second Chrome root process).
 6. Clicking links should open the requested URL (no "open Chrome but drop URL" regression).
 
@@ -39,7 +39,7 @@ Use exactly one **main** Chrome experience for day-to-day browsing:
 
 ### Manual checks (required)
 
-- Hyper+B opens/focuses your normal Chrome window (with expected tabs/pinned tabs)
+- Hyper+B focuses the existing Home window (with expected tabs/pinned tabs) without creating another window
 - Link from Slack/other app opens in that same window/process and navigates to the URL
 - Pi can still open new automation window/tab without disturbing your existing tabs
 

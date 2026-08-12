@@ -3,7 +3,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const DEFAULT_DEBUG_PORT = 9222;
-const DEFAULT_REQUIRED_PROFILE_DIRECTORY = "Work";
+const DEFAULT_REQUIRED_PROFILE_DIRECTORY = null;
 const DEFAULT_CHROME_USER_DATA_DIR =
   process.platform === "darwin"
     ? path.join(process.env.HOME || "", "Library", "Application Support", "Google", "Chrome")
@@ -149,12 +149,15 @@ function launchChromeWithDebugPort({
   const chromeArgs = [
     `--remote-debugging-port=${port}`,
     "--remote-allow-origins=*",
-    `--profile-directory=${profileDirectory}`,
     "--disable-search-engine-choice-screen",
     "--no-first-run",
     "--disable-features=ProfilePicker",
     "--disable-session-crashed-bubble",
   ];
+
+  if (profileDirectory) {
+    chromeArgs.push(`--profile-directory=${profileDirectory}`);
+  }
 
   if (userDataDir) {
     chromeArgs.push(`--user-data-dir=${userDataDir}`);
@@ -242,21 +245,18 @@ function readProfileDisplayName(userDataDir, profileDirectory) {
 
 function getDebugListenerInfo(port = DEFAULT_DEBUG_PORT) {
   try {
-    const pid = execSync(
-      `lsof -nP -iTCP:${port} -sTCP:LISTEN -t | head -n 1`,
-      { encoding: "utf-8" },
-    ).trim();
-
-    if (!pid) return null;
-
-    const command = execSync(`ps -p ${pid} -o command=`, {
+    const pids = execSync(`lsof -nP -iTCP:${port} -sTCP:LISTEN -t`, {
       encoding: "utf-8",
-    }).trim();
+    }).trim().split(/\s+/).filter(Boolean);
 
-    return {
-      pid,
-      command,
-    };
+    let fallback = null;
+    for (const pid of pids) {
+      const command = execSync(`ps -p ${pid} -o command=`, { encoding: "utf-8" }).trim();
+      const listener = { pid, command };
+      if (command.includes("Google Chrome")) return listener;
+      fallback ||= listener;
+    }
+    return fallback;
   } catch {
     return null;
   }
@@ -364,8 +364,10 @@ function validateListenerPolicy(
 }
 
 function formatManualRelaunchHint({ port, requiredProfileDirectory }) {
-  const profile = requiredProfileDirectory || DEFAULT_REQUIRED_PROFILE_DIRECTORY;
-  const resolvedProfileDirectory = resolveChromeProfileDirectory(profile, DEFAULT_CHROME_USER_DATA_DIR);
+  const profile = requiredProfileDirectory || "last used";
+  const resolvedProfileDirectory = requiredProfileDirectory
+    ? resolveChromeProfileDirectory(requiredProfileDirectory, DEFAULT_CHROME_USER_DATA_DIR)
+    : "automatic";
   return [
     `Please relaunch your Chrome debug session manually (port ${port}, profile '${profile}' => '${resolvedProfileDirectory}').`,
     "Shortcut: ~/dotfiles/bin/chrome-pi-debug.sh",
@@ -418,7 +420,9 @@ async function ensureDebugSession({
     );
   }
 
-  const launchProfileDirectory = resolveChromeProfileDirectory(requiredProfileDirectory, DEFAULT_CHROME_USER_DATA_DIR);
+  const launchProfileDirectory = requiredProfileDirectory
+    ? resolveChromeProfileDirectory(requiredProfileDirectory, DEFAULT_CHROME_USER_DATA_DIR)
+    : null;
 
   launchChromeWithDebugPort({
     port,
