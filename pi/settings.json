@@ -1,18 +1,15 @@
 {
   "provider": "github-copilot",
   "model": "claude-opus-4.5",
-  "lastChangelogVersion": "0.80.10",
-  "defaultProvider": "openai-codex",
+  "lastChangelogVersion": "0.84.1",
+  "defaultProvider": "openai",
   "defaultModel": "gpt-5.6-terra",
-  "defaultThinkingLevel": "minimal",
+  "defaultThinkingLevel": "max",
   "hideThinkingBlock": true,
   "packages": [],
   "enabledModels": [
-    "anthropic/claude-fable-5",
-    "anthropic/claude-opus-4-8",
-    "openai-codex/gpt-5.6-sol",
-    "openai-codex/gpt-5.6-luna",
-    "openai-codex/gpt-5.6-terra"
+    "openai/gpt-5.6-sol",
+    "openai/gpt-5.6-terra"
   ],
   "theme": "dark"
 }
