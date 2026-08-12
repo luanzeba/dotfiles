@@ -57,7 +57,7 @@ download_skill_creator() {
     return 0
 }
 
-# Clone or update private-dotfiles repo (contains sensitive skills like copilot-policy-queries)
+# Clone or update private-dotfiles repo (contains optional private skills and tools)
 # This will fail gracefully in Codespaces due to GITHUB_TOKEN scope limitations
 download_private_skills() {
     echo "Fetching private skills from $PRIVATE_REPO..."
@@ -124,11 +124,27 @@ symlink_skill() {
     return 0
 }
 
+remove_stale_skill_links() {
+    local root link target
+    for root in "$HOME/.claude/skills" "$HOME/.pi/agent/skills"; do
+        for link in "$root"/*; do
+            [[ -L "$link" ]] || continue
+            target="$(readlink "$link")"
+            case "$target" in
+                "$SCRIPT_DIR"/*|"$PRIVATE_DIR"/skills/*)
+                    [[ -d "$target" ]] || rm -f "$link"
+                    ;;
+            esac
+        done
+    done
+}
+
 # Create global skill directories and symlink all skills
 configure() {
     # Create global skill directories
     mkdir -p ~/.claude/skills
     mkdir -p ~/.pi/agent/skills
+    remove_stale_skill_links
 
     # Link custom skills from this repo (all directories except 'external')
     for skill_dir in "$SCRIPT_DIR"/*/; do

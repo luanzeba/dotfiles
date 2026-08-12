@@ -13,11 +13,6 @@ skills/
 ├── github-prs/          # Draft/open concise PRs with template + demo guidance
 │   ├── SKILL.md
 │   └── references/
-├── vernier-test-profiling/ # Profile slow github/github tests with Vernier
-│   └── SKILL.md
-├── feature-flag-removal/# Remove fully rolled-out flag conditionals from github/github
-│   ├── SKILL.md
-│   └── references/
 ├── merge-conflict-resolver/ # Resolve merge conflicts using commit + PR intent
 │   ├── SKILL.md
 │   ├── scripts/

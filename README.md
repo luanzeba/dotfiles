@@ -179,48 +179,6 @@ dot logs --clear      # Clear error log
 | Omarchy | `~/.local/share/omarchy` | Arch + Hyprland; preserves Omarchy defaults (`dot pull` skips apply unless `--apply`, `install-local` skips nvim unless `DOTFILES_INSTALL_NVIM_ON_OMARCHY=1`) |
 | GitHub Codespaces | `$CODESPACES` | Auto-installed on codespace creation |
 
-## Codespaces: Local Pi, remote dotcom tools
-
-When I want to work on `github/github` from local macOS without opening a full SSH shell first, I use Pi in codespace mode.
-
-Quick flow:
-
-```bash
-# Pick target codespace once
-# (or pass a name explicitly later)
-gh csd select
-
-# Start Pi with remote dev tools enabled
-pi --codespace
-```
-
-What switches to remote (inside Codespace):
-- `read`, `write`, `edit`, `bash`
-
-Everything else stays local.
-
-Session behavior (important):
-- Codespace target is **pinned per Pi session**.
-- `pi --codespace` or `/codespace on` (without a name) resolves the current `gh csd` selection once, then keeps using that codespace.
-- Remote cwd auto-resolves from the codespace repository (`/workspaces/<repo_name>`), with fallback to `/workspaces/github`.
-- Changing `gh csd select` in another terminal will **not** retarget an already-running Pi session.
-- Switch intentionally with `/codespace on <name>` or `/codespace use <name>`.
-
-Useful in-session commands:
-- `/codespace` (interactive menu: connect current, pick existing, or create new)
-- `/codespace on [name] [cwd]` (enable and pin target; no name = pin current selection)
-- `/codespace off`
-- `/codespace status`
-- `/codespace use <name>` (retarget current Pi session)
-- `/codespace cwd <path>`
-
-Optional env overrides (for custom workspace layouts):
-- `PI_CODESPACE_WORKSPACES_ROOT` (default: `/workspaces`)
-- `PI_CODESPACE_DEFAULT_CWD` (fallback cwd when repo cannot be resolved)
-- `PI_CODESPACE_REPO_CWD_OVERRIDES` (JSON map, e.g. `{ "github/github": "/workspaces/github-ui" }`)
-
-If Pi says `gh csd exec` is unavailable, update `gh-csd` first.
-
 ## Codespaces: Pi auth bootstrap (safe)
 
 `pi/install` can bootstrap `~/.pi/agent/auth.json` from environment secrets so you don't need to run `/login` in every new codespace.
