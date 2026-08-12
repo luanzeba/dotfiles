@@ -35,10 +35,6 @@ dotfiles_dir() {
 }
 
 # Platform detection
-is_codespaces() {
-    [[ -n "$CODESPACES" ]]
-}
-
 is_macos() {
     [[ "$OSTYPE" == darwin* ]]
 }

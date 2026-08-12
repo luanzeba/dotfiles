@@ -120,51 +120,6 @@ apply() {
 
 Reference: `bin/install`
 
-## Codespaces-Aware Installation
-
-Handle pre-installed tools and Codespaces-specific behavior.
-
-```bash
-install() {
-    # In Codespaces, tool may be pre-installed
-    if [[ -n "$CODESPACES" ]] && command -v tool &>/dev/null; then
-        echo "tool already available in Codespaces"
-        return 0
-    fi
-
-    # Normal installation for local machines
-    # ...
-}
-
-configure() {
-    if [[ -n "$CODESPACES" ]]; then
-        # Codespaces: minimal config
-        setup_essential_config
-    else
-        # Local: full config with extensions/plugins
-        setup_full_config
-    fi
-}
-
-update() {
-    # Skip binary update in Codespaces (managed by GitHub)
-    if [[ -z "$CODESPACES" ]]; then
-        update_binary
-    fi
-
-    # Config updates apply everywhere
-    update_config
-}
-```
-
-**Key points:**
-- Check `$CODESPACES` environment variable
-- Skip binary installs for pre-installed tools
-- May still need to configure (extensions, plugins, config files)
-- Skip binary updates in Codespaces
-
-Reference: `gh/install`
-
 ## Health Check Functions
 
 Implement `check_installed()` and `check_configured()` for `dot doctor`.

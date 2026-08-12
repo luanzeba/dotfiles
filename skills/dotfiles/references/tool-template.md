@@ -135,7 +135,7 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
 fi
 ```
 
-For more patterns (version checking, migrations, Codespaces handling), see [install-patterns.md](install-patterns.md).
+For more patterns (version checking and migrations), see [install-patterns.md](install-patterns.md).
 
 ## Variations
 
@@ -149,14 +149,11 @@ install() {
     fi
 
     if [[ "$(uname)" == "Darwin" ]]; then
-        # macOS - Homebrew (installed by install-local Phase 3)
+        # macOS - Homebrew (installed by main install Phase 3)
         brew install <package-name>
     elif command -v pacman &>/dev/null; then
         # Arch Linux
         sudo pacman -S --noconfirm <package-name>
-    elif [[ -n "$CODESPACES" ]] || command -v apt-get &>/dev/null; then
-        # Debian/Ubuntu/Codespaces
-        sudo apt-get update && sudo apt-get install -y <package-name>
     fi
 }
 ```
@@ -208,7 +205,7 @@ configure() {
 
 ## Integration with Main Install
 
-Add to `install-local` in the appropriate phase:
+Add to `install` in the appropriate phase:
 
 - **Phase 1-2**: Tools with direct GitHub downloads (no Homebrew needed)
 - **Phase 3**: Tools requiring Homebrew/package managers

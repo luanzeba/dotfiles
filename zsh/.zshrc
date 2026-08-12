@@ -4,12 +4,6 @@ export COLORTERM=truecolor
 # Add ~/.local/bin to PATH for user-installed binaries
 export PATH="$HOME/.local/bin:$PATH"
 
-# Codespaces-specific configuration
-if [[ -n "$CODESPACES" ]]; then
-    # Playwright must run headless in Codespaces (no display available)
-    export HEADLESS=true
-fi
-
 # Source configs
 for config_file ($HOME/.zsh/*.zsh); do
   source $config_file
@@ -33,13 +27,6 @@ alias svim="source $HOME/.config/nvim/init.vim"
 if [[ "$(uname)" == "Darwin" ]] && ! command -v tailscale >/dev/null 2>&1 && [[ -x "/Applications/Tailscale.app/Contents/MacOS/Tailscale" ]]; then
   alias tailscale="/Applications/Tailscale.app/Contents/MacOS/Tailscale"
 fi
-# Only define `cssh` if the `rdm` binary exists
-# https://github.com/BlakeWilliams/remote-development-manager
-if [[ -x "$(command -v rdm)" ]]; then
-  alias cssh="csw ssh -- -R 127.0.0.1:7391:$(rdm socket)"
-fi
-
-
 alias k="kubectl"
 
 # Map Ctrl-x to clear
@@ -52,7 +39,6 @@ bindkey '^F' autosuggest-accept
 setopt CHASE_LINKS
 
 # Activate mise if it's installed
-# for local MacOS for now but might figure it out for Codespaces later
 if [[ -x ~/.local/bin/mise ]]; then
   eval "$(~/.local/bin/mise activate zsh)"
 fi
@@ -66,11 +52,6 @@ if [[ -d "/nix/var/nix/profiles/default/bin" ]]; then
 fi
 if [[ -d "$HOME/.nix-profile/bin" ]]; then
     export PATH="$HOME/.nix-profile/bin:$PATH"
-fi
-
-# GitHub token for local dotcom devcontainer startup
-if [[ -z "$GITHUB_TOKEN" ]] && command -v gh >/dev/null 2>&1; then
-  export GITHUB_TOKEN="$(gh auth token 2>/dev/null)"
 fi
 
 if [[ -f "$HOME/.config/beta/proxy.env" ]]; then

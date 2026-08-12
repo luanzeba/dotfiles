@@ -22,7 +22,9 @@ configure() {
     git submodule update --init
     
     ln -sfn "$SCRIPT_DIR/zsh"       "$HOME/.zsh"
-    ln -sf "$SCRIPT_DIR/.zlogin"    "$HOME/.zlogin"
+    if [[ -L "$HOME/.zlogin" && "$(readlink "$HOME/.zlogin")" == "$SCRIPT_DIR/.zlogin" ]]; then
+        rm -f "$HOME/.zlogin"
+    fi
     ln -sf "$SCRIPT_DIR/.zlogout"   "$HOME/.zlogout"
     ln -sf "$SCRIPT_DIR/.zprofile"  "$HOME/.zprofile"
     ln -sf "$SCRIPT_DIR/.zshrc"     "$HOME/.zshrc"

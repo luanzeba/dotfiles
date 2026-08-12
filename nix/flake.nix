@@ -37,8 +37,8 @@
             # fzf-lua requires fzf >= 0.36; distro packages can lag behind.
             fzf
 
-            # Shared local-machine basics previously installed through
-            # Homebrew/pacman by install-local.
+            # Shared machine basics previously installed through
+            # Homebrew or pacman.
             azure-cli
             fd
             ffmpeg

@@ -107,10 +107,6 @@ install() {
         # Arch Linux / Omarchy
         ensure_sudo
         install_arch_tailscale
-    elif [[ -n "$CODESPACES" ]] || command -v apt-get &>/dev/null; then
-        # Debian/Ubuntu/Codespaces - use official install script
-        ensure_sudo
-        curl -fsSL https://tailscale.com/install.sh | run_as_root sh
     else
         echo "Unknown platform. Please install Tailscale manually:"
         echo "  https://tailscale.com/download"
@@ -162,10 +158,6 @@ update() {
     elif command -v pacman &>/dev/null; then
         ensure_sudo
         run_as_root pacman -Syu --noconfirm tailscale
-    elif command -v apt-get &>/dev/null; then
-        ensure_sudo
-        run_as_root apt-get update
-        run_as_root apt-get install -y tailscale
     fi
 
     if command -v tailscale &>/dev/null; then

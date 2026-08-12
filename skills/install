@@ -8,8 +8,7 @@ PRIVATE_DIR="$EXTERNAL_DIR/private"
 PRIVATE_REPO="luanzeba/private-dotfiles"
 
 check_installed() {
-    # External/private skills are optional and may be unavailable depending on
-    # auth scope (for example in Codespaces). Treat skills as installed.
+    # External/private skills are optional and may be unavailable.
     return 0
 }
 
@@ -58,7 +57,6 @@ download_skill_creator() {
 }
 
 # Clone or update private-dotfiles repo (contains optional private skills and config)
-# This will fail gracefully in Codespaces due to GITHUB_TOKEN scope limitations
 download_private_skills() {
     echo "Fetching private skills from $PRIVATE_REPO..."
 
@@ -73,18 +71,14 @@ download_private_skills() {
         if command -v gh &>/dev/null && gh auth status &>/dev/null; then
             if ! gh repo clone "$PRIVATE_REPO" "$PRIVATE_DIR" -- --depth 1 2>/dev/null; then
                 echo "WARNING: Failed to clone private skills."
-                echo "  This is expected in Codespaces (GITHUB_TOKEN lacks access)."
-                echo "  On local machines, ensure you have access to $PRIVATE_REPO"
+                echo "  Ensure you have access to $PRIVATE_REPO"
                 return 1
             fi
         else
             # Fall back to SSH
             if ! git clone --depth 1 "git@github.com:$PRIVATE_REPO.git" "$PRIVATE_DIR" 2>/dev/null; then
                 echo "WARNING: Failed to clone private skills."
-                echo "  This is expected in Codespaces (no SSH key)."
-                echo "  On local machines:"
-                echo "    - For SSH: Ensure your SSH key is set up"
-                echo "    - Or install gh CLI and run 'gh auth login'"
+                echo "  Ensure your SSH key is set up, or install gh and run 'gh auth login'"
                 return 1
             fi
         fi
@@ -161,7 +155,6 @@ configure() {
     # fi
 
     # Link private skills (each skill in private repo's skills/ directory)
-    # These contain sensitive content and won't be available in Codespaces
     if [[ -d "$PRIVATE_DIR/skills" ]]; then
         for skill_dir in "$PRIVATE_DIR/skills"/*/; do
             if [[ -d "$skill_dir" ]]; then

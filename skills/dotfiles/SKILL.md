@@ -1,14 +1,13 @@
 ---
 name: dotfiles
-description: Navigate, modify, and manage Luan's dotfiles repository from any directory. Use when adding or configuring development tools, updating shell/editor/terminal settings, creating cross-platform install scripts (macOS, Arch Linux, GitHub Codespaces), or understanding dotfiles organization. Repo is at ~/dotfiles.
+description: Navigate, modify, and manage Luan's dotfiles repository from any directory. Use when adding or configuring development tools, updating shell/editor/terminal settings, creating cross-platform install scripts for macOS and Arch Linux, or understanding dotfiles organization. Repo is at ~/dotfiles.
 ---
 
 # Dotfiles Management
 
 ## Repository Location
 
-- **macOS/Arch**: `~/dotfiles`
-- **Codespaces**: `/workspaces/.codespaces/.persistedshare/dotfiles` (GitHub implementation detail, may change)
+The repository lives at `~/dotfiles` on macOS and Arch Linux.
 
 **Debugging**: Installation output is logged to `~/dotfiles_install.log`
 
@@ -55,7 +54,6 @@ See [references/tool-template.md](references/tool-template.md) for the install s
 
 | Platform | Detection | Package Manager | Notes |
 |----------|-----------|-----------------|-------|
-| GitHub Codespaces | `$CODESPACES` set | `apt` | Debian-based, **read-only for push** (use `dot patch`) |
 | macOS | `uname == Darwin` | `brew` | Personal machines |
 | Arch/Omarchy | `command -v pacman` | `pacman`/`yay` | Arch + Hyprland |
 | Omarchy | `~/.local/share/omarchy` exists | `pacman`/`yay` | Uses default configs, skip apply() |
@@ -80,49 +78,20 @@ Common mistakes to avoid:
 
 After creating or modifying files in `~/dotfiles/`, run the appropriate install script to create symlinks (e.g., `dot install skills`, `dot install nvim`).
 
-### Codespaces: Read-Only for Pushing
-
-**You cannot push dotfiles changes directly from GitHub Codespaces.**
-
-Why:
-- Codespaces use a scoped `GITHUB_TOKEN` that only has access to the workspace repository (e.g., `github/github`), not your personal `luanzeba/dotfiles` repo
-- Pushing changes would require setting up SSH keys or manually providing a PAT
-
-**Workaround - Use `dot patch`:**
-
-```bash
-# 1. In Codespace: Create a patch from your changes
-dot patch create
-
-# 2. On local machine: Pull and apply the patch
-dot patch pull
-
-# 3. On local: Review, commit, and push
-cd ~/dotfiles
-git diff
-git add -A && git commit -m "Fix from Codespace"
-git push
-
-# 4. In Codespace: Pull the committed changes
-dot pull
-```
-
-This uses `gh cs cp` to transfer a patch file, authenticating through GitHub's Codespace infrastructure rather than requiring repo-specific credentials.
-
 ## Key Principles
 
 - **Always install latest versions**: Install scripts should always fetch the latest stable/LTS version of tools, not pin to specific versions. Use `@latest` tags, `--lts` flags, or omit version specifiers where possible.
 - **Idempotent scripts**: Install scripts must be safe to run multiple times without side effects.
-- **Platform-aware**: Use platform detection to handle differences between Codespaces, macOS, and Arch.
+- **Platform-aware**: Use platform detection to handle differences between macOS and Arch.
 - **Script pattern**: Each tool script should have `install()`, `configure()`, and optionally `apply()` and `update()` functions.
 
 ### Installation Preference Hierarchy
 
 1. **Direct GitHub releases** - Preferred for tools with prebuilt binaries not yet managed by Nix
 2. **Nix flake profile** - Preferred for shared language runtimes/toolchains and base utilities managed in dotfiles (currently base utilities, Node + TypeScript tools, Go, Rust, Ruby, Neovim, Helix, jj, gh, glab, AWS CLI, Git, 1Password CLI, Whisper, Zig, bat)
-3. **Package managers** - Only when no prebuilt binaries or Nix packages fit (system tools via apt/pacman, GUI apps via brew casks)
+3. **Package managers** - Only when no prebuilt binaries or Nix packages fit (system tools via pacman, GUI apps via brew casks)
 
-Homebrew is installed lazily in Phase 3 of `install-local`, only when needed for brew-dependent tools.
+Homebrew is installed lazily in Phase 3 of `install`, only when needed for brew-dependent tools.
 
 ### Standard Binary Locations
 
@@ -189,10 +158,10 @@ The CLI uses jj (Jujutsu) if available, falling back to git.
    - `check_installed()` / `check_configured()` - For `dot status` health checks
 3. Add config files to the directory
 4. Test on each platform
-5. Optionally integrate with `install-local` in the appropriate phase
+5. Optionally integrate with `install` in the appropriate phase
 
 See [references/tool-template.md](references/tool-template.md) for the install script template.
-See [references/install-patterns.md](references/install-patterns.md) for version checking, migrations, and Codespaces patterns.
+See [references/install-patterns.md](references/install-patterns.md) for version checking and migrations.
 
 ### Modifying Neovim Config
 
@@ -206,12 +175,8 @@ Key locations:
 ### Running Install Scripts
 
 ```bash
-# Main install (dispatches to platform-specific script)
+# Main install
 ~/dotfiles/install
-
-# Platform-specific scripts (called by main install)
-~/dotfiles/install-codespaces   # GitHub Codespaces
-~/dotfiles/install-local        # macOS and Arch
 
 # Tool-specific installs
 ~/dotfiles/base/install
@@ -232,8 +197,7 @@ The `lib/common.sh` file provides shared functions for all scripts:
 ```bash
 source "$DOTFILES_DIR/lib/common.sh"
 
-dotfiles_dir    # Get dotfiles path (handles Codespaces)
-is_codespaces   # Check if running in Codespaces
+dotfiles_dir    # Get dotfiles path
 is_macos        # Check if running on macOS
 is_arch         # Check if running on Arch Linux
 is_omarchy      # Check if running on Omarchy

@@ -17,7 +17,7 @@ dot install tailscale
 1. Open Tailscale from Applications
 2. Click the menu bar icon and log in with your account
 
-### Linux (Arch/Debian)
+### Arch Linux
 
 ```bash
 sudo tailscale up

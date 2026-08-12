@@ -99,7 +99,7 @@ _source_nix_env() {
     done
 
     # Determinate Nix can install the nix CLI into the system profile without
-    # making it visible to non-login shells in devcontainers.
+    # making it visible to non-login shells.
     if ! command -v nix &>/dev/null && [[ -x /nix/var/nix/profiles/default/bin/nix ]]; then
         export PATH="/nix/var/nix/profiles/default/bin:$PATH"
     fi
@@ -132,7 +132,6 @@ _nix_daemon_ready() {
 }
 
 # Start the Determinate nix-daemon if it isn't already running.
-# Required on containers without systemd (e.g. supervisord-based devcontainers).
 _ensure_nix_daemon_running() {
     if _nix_daemon_ready; then
         return 0

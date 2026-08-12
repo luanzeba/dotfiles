@@ -66,6 +66,5 @@ Managed by Mason. Configured in `lua/plugins/lsp.lua`:
 
 ### Important Notes
 
-- Clipboard integrates with `rdm` in Codespaces for copy/paste
 - Mason binaries are added to PATH in `init.lua`
 - Format on save is enabled for specific filetypes

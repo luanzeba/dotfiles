@@ -27,10 +27,6 @@ check_installed() {
 check_configured() {
     bootstrap_gh_path
 
-    if gh extension list 2>/dev/null | grep -q "gh-csd"; then
-        return 1
-    fi
-
     if [[ ! -L "$HOME/.config/gh-not" ]]; then
         return 1
     fi
@@ -61,20 +57,11 @@ configure() {
         return 0
     fi
 
-    if gh extension list 2>/dev/null | grep -q "gh-csd"; then
-        gh extension remove luanzeba/gh-csd
-    fi
-
     echo "Installing gh extensions..."
 
-    if [[ -n "$CODESPACES" ]]; then
-        gh extension install nobe4/gh-not 2>/dev/null || true
-    else
-        # Local: install all useful extensions.
-        gh extension install github/gh-shell 2>/dev/null || true
-        gh extension install rneatherway/gh-slack 2>/dev/null || true
-        gh extension install nobe4/gh-not 2>/dev/null || true
-    fi
+    gh extension install github/gh-shell 2>/dev/null || true
+    gh extension install rneatherway/gh-slack 2>/dev/null || true
+    gh extension install nobe4/gh-not 2>/dev/null || true
 
     mkdir -p "$HOME/.config"
     local gh_not_config="$HOME/.config/gh-not"
