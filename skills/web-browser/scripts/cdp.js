@@ -9,7 +9,7 @@ export async function connect(timeout = 5000) {
   const timeoutId = setTimeout(() => controller.abort(), timeout);
 
   try {
-    const resp = await fetch("http://localhost:9222/json/version", {
+    const resp = await fetch("http://127.0.0.1:9222/json/version", {
       signal: controller.signal,
     });
     const { webSocketDebuggerUrl, Browser } = await resp.json();

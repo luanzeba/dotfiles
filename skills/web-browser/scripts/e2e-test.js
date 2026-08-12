@@ -1,6 +1,6 @@
 const WebSocket = require('ws');
 const fs = require('fs');
-const ws = new WebSocket('ws://localhost:9222/devtools/page/F4A64D4410B9DE0B4EADB60D9D8FC0CA');
+const ws = new WebSocket('ws://127.0.0.1:9222/devtools/page/F4A64D4410B9DE0B4EADB60D9D8FC0CA');
 ws.on('open', () => {
   // Clear and reload
   ws.send(JSON.stringify({id:1, method:'Runtime.evaluate', params:{

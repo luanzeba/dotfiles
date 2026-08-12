@@ -1,0 +1,104 @@
+#!/bin/bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SOURCE="$SCRIPT_DIR/chrome-router.swift"
+APP="$HOME/Applications/Chrome Router.app"
+CONTENTS="$APP/Contents"
+BINARY="$CONTENTS/MacOS/chrome-router"
+LOCAL_BIN="$HOME/.local/bin"
+LAUNCH_AGENT="$HOME/Library/LaunchAgents/com.luanzeba.chrome-router.plist"
+LSREGISTER="/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
+
+if [[ "$(uname -s)" != "Darwin" ]]; then
+  echo "Chrome Router is macOS-only."
+  exit 0
+fi
+
+command -v swiftc >/dev/null 2>&1 || { echo "swiftc is required (install Xcode Command Line Tools)." >&2; exit 1; }
+
+# Stop only our tiny URL-handler process so a rebuild takes effect immediately.
+osascript -e 'tell application id "com.luanzeba.chrome-router" to quit' >/dev/null 2>&1 || true
+
+mkdir -p "$CONTENTS/MacOS" "$LOCAL_BIN"
+swiftc -O -framework AppKit -framework CoreServices "$SOURCE" -o "$BINARY"
+
+cat > "$CONTENTS/Info.plist" <<'PLIST'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleDevelopmentRegion</key><string>en</string>
+  <key>CFBundleDisplayName</key><string>Chrome Router</string>
+  <key>CFBundleExecutable</key><string>chrome-router</string>
+  <key>CFBundleIdentifier</key><string>com.luanzeba.chrome-router</string>
+  <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
+  <key>CFBundleName</key><string>Chrome Router</string>
+  <key>CFBundlePackageType</key><string>APPL</string>
+  <key>CFBundleShortVersionString</key><string>0.1.0</string>
+  <key>CFBundleVersion</key><string>1</string>
+  <key>CFBundleDocumentTypes</key>
+  <array>
+    <dict>
+      <key>CFBundleTypeName</key><string>HTML Document</string>
+      <key>CFBundleTypeRole</key><string>Viewer</string>
+      <key>LSItemContentTypes</key><array><string>public.html</string></array>
+    </dict>
+    <dict>
+      <key>CFBundleTypeName</key><string>XHTML Document</string>
+      <key>CFBundleTypeRole</key><string>Viewer</string>
+      <key>LSItemContentTypes</key><array><string>public.xhtml</string></array>
+    </dict>
+  </array>
+  <key>CFBundleURLTypes</key>
+  <array>
+    <dict>
+      <key>CFBundleTypeRole</key><string>Viewer</string>
+      <key>CFBundleURLName</key><string>Web site URL</string>
+      <key>CFBundleURLSchemes</key><array><string>http</string><string>https</string></array>
+    </dict>
+  </array>
+  <key>LSMinimumSystemVersion</key><string>13.0</string>
+  <key>LSUIElement</key><true/>
+  <key>NSHighResolutionCapable</key><true/>
+  <key>NSPrincipalClass</key><string>NSApplication</string>
+  <key>NSUserActivityTypes</key><array><string>NSUserActivityTypeBrowsingWeb</string></array>
+</dict>
+</plist>
+PLIST
+
+plutil -lint "$CONTENTS/Info.plist" >/dev/null
+codesign --force --deep --sign - "$APP" >/dev/null 2>&1
+ln -sfn "$BINARY" "$LOCAL_BIN/chrome-router"
+"$LSREGISTER" -f "$APP"
+"$BINARY" self-test
+"$BINARY" default
+
+for _ in {1..20}; do
+  "$BINARY" is-default && break
+  sleep 0.1
+done
+"$BINARY" is-default || { echo "Could not make Chrome Router the default browser." >&2; exit 1; }
+
+mkdir -p "$(dirname "$LAUNCH_AGENT")"
+cat > "$LAUNCH_AGENT" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.luanzeba.chrome-router</string>
+  <key>ProgramArguments</key>
+  <array><string>/usr/bin/open</string><string>-a</string><string>$APP</string></array>
+  <key>RunAtLoad</key><true/>
+</dict>
+</plist>
+PLIST
+launchctl bootout "gui/$(id -u)" "$LAUNCH_AGENT" >/dev/null 2>&1 || true
+launchctl bootstrap "gui/$(id -u)" "$LAUNCH_AGENT"
+
+if [[ -L "$HOME/.finicky.js" && "$(readlink "$HOME/.finicky.js")" == */dotfiles/finicky/config.js ]]; then
+  rm -f "$HOME/.finicky.js"
+fi
+
+echo "Installed: $APP"
+echo "CLI: $LOCAL_BIN/chrome-router"

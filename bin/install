@@ -45,8 +45,8 @@ configure() {
     for script in "$SCRIPT_DIR"/*; do
         local name
         name=$(basename "$script")
-        # Skip the install script itself
-        [[ "$name" == "install" ]] && continue
+        # Skip the installer and native source files.
+        [[ "$name" == "install" || "$name" == *.swift ]] && continue
         ln -sf "$script" "$LOCAL_BIN/$name"
     done
 }

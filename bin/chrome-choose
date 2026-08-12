@@ -1,0 +1,13 @@
+#!/bin/bash
+
+# Required parameters:
+# @raycast.schemaVersion 1
+# @raycast.title Choose Chrome Profile for URL
+# @raycast.mode silent
+
+# Optional parameters:
+# @raycast.icon 🧭
+# @raycast.packageName Browser
+# @raycast.description Pick a profile for the URL on the clipboard and remember its domain.
+
+exec "$HOME/.local/bin/chrome-router" choose

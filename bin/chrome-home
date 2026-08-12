@@ -1,0 +1,13 @@
+#!/bin/bash
+
+# Required parameters:
+# @raycast.schemaVersion 1
+# @raycast.title Open Chrome — Home
+# @raycast.mode silent
+
+# Optional parameters:
+# @raycast.icon 🏠
+# @raycast.packageName Browser
+# @raycast.description Instantly focus or launch the Home Chrome profile with Pi debugging enabled.
+
+exec "$HOME/.local/bin/chrome-router" open Home

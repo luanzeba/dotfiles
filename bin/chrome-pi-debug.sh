@@ -3,7 +3,7 @@
 # Required parameters:
 # @raycast.schemaVersion 1
 # @raycast.title Open Chrome (Pi Debug)
-# @raycast.mode fullOutput
+# @raycast.mode silent
 
 # Optional parameters:
 # @raycast.icon 🌐
@@ -19,6 +19,12 @@ set -uo pipefail
 if [[ "$(uname -s)" != "Darwin" ]]; then
   echo "This command is macOS-only."
   exit 1
+fi
+
+# Hyper+B takes the native fast path. Explicit diagnostic flags retain the
+# slower CDP validation flow below for agents and troubleshooting.
+if [[ $# -eq 0 && -x "$HOME/.local/bin/chrome-router" ]]; then
+  exec "$HOME/.local/bin/chrome-router" open Work
 fi
 
 ENSURE_ONLY=0

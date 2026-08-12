@@ -161,6 +161,7 @@ dot logs --clear      # Clear error log
 
 ## Utilities
 
+- `chrome-router`: native macOS HTTP/HTTPS handler that routes links to Chrome profiles while keeping the Pi CDP session available. Hold Hyper while clicking a link to choose Home or Work and remember that site. CLI examples: `chrome-router open Work`, `chrome-router open Home`, `chrome-router choose`, `chrome-router rules`, and `chrome-router status`. Raycast discovers the `Open Chrome — Work`, `Open Chrome — Home`, and `Choose Chrome Profile for URL` commands from `bin/` for direct keybinding assignment.
 - `oryx`: Oryx GraphQL wrapper for layout inspection, key updates, and compilation. `oryx auth login` uses an isolated visible Chromium profile; its session is stored outside the repository at `~/.local/state/oryx/session.json` with mode `0600`.
 - `zsa/install`: installs minimal Voyager-only udev rules and adds the user to `plugdev` for Oryx WebUSB flashing.
 - `tui-qa`: PTY-driven TUI smoke tests.

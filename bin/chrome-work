@@ -1,0 +1,13 @@
+#!/bin/bash
+
+# Required parameters:
+# @raycast.schemaVersion 1
+# @raycast.title Open Chrome — Work
+# @raycast.mode silent
+
+# Optional parameters:
+# @raycast.icon 🌐
+# @raycast.packageName Browser
+# @raycast.description Instantly focus or launch the Work Chrome profile with Pi debugging enabled.
+
+exec "$HOME/.local/bin/chrome-router" open Work

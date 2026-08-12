@@ -6,7 +6,7 @@ Use exactly one **main** Chrome experience for day-to-day browsing:
 
 - same tabs/pinned tabs/history/profiles
 - same window used by Hyper+B
-- same window/process that receives links from other apps (via Finicky)
+- same window/process that receives links from other apps (via Chrome Router)
 - same process exposing CDP on `:9222` for Pi
 
 ## Desired Behavior
@@ -18,7 +18,7 @@ Use exactly one **main** Chrome experience for day-to-day browsing:
    - ensure debug readiness,
    - bring the main Chrome process to front,
    - never open a separate empty-profile Chrome instance.
-5. Finicky should open links into that same canonical Chrome process (no second Chrome root process).
+5. Chrome Router should open links into that same canonical Chrome process (no second Chrome root process).
 6. Clicking links should open the requested URL (no "open Chrome but drop URL" regression).
 
 ## Test Matrix
@@ -47,5 +47,5 @@ Use exactly one **main** Chrome experience for day-to-day browsing:
 
 - If multiple root Chrome processes are already running, full convergence to a single process may require a one-time cleanup/relaunch cycle.
 - Chrome cannot always add `--remote-debugging-port` to an already-running default-profile process, so a clean startup order matters.
-- Finicky uses `~/dotfiles/bin/chrome-pi-open-url.sh` to route external links into the canonical Pi-debug Chrome process.
+- Chrome Router launches Chrome directly with the canonical user-data directory and CDP flags, avoiding the old Node/Python bridge on the URL-opening hot path.
 - Legacy path `~/.cache/scraping` is kept as a compatibility symlink to the canonical profile directory.

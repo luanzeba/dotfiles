@@ -13,7 +13,7 @@ const LEGACY_PI_PROFILE_USER_DATA_DIR = path.join(process.env.HOME || "", ".cach
 const DEFAULT_PI_PROFILE_USER_DATA_DIR = path.join(process.env.HOME || "", ".cache", "pi-chrome-profile");
 
 function endpoint(port, pathname) {
-  return `http://localhost:${port}${pathname}`;
+  return `http://127.0.0.1:${port}${pathname}`;
 }
 
 function normalizePath(input) {

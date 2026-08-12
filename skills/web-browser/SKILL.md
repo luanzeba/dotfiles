@@ -56,6 +56,22 @@ Profile lifecycle helper:
 ~/dotfiles/bin/chrome-pi-profile.sh sanitize
 ```
 
+## Native Chrome routing (macOS)
+
+Chrome Router is the default HTTP/HTTPS handler and keeps normal links, profile shortcuts, and Pi automation on the canonical debug-enabled Chrome process.
+
+```bash
+chrome-router open Work                 # focus/launch Work
+chrome-router open Home                 # focus/launch Home
+chrome-router open Work https://example.com
+chrome-router choose                    # choose + remember the clipboard URL
+chrome-router rules
+chrome-router status
+chrome-router profile Home "Profile 1"  # change a logical profile mapping
+```
+
+Hold Hyper while clicking a link to choose Home or Work and remember the matching site. Normal unmatched links use Chrome's last-used profile. Saved rules live at `~/.config/chrome-router/config.json`; use the CLI instead of editing it manually.
+
 ## Navigate
 
 ```bash
