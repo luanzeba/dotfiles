@@ -25,9 +25,8 @@ All valid categories in the vault (19 total). Use `[[Categories/Name|Name]]` for
 **Common types:** Project, Investigation, Meeting, Proposal, Feedback
 
 ### Investigations
-**Purpose:** Incident investigations with query tracking  
-**Common types:** Active, Resolved, On-hold  
-**Note:** Integrates with `iq` query database - see `obsidian-investigations` skill
+**Purpose:** Incident investigations
+**Common types:** Active, Resolved, On-hold
 
 ### Meetings
 **Purpose:** Meeting notes  

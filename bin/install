@@ -28,6 +28,19 @@ configure() {
     # Ensure ~/.local/bin exists
     mkdir -p "$LOCAL_BIN"
 
+    # Remove links to scripts that no longer exist in dotfiles.
+    for link in "$LOCAL_BIN"/*; do
+        [[ -L "$link" ]] || continue
+        local target
+        target=$(readlink "$link")
+        if [[ "$target" == "$SCRIPT_DIR/"* && ! -e "$target" ]]; then
+            rm -f "$link"
+        fi
+    done
+
+    # The retired todo installer linked a binary from its separate source repo.
+    [[ -L "$LOCAL_BIN/todo" ]] && rm -f "$LOCAL_BIN/todo"
+
     # Symlink each script individually to ~/.local/bin
     for script in "$SCRIPT_DIR"/*; do
         local name

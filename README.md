@@ -39,7 +39,7 @@ git clone https://github.com/luanzeba/dotfiles.git ~/dotfiles
 
 The main `install` script detects your platform and runs the appropriate setup.
 
-`todo`, `glab`, and `aws` are intentionally opt-in and **not** included in default install phases.
+`glab` and `aws` are intentionally opt-in and **not** included in default install phases.
 Use `dot install <tool>` when you want to set one up.
 
 `hunk` is included in default installs (macOS, Arch/Omarchy, and Codespaces).
@@ -118,7 +118,6 @@ After installation, use the `dotfiles` (or `dot`) command:
 | `dot pull` | Pull latest (Omarchy skips apply by default; use `--apply`) |
 | `dot install` | Run full install |
 | `dot install <tool>` | Install specific tool(s), e.g. `dot install base` |
-| `dot install todo` | Interactive todo installer (server/client + local/remote) |
 | `dot install aws` | Install AWS CLI v2 and link private SSO profiles |
 | `dot install -f <tool>` | Force reinstall (skip install check) |
 | `dot update` | Update tools (brew, nvim plugins, etc.) |
@@ -164,12 +163,7 @@ dot logs --clear      # Clear error log
 
 - `oryx`: Oryx GraphQL wrapper for layout inspection, key updates, and compilation. `oryx auth login` uses an isolated visible Chromium profile; its session is stored outside the repository at `~/.local/state/oryx/session.json` with mode `0600`.
 - `zsa/install`: installs minimal Voyager-only udev rules and adds the user to `plugdev` for Oryx WebUSB flashing.
-- `tui-qa`: PTY-driven TUI smoke tests. Example:
-  `tui-qa --cmd "./gh-csd tui" --keys "sleep:1,j,q" --assert "codespace\(s\)"`
-- `github-devcontainer-postcreate`: re-apply dotfiles and copy local Pi auth into the
-  `github/github` local arm64 devcontainer so `/login` is not needed each time.
-  `dev rebuild` runs this automatically after a successful rebuild; run it manually as needed.
-  Example: `github-devcontainer-postcreate --workspace-folder ~/github/github`
+- `tui-qa`: PTY-driven TUI smoke tests.
 
 ## Platforms
 

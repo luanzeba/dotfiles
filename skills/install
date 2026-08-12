@@ -57,7 +57,7 @@ download_skill_creator() {
     return 0
 }
 
-# Clone or update private-dotfiles repo (contains optional private skills and tools)
+# Clone or update private-dotfiles repo (contains optional private skills and config)
 # This will fail gracefully in Codespaces due to GITHUB_TOKEN scope limitations
 download_private_skills() {
     echo "Fetching private skills from $PRIVATE_REPO..."
@@ -173,12 +173,11 @@ configure() {
     fi
 }
 
-# Install tools from private-dotfiles (iq, splunk-cli)
-install_private_tools() {
-    if [[ -x "$PRIVATE_DIR/install" ]]; then
+configure_private_dotfiles() {
+    if [[ -x "$PRIVATE_DIR/configure" ]]; then
         echo ""
-        echo "Installing private tools..."
-        "$PRIVATE_DIR/install"
+        echo "Configuring private dotfiles..."
+        "$PRIVATE_DIR/configure"
     fi
 }
 
@@ -198,7 +197,7 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     echo "Installing skills..."
     install
     configure
-    install_private_tools
+    configure_private_dotfiles
     install_skill_dependencies
     echo ""
     echo "Skills installation complete!"
