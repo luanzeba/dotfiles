@@ -10,6 +10,7 @@ private let debugPort = 9222
 private struct Rule: Codable, Equatable {
     var host: String
     var pathPrefix: String?
+    var urlContains: String? = nil
     var profile: String
 }
 
@@ -28,6 +29,11 @@ private struct RouterConfig: Codable {
             Rule(host: "github.com", pathPrefix: "/github", profile: "Work"),
             Rule(host: "app.datadoghq.com", pathPrefix: nil, profile: "Work"),
             Rule(host: "beta.team", pathPrefix: nil, profile: "Work"),
+            Rule(host: "linear.app", pathPrefix: nil, profile: "Work"),
+            Rule(host: "concursolutions.com", pathPrefix: nil, profile: "Work"),
+            Rule(host: "app.flightschedulepro.com", pathPrefix: nil, profile: "Work"),
+            Rule(host: "faa.gov", pathPrefix: nil, profile: "Work"),
+            Rule(host: "", pathPrefix: nil, urlContains: "betaairllc", profile: "Work"),
             Rule(host: "x.com", pathPrefix: nil, profile: "Home"),
             Rule(host: "traveljoy.com", pathPrefix: nil, profile: "Home"),
         ]
@@ -278,6 +284,21 @@ private final class Router {
         return rule
     }
 
+    @discardableResult
+    func rememberContains(_ value: String, profile: String) -> Rule {
+        let value = value.lowercased()
+        if let index = config.rules.firstIndex(where: { $0.urlContains?.lowercased() == value }) {
+            config.rules[index].profile = canonicalProfile(profile)
+            try? save()
+            return config.rules[index]
+        }
+
+        let rule = Rule(host: "", pathPrefix: nil, urlContains: value, profile: canonicalProfile(profile))
+        config.rules.append(rule)
+        try? save()
+        return rule
+    }
+
     func forget(_ url: URL) -> Rule? {
         guard let index = matchingRuleIndex(for: url) else { return nil }
         let rule = config.rules.remove(at: index)
@@ -387,8 +408,12 @@ private final class Router {
             return
         }
         for rule in config.rules.sorted(by: ruleSort) {
-            let path = rule.pathPrefix ?? "/*"
-            print("\(rule.profile)\t\(rule.host)\(path)")
+            if let value = rule.urlContains {
+                print("\(rule.profile)\t*\(value)*")
+            } else {
+                let path = rule.pathPrefix ?? "/*"
+                print("\(rule.profile)\t\(rule.host)\(path)")
+            }
         }
     }
 
@@ -403,6 +428,10 @@ private final class Router {
     }
 
     private func ruleMatches(_ rule: Rule, url: URL) -> Bool {
+        if let value = rule.urlContains, !value.isEmpty {
+            return url.absoluteString.range(of: value, options: .caseInsensitive) != nil
+        }
+
         let host = normalizedHost(url.host ?? "")
         let expectedHost = normalizedHost(rule.host)
         guard host == expectedHost || host.hasSuffix(".\(expectedHost)") else { return false }
@@ -412,13 +441,15 @@ private final class Router {
     }
 
     private func ruleSpecificity(_ rule: Rule) -> Int {
-        rule.host.count + (rule.pathPrefix?.count ?? 0) * 1000
+        if let value = rule.urlContains { return 1_000_000 + value.count }
+        return rule.host.count + (rule.pathPrefix?.count ?? 0) * 1000
     }
 
     private func ruleSort(_ lhs: Rule, _ rhs: Rule) -> Bool {
         if lhs.profile != rhs.profile { return lhs.profile < rhs.profile }
-        if lhs.host != rhs.host { return lhs.host < rhs.host }
-        return (lhs.pathPrefix ?? "") < (rhs.pathPrefix ?? "")
+        let lhsPattern = lhs.urlContains.map { "*\($0)*" } ?? "\(lhs.host)\(lhs.pathPrefix ?? "")"
+        let rhsPattern = rhs.urlContains.map { "*\($0)*" } ?? "\(rhs.host)\(rhs.pathPrefix ?? "")"
+        return lhsPattern < rhsPattern
     }
 
     private func normalizedHost(_ host: String) -> String {
@@ -513,6 +544,7 @@ private func usage() {
       open [Home|Work|last] [URL]   Focus a profile or open a URL there
       choose [URL]                  Pick a profile and remember it (uses clipboard if omitted)
       remember <profile> [URL]      Save the URL's domain for a profile
+      contains <profile> <text>     Save a URL substring for a profile
       forget [URL]                  Remove the matching rule
       route <URL>                   Route using saved rules, otherwise last-used profile
       rules                         List saved rules
@@ -544,6 +576,12 @@ private func runCLI(_ arguments: [String]) -> Int32 {
         guard let url else { return 1 }
         let rule = router.remember(url, profile: arguments[1])
         print("Remembered \(rule.host)\(rule.pathPrefix ?? "/*") → \(rule.profile)")
+    case "contains":
+        guard arguments.count > 2 else { usage(); return 1 }
+        let value = arguments[2].trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !value.isEmpty else { return 1 }
+        let rule = router.rememberContains(value, profile: arguments[1])
+        print("Remembered *\(rule.urlContains!)* → \(rule.profile)")
     case "forget":
         let url = arguments.count > 1 ? parseURL(arguments[1]) : router.promptForURL()
         guard let url else { return 1 }
@@ -591,12 +629,20 @@ private func runCLI(_ arguments: [String]) -> Int32 {
         setenv("CHROME_ROUTER_CONFIG", temporaryConfig.path, 1)
         let testRouter = Router()
         defer { try? FileManager.default.removeItem(at: temporaryConfig) }
-        guard testRouter.matchingRule(for: URL(string: "https://github.com/github/test")!)?.profile == "Work",
-              testRouter.matchingRule(for: URL(string: "https://app.beta.team/test")!)?.profile == "Work",
-              testRouter.matchingRule(for: URL(string: "https://www.traveljoy.com/test")!)?.profile == "Home",
-              testRouter.matchingRule(for: URL(string: "https://example.com")!) == nil,
-              parseURL("not a URL") == nil else {
-            fputs("chrome-router: self-test failed\n", stderr)
+        let checks = [
+            ("github path", testRouter.matchingRule(for: URL(string: "https://github.com/github/test")!)?.profile == "Work"),
+            ("beta.team", testRouter.matchingRule(for: URL(string: "https://app.beta.team/test")!)?.profile == "Work"),
+            ("Linear", testRouter.matchingRule(for: URL(string: "https://linear.app/acme/issue/1")!)?.profile == "Work"),
+            ("Concur", testRouter.matchingRule(for: URL(string: "https://expense.concursolutions.com/home")!)?.profile == "Work"),
+            ("Flight Schedule Pro", testRouter.matchingRule(for: URL(string: "https://app.flightschedulepro.com/betaair")!)?.profile == "Work"),
+            ("FAA", testRouter.matchingRule(for: URL(string: "https://www.faa.gov/licenses")!)?.profile == "Work"),
+            ("URL substring", testRouter.matchingRule(for: URL(string: "https://x.com/?tenant=BETAAIRLLC")!)?.profile == "Work"),
+            ("Home subdomain", testRouter.matchingRule(for: URL(string: "https://www.traveljoy.com/test")!)?.profile == "Home"),
+            ("unmatched URL", testRouter.matchingRule(for: URL(string: "https://example.com")!) == nil),
+            ("invalid URL", parseURL("not a URL") == nil),
+        ]
+        if let failed = checks.first(where: { !$0.1 }) {
+            fputs("chrome-router: self-test failed: \(failed.0)\n", stderr)
             return 1
         }
         print("Chrome Router self-test passed.")
