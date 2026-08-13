@@ -58,84 +58,34 @@ if [[ ! -f "$START_SCRIPT" ]]; then
   exit 1
 fi
 
-pick_preferred_chrome_pid() {
+debug_chrome_pid() {
   python3 - <<'PY'
-import os
 import subprocess
 
-DEFAULT_USER_DATA_DIR = os.path.expanduser("~/Library/Application Support/Google/Chrome")
-CHROME_BIN = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
-
-out = subprocess.check_output(["ps", "-axo", "pid=,command="], text=True)
-entries = []
-for line in out.splitlines():
+chrome = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+for line in subprocess.check_output(["ps", "-axo", "pid=,command="], text=True).splitlines():
     line = line.strip()
-    if not line:
-        continue
-    if CHROME_BIN not in line:
-        continue
-    if "Helper" in line:
-        continue
-
-    pid_text, command = line.split(" ", 1)
-    pid = int(pid_text)
-
-    entries.append((pid, command))
-
-if not entries:
-    raise SystemExit(0)
-
-# Preference order:
-# 1) Active Pi-debug session (:9222)
-# 2) Main Chrome instance (no explicit --user-data-dir flag)
-# 3) Explicit default Chrome user-data-dir
-# 4) Any other chrome root process
-for pid, command in entries:
-    if "--remote-debugging-port=9222" in command:
-        print(pid)
-        raise SystemExit(0)
-
-for pid, command in entries:
-    if "--user-data-dir=" not in command:
-        print(pid)
-        raise SystemExit(0)
-
-for pid, command in entries:
-    if f"--user-data-dir={DEFAULT_USER_DATA_DIR}" in command:
-        print(pid)
-        raise SystemExit(0)
-
-print(entries[0][0])
+    if chrome in line and "Helper" not in line and "--remote-debugging-port=9222" in line:
+        print(line.split(" ", 1)[0])
+        break
 PY
 }
 
 activate_chrome_window() {
-  if ! pgrep -x "Google Chrome" >/dev/null 2>&1; then
-    echo "No Chrome process found, launching..."
-    /usr/bin/open -a "Google Chrome"
-    return 0
+  local pid
+  pid="$(debug_chrome_pid || true)"
+
+  if [[ -z "${pid:-}" ]]; then
+    echo "No debug-enabled Chrome process is available to activate."
+    return 1
   fi
 
-  local preferred_pid
-  preferred_pid="$(pick_preferred_chrome_pid || true)"
-
-  if [[ -n "${preferred_pid:-}" ]]; then
-    echo "Chrome is already running, activating preferred process pid=$preferred_pid..."
-    osascript <<APPLESCRIPT
-      tell application "System Events"
-        try
-          set frontmost of first process whose unix id is $preferred_pid to true
-        on error
-          set frontmost of first process whose name is "Google Chrome" to true
-        end try
-      end tell
-      tell application "Google Chrome" to activate
+  echo "Activating debug-enabled Chrome pid=$pid..."
+  osascript <<APPLESCRIPT
+    tell application "System Events"
+      set frontmost of first process whose unix id is $pid to true
+    end tell
 APPLESCRIPT
-    return 0
-  fi
-
-  echo "Chrome is already running, activating..."
-  osascript -e 'tell application "Google Chrome" to activate'
 }
 
 if ! ensure_node; then
@@ -169,9 +119,11 @@ if [[ $START_STATUS -ne 0 ]]; then
   echo "⚠️  Debug session check failed, but I’ll still bring Chrome to the front."
 fi
 
-activate_chrome_window
+if ! activate_chrome_window; then
+  exit 1
+fi
 
 echo "✓ Ready. Pi can now use the web-browser skill on the active visible debug session."
 
-# Non-strict default: prioritize UX (always open browser) even when debug check fails.
+# Never fall back to launching ordinary Chrome without the shared debug session.
 exit 0

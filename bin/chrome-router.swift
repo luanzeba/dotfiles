@@ -79,10 +79,7 @@ private final class Router {
             if let profile, profile.lowercased() != "last" {
                 focusProfile(profile)
             } else {
-                NSWorkspace.shared.openApplication(
-                    at: URL(fileURLWithPath: "/Applications/Google Chrome.app"),
-                    configuration: NSWorkspace.OpenConfiguration()
-                )
+                launchChrome(url: nil, profile: nil)
             }
             return
         }
@@ -90,7 +87,13 @@ private final class Router {
         launchChrome(url: url, profile: profile)
     }
 
-    private func launchChrome(url: URL?, profile: String?) {
+    @discardableResult
+    private func launchChrome(url: URL?, profile: String?) -> Bool {
+        if !debugEndpointAvailable(), ordinaryChromeIsRunning() {
+            showError("Google Chrome is already running without remote debugging. Quit that Chrome instance, then try again.")
+            return false
+        }
+
         var arguments = [
             "--remote-debugging-port=\(debugPort)",
             "--remote-allow-origins=*",
@@ -111,19 +114,51 @@ private final class Router {
         process.standardError = FileHandle.nullDevice
         do {
             try process.run()
+            return true
         } catch {
             showError("Could not open Chrome: \(error.localizedDescription)")
+            return false
+        }
+    }
+
+    private func ordinaryChromeIsRunning() -> Bool {
+        let process = Process()
+        let output = Pipe()
+        process.executableURL = URL(fileURLWithPath: "/bin/ps")
+        process.arguments = ["-axo", "command="]
+        process.standardOutput = output
+        process.standardError = FileHandle.nullDevice
+
+        do {
+            try process.run()
+            let data = output.fileHandleForReading.readDataToEndOfFile()
+            process.waitUntilExit()
+            guard let commands = String(data: data, encoding: .utf8) else { return false }
+            return commands.split(separator: "\n").contains { rawCommand in
+                let command = rawCommand.trimmingCharacters(in: .whitespaces)
+                return command.hasPrefix(chromePath) && !command.contains("--remote-debugging-port=\(debugPort)")
+            }
+        } catch {
+            return false
         }
     }
 
     private func focusProfile(_ profile: String) {
         let profileName = canonicalProfile(profile)
-        if let windowID = windowState()[profileName], activateWindow(windowID) {
+        if debugEndpointAvailable(),
+           let windowID = windowState()[profileName],
+           activateWindow(windowID) {
             return
         }
 
         let marker = "http://127.0.0.1:9/chrome-router-focus/\(UUID().uuidString)"
-        launchChrome(url: URL(string: marker), profile: profileName)
+        guard launchChrome(url: URL(string: marker), profile: profileName) else { return }
+
+        guard waitForDebugTarget(matching: marker) else {
+            fputs("chrome-router: Chrome did not expose the profile window on :\(debugPort).\n", stderr)
+            closeDebugTarget(matching: marker)
+            return
+        }
 
         let script = """
         tell application "Google Chrome"
@@ -164,13 +199,28 @@ private final class Router {
         closeDebugTarget(matching: marker)
     }
 
-    private func closeDebugTarget(matching url: String) {
-        guard let listURL = URL(string: "http://127.0.0.1:\(debugPort)/json/list") else { return }
+    private func debugTargets() -> [DebugTarget] {
+        guard let listURL = URL(string: "http://127.0.0.1:\(debugPort)/json/list"),
+              let data = try? Data(contentsOf: listURL) else { return [] }
+        return (try? JSONDecoder().decode([DebugTarget].self, from: data)) ?? []
+    }
 
+    private func debugEndpointAvailable() -> Bool {
+        guard let versionURL = URL(string: "http://127.0.0.1:\(debugPort)/json/version") else { return false }
+        return (try? Data(contentsOf: versionURL)) != nil
+    }
+
+    private func waitForDebugTarget(matching url: String) -> Bool {
+        for _ in 0..<100 {
+            if debugTargets().contains(where: { $0.url == url }) { return true }
+            Thread.sleep(forTimeInterval: 0.05)
+        }
+        return false
+    }
+
+    private func closeDebugTarget(matching url: String) {
         for _ in 0..<40 {
-            if let data = try? Data(contentsOf: listURL),
-               let targets = try? JSONDecoder().decode([DebugTarget].self, from: data),
-               let target = targets.first(where: { $0.url == url }),
+            if let target = debugTargets().first(where: { $0.url == url }),
                let closeURL = URL(string: "http://127.0.0.1:\(debugPort)/json/close/\(target.id)") {
                 _ = try? Data(contentsOf: closeURL)
                 return
