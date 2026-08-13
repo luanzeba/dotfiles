@@ -13,6 +13,11 @@ private struct Rule: Codable, Equatable {
     var profile: String
 }
 
+private struct DebugTarget: Decodable {
+    let id: String
+    let url: String
+}
+
 private struct RouterConfig: Codable {
     var profiles: [String: String]
     var rules: [Rule]
@@ -123,21 +128,19 @@ private final class Router {
         tell application "Google Chrome"
           repeat 40 times
             repeat with w in windows
-              set tabTotal to count tabs of w
-              repeat with tabNumber from 1 to tabTotal
-                set candidate to tab tabNumber of w
-                if URL of candidate is "\(marker)" then
-                  set active tab index of w to tabNumber
-                  set index of w to 1
-                  activate
-                  if tabTotal > 1 then
-                    close candidate
-                  else
-                    set URL of candidate to "chrome://newtab/"
-                  end if
-                  return id of w as text
+              try
+                set candidate to first tab of w whose URL is "\(marker)"
+                set tabTotal to count tabs of w
+                set windowID to id of w as text
+                set index of w to 1
+                activate
+                if tabTotal > 1 then
+                  close candidate
+                else
+                  set URL of candidate to "chrome://newtab/"
                 end if
-              end repeat
+                return windowID
+              end try
             end repeat
             delay 0.05
           end repeat
@@ -151,6 +154,27 @@ private final class Router {
             var state = windowState()
             state[profileName] = windowID
             saveWindowState(state)
+            return
+        }
+
+        if let error {
+            fputs("chrome-router: Could not inspect Chrome windows: \(error)\n", stderr)
+        }
+        closeDebugTarget(matching: marker)
+    }
+
+    private func closeDebugTarget(matching url: String) {
+        guard let listURL = URL(string: "http://127.0.0.1:\(debugPort)/json/list") else { return }
+
+        for _ in 0..<40 {
+            if let data = try? Data(contentsOf: listURL),
+               let targets = try? JSONDecoder().decode([DebugTarget].self, from: data),
+               let target = targets.first(where: { $0.url == url }),
+               let closeURL = URL(string: "http://127.0.0.1:\(debugPort)/json/close/\(target.id)") {
+                _ = try? Data(contentsOf: closeURL)
+                return
+            }
+            Thread.sleep(forTimeInterval: 0.05)
         }
     }
 
