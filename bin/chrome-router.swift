@@ -27,6 +27,7 @@ private struct RouterConfig: Codable {
         rules: [
             Rule(host: "github.com", pathPrefix: "/github", profile: "Work"),
             Rule(host: "app.datadoghq.com", pathPrefix: nil, profile: "Work"),
+            Rule(host: "beta.team", pathPrefix: nil, profile: "Work"),
             Rule(host: "x.com", pathPrefix: nil, profile: "Home"),
             Rule(host: "traveljoy.com", pathPrefix: nil, profile: "Home"),
         ]
@@ -541,6 +542,7 @@ private func runCLI(_ arguments: [String]) -> Int32 {
         let testRouter = Router()
         defer { try? FileManager.default.removeItem(at: temporaryConfig) }
         guard testRouter.matchingRule(for: URL(string: "https://github.com/github/test")!)?.profile == "Work",
+              testRouter.matchingRule(for: URL(string: "https://app.beta.team/test")!)?.profile == "Work",
               testRouter.matchingRule(for: URL(string: "https://www.traveljoy.com/test")!)?.profile == "Home",
               testRouter.matchingRule(for: URL(string: "https://example.com")!) == nil,
               parseURL("not a URL") == nil else {
