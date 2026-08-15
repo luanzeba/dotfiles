@@ -1,64 +1,107 @@
 ---
 name: evidence-based-responses
-description: Guide for writing and responding to code review comments with evidence-based claims. Use when writing PR review comments, responding to reviewer feedback, or engaging in technical discussions where claims should be backed by documentation, code references, or test results. Covers research and validation before making claims, linking to evidence, and professional communication.
+description: Draft, revise, and respond to human code-review comments on GitHub PRs and GitLab MRs. Use when reviewing diffs, leaving inline feedback, explaining a concern, responding to reviewers, or revising comments for clarity. Verifies technical claims and writes plain-language comments with concrete code or pseudocode when suggesting a change.
 ---
 
-# Evidence-Based Responses
+# Evidence-Based Review Communication
 
-Never make a technical claim without evidence to back it up. When someone asks "does X work this way?" or "shouldn't this be Y?", the answer should include a link to documentation, a code reference, or test results that demonstrate the claim is true.
+Verify the concern first, then explain it in language the author can act on. Evidence prevents incorrect comments; clear writing prevents correct comments from becoming useless.
 
-## Responding to Review Comments
+## Review workflow
 
-When a reviewer raises a concern, follow this workflow: first understand what they're actually asking (not what you assume they're asking), then research to verify the facts, gather concrete evidence, and finally draft a response that addresses their concern directly.
+1. Understand the code and the behavior being changed. Read the full implementation, relevant callers, and tests rather than reviewing the patch in isolation.
+2. Verify each technical claim with code, documentation, a focused experiment, or test output.
+3. Draft one comment per main concern.
+4. Run a clarity pass: remove unexplained jargon, state the current problem first, and include the expected code shape when asking for a change.
 
-Start by acknowledging valid points. Phrases like "Good catch" or "You're right that..." show you've genuinely considered their feedback. If they've identified a real issue, thank them and explain how you're addressing it. If their concern is based on a misunderstanding, clarify with evidence rather than dismissing the concern.
+## Writing an actionable review comment
 
-Address the reviewer's actual question. If they ask "should this constant be dynamic?", don't just say "no" or "yes". Explain why the current approach works (or doesn't), cite the relevant documentation or code behavior, and link to any changes you've made in response.
+A useful comment normally answers four questions:
 
-See [references/response-examples.md](references/response-examples.md) for concrete examples of well-structured responses.
+1. What does the current code do that seems wrong, confusing, or fragile?
+2. Why does that matter in this change?
+3. What would you change instead?
+4. Roughly what should the result look like?
 
-## Writing Review Comments
+This is a checklist, not a mandatory four-paragraph template. A simple issue may only need two sentences. A less familiar design or architecture concern may need several paragraphs.
 
-When writing a review comment, lead with the concern rather than the solution. Explain what you've observed and why it might be problematic, then provide evidence for your concern. If you're suggesting a change, explain the reasoning and offer alternatives when possible.
+When recommending a code change, include one of:
 
-Avoid drive-by comments that just say "this is wrong" without explanation. If you're not sure something is actually a problem, frame it as a question: "I noticed X, which might cause Y. Was this intentional?" This invites discussion rather than putting the author on the defensive.
+- An exact suggestion block when the replacement can be applied directly
+- A shortened code sample when surrounding code can be omitted
+- Pseudocode when the change spans files or the exact implementation needs author input
 
-When proposing code changes, use GitHub's suggestion blocks so the author can apply your suggestion directly. This makes it easy for them to accept your feedback and reduces friction.
+Say when a sample is approximate. Do not present pseudocode as a drop-in replacement.
 
-## Validation Before Claiming
+## Clarity rules
 
-Before asserting that something behaves a certain way, verify it. The type of verification depends on the claim.
+- Concise means no filler, not minimal explanation. Write enough that the author should not need to ask what the comment means.
+- Start with the concrete behavior or code. Do not lead with labels such as “semantic,” “tone,” “shared API,” or “second cue.”
+- If a technical term helps, explain the concrete idea first and name the term afterward if it is still useful.
+- Make suggestions specific. “Add another cue” is unclear; “keep the colors and use an exclamation mark inside Faulted pins” is actionable.
+- Prefer one recommended path over several vague alternatives. Mention alternatives only when the choice genuinely depends on information the reviewer does not have.
+- Explain what is wrong now. Do not make hypothetical future work the main reason for changing the current code.
+- Keep one main concern per comment. Split unrelated accessibility, correctness, and maintainability issues.
+- Avoid drive-by comments such as “this is wrong,” “nit,” or “could be cleaner” without explaining why and what better looks like.
+- If uncertain, ask a focused question rather than turning an assumption into a finding.
 
-For language or framework behavior, cite official documentation. If you claim "Ruby constants are evaluated once at assignment time", link to the Ruby docs or Rails guides that confirm this. When documentation is ambiguous, write a small test to confirm the behavior and mention that you tested it.
+See [references/review-comment-examples.md](references/review-comment-examples.md) for before-and-after examples.
 
-For claims about how code in the repository works, link to the specific file and line numbers. Use permalink URLs with commit SHAs rather than branch names so the links remain valid even after the code changes. If you've made changes that address the concern, link to the commit.
+## Evidence in comments
 
-For claims about system architecture (like "this data persists indefinitely"), trace the data flow through the code to find the backing store, configuration, or service. Link to the relevant implementation files and explain what you found.
+Validate every technical claim before writing it. Include the evidence the author needs to evaluate the concern, but do not turn every comment into a bibliography when the nearby diff already demonstrates the behavior.
 
-See [references/validation-techniques.md](references/validation-techniques.md) for detailed research methods.
+Use:
 
-## GitHub Link Formats
+- A code reference for repository behavior
+- A focused test or experiment for edge cases
+- Official documentation for language or framework rules
+- Concrete measurements for accessibility or performance claims
 
-Use commit SHAs in links so they remain valid over time. The format `https://github.com/org/repo/blob/<sha>/path/to/file.rb#L123` creates a permalink to a specific line. For line ranges, use `#L10-L20`.
+When evidence is incomplete, say so plainly and frame the comment as a question.
 
-When referencing commits, you can use the short SHA inline (like "fixed in abc123") or provide the full URL for easier navigation. GitHub automatically links commit SHAs in comments.
+See [references/validation-techniques.md](references/validation-techniques.md) for research methods.
 
-For suggesting code changes, use suggestion blocks:
+## Responding to review comments
 
-````
+First understand what the reviewer is actually asking. Research the claim, gather evidence, then answer that question directly.
+
+Acknowledge valid feedback without filler. If the reviewer found a real issue, explain the change. If the concern comes from a misunderstanding, clarify it with code, docs, or test results rather than dismissing it.
+
+Do not answer a specific question with a generic summary of the implementation. Link to the relevant change or test when useful.
+
+See [references/response-examples.md](references/response-examples.md) for response examples.
+
+## Stable links and suggestions
+
+Use commit SHAs in source links so references remain stable.
+
+GitHub:
+
+```text
+https://github.com/org/repo/blob/<sha>/path/to/file.rb#L10-L20
+```
+
+GitLab:
+
+```text
+https://gitlab.example.com/group/project/-/blob/<sha>/path/to/file.rb#L10-20
+```
+
+Both platforms support suggestion fences for directly applicable replacements:
+
+````markdown
 ```suggestion
 the corrected code here
 ```
 ````
 
-This lets the author apply your suggestion with one click.
+Use a normal language-tagged code fence instead when the sample is approximate or spans multiple locations.
 
 ## Style
 
-Write in prose and paragraphs rather than bullet lists. A well-constructed paragraph flows better and communicates more naturally than a wall of bullet points.
+Write conversational prose. Be friendly and direct, assume good intent, and avoid corporate hedging.
 
-Avoid emdashes. Use commas, parentheses, or separate sentences instead.
+Do not over-format a simple point, but do not compress a nuanced concern until it becomes cryptic. Stop when the issue, impact, and expected change are clear.
 
-Keep responses concise but complete. Say what needs to be said, provide the necessary evidence, and stop. Don't pad responses with unnecessary qualifications or repetition.
-
-Be friendly and direct. You can be professional without being cold, and direct without being harsh. Assume good intent from reviewers and authors alike.
+Avoid em dashes. Use commas, parentheses, or separate sentences.

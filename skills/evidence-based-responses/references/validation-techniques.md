@@ -18,7 +18,7 @@ Read the implementation, not just the interface. If you're claiming that a metho
 
 Check the tests for the code in question. Tests often document expected behavior more reliably than comments, and they reveal edge cases the original author considered. If a test expects certain behavior, that's strong evidence of how the code is supposed to work.
 
-When referencing code, use permalink URLs that include the commit SHA. This ensures your links remain valid even after the code changes. The format is: `https://github.com/org/repo/blob/<commit-sha>/path/to/file.rb#L42` for a specific line, or `#L42-L50` for a range.
+When referencing code, use permalink URLs that include the commit SHA. This ensures links remain valid after the branch changes. GitHub uses `/blob/<sha>/path#L42-L50`; GitLab uses `/-/blob/<sha>/path#L42-50`.
 
 ## System Architecture
 

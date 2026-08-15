@@ -142,6 +142,8 @@ Guidelines:
 - Keep comments focused: intent, structure, risks, or follow-ups
 - Don't comment on every hunk -- highlight what the user wouldn't spot themselves
 
+Before adding a note, follow `../evidence-based-responses/SKILL.md`. The summary should state the concrete concern. Use the rationale to explain why it matters and what change is expected. Include a short code sample or pseudocode when asking for a code change. Avoid shorthand that leaves the user or author asking what the comment means.
+
 ## Common errors
 
 - **"No visible diff file matches ..."** -- the file is not in the loaded review. Check `context`, then `reload` if needed.

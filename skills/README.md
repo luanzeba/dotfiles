@@ -13,6 +13,10 @@ skills/
 ├── github-prs/          # Draft/open concise PRs with template + demo guidance
 │   ├── SKILL.md
 │   └── references/
+├── gitlab-mr-review/    # Review MRs and manage pending GitLab draft notes safely
+│   ├── SKILL.md
+│   ├── scripts/
+│   └── references/
 ├── merge-conflict-resolver/ # Resolve merge conflicts using commit + PR intent
 │   ├── SKILL.md
 │   ├── scripts/

@@ -1,18 +1,20 @@
 ---
 name: markdown-output
-description: Formatting and delivering GitHub-flavored markdown content. Use when producing markdown that will be posted to GitHub (issues, PRs, comments, discussions), when the user asks for content to copy/paste elsewhere, or when creating markdown files. Covers proper formatting for collapsible sections, code blocks, tables, alerts, and delivering content via clipboard when manual pasting is needed.
+description: Format and deliver Markdown for GitHub and GitLab issues, pull or merge requests, reviews, comments, and discussions. Use when producing content that will be posted to either platform, when the user asks for copy/paste-ready Markdown, or when creating Markdown files.
 ---
 
 # Markdown Output
 
-## Delivery Method
+## Delivery method
 
-Determine how content reaches its destination before formatting:
+Determine where the content is going before formatting or posting it:
 
-1. **Agent posts directly**: Use `gh` CLI for GitHub (issues, PRs, comments) or write to local files. This is preferred when available.
-2. **User pastes manually**: Copy to clipboard when the user needs to paste content elsewhere.
+1. **GitHub:** use `gh` for issues, PRs, reviews, and comments.
+2. **GitLab:** use `glab` for issues, MRs, discussions, pipelines, and comments. Use the `gitlab-mr-review` skill when comments must remain pending.
+3. **Local file:** use the file tools and give the user the path.
+4. **Manual paste:** copy to the clipboard only when the user needs to paste the content themselves.
 
-For clipboard delivery, use platform-specific commands with a quoted heredoc delimiter to preserve all formatting:
+For clipboard delivery, use a quoted heredoc so Markdown is not expanded by the shell:
 
 ```bash
 # macOS
@@ -26,54 +28,58 @@ content here
 EOF
 ```
 
-The single quotes around `'EOF'` prevent shell expansion of special characters.
+Do not post, submit, or publish review content when the user asked only for a draft.
 
-## Collapsible Sections
+## Review comment code
 
-GitHub requires blank lines after `<details>` and `<summary>` tags for proper rendering.
+Use an exact suggestion fence only when the replacement is directly applicable at that location:
 
-Correct:
-
-```markdown
-<details>
-
-<summary>Click to expand</summary>
-
-Content inside the collapsible section.
-
-</details>
+````markdown
+```suggestion
+const corrected = code;
 ```
+````
 
-Incorrect (will not render properly):
+Use a normal language-tagged fence when the example is shortened, approximate, spans files, or needs author input:
 
-```markdown
-<details>
-<summary>Click to expand</summary>
-Content inside the collapsible section.
-</details>
+````markdown
+Roughly:
+
+```ts
+const expectedShape = buildValue(input);
+// ...
 ```
+````
 
-## Code Blocks
+Never put approximate code in a suggestion fence. It may be applied as if it were complete.
 
-Always specify a language hint for syntax highlighting: `sql`, `json`, `ruby`, `kusto`, `bash`, `python`, etc.
+## Code blocks
 
-JSON code blocks must contain valid JSON with quoted keys and string values:
+Always specify a language hint such as `ts`, `tsx`, `ruby`, `sql`, `json`, or `bash`.
 
-Correct:
+JSON blocks must contain valid JSON with quoted keys and string values:
 
 ```json
 {"my_policy": "enabled", "count": 42}
 ```
 
-Incorrect:
+## Collapsible sections
 
-```json
-{my_policy: enabled, count: 42}
+GitHub and GitLab require blank lines around content inside `<details>` blocks:
+
+```markdown
+<details>
+
+<summary>Click to expand</summary>
+
+Content inside the collapsible section.
+
+</details>
 ```
 
 ## Tables
 
-Tables require blank lines before and after them for proper rendering:
+Leave a blank line before and after a table:
 
 ```markdown
 Some text above.
@@ -87,21 +93,11 @@ Some text below.
 
 ## Alerts
 
-GitHub supports special alert callouts using blockquote syntax:
+GitHub supports alert callouts using blockquote syntax:
 
 ```markdown
 > [!NOTE]
 > Useful information that users should know.
-
-> [!TIP]
-> Helpful advice for doing things better.
-
-> [!IMPORTANT]
-> Key information users need to know.
-
-> [!WARNING]
-> Urgent info that needs immediate attention.
-
-> [!CAUTION]
-> Advises about risks or negative outcomes.
 ```
+
+Do not assume platform-specific alert rendering on GitLab. Use a normal blockquote or bold label when portability matters.

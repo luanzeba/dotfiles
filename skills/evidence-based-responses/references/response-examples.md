@@ -34,18 +34,17 @@ A reviewer asks: "What's the retention policy on this key-value store? Will thes
 
 ## Example 3: Writing a Review Comment About a Potential Issue
 
-You notice that a new feature writes to the database inside a loop, which could cause performance issues at scale.
+You notice that a new feature writes to the database inside a loop, and the request can contain hundreds of records.
 
 **Comment:**
 
-> I noticed that `save_record()` is called inside the loop at line 45, which means we'll make N database writes for N items. For small batches this is fine, but if `items` can be large (say, thousands of records), this could cause performance issues and potentially hit database connection limits.
+> `save_record()` runs once per item here, so a request with 500 items makes 500 separate database writes. This can become a performance issue as the request grows.
 >
-> A few options to consider:
+> Could we collect the rows and insert them in one call? We don't use callbacks from `save_record()` in this path, so `insert_all` should preserve the behavior while avoiding the repeated writes.
 >
-> 1. Use `insert_all` for bulk inserts if we don't need callbacks
-> 2. Batch the saves into groups of 100-500 records
-> 3. Add a guard clause that fails if `items.size` exceeds some threshold
->
-> If the expected size is always small, adding a comment noting that assumption would help future readers. What's the expected scale here?
+> ```ruby
+> rows = items.map { |item| attributes_for(item) }
+> Record.insert_all(rows)
+> ```
 
-**Why this works:** The comment explains the concern with specifics (N writes, connection limits), provides concrete alternatives, and asks a clarifying question rather than assuming the author made a mistake. It's constructive and invites discussion.
+**Why this works:** The comment explains the repeated writes, recommends one fix, and shows what the code could look like.

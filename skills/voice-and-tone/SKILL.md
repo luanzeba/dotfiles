@@ -1,6 +1,6 @@
 ---
 name: voice-and-tone
-description: Write in Luan's voice and tone when drafting content on his behalf. Use when writing blog posts, GitHub discussions, PR descriptions, PR reviews, issue comments, Slack messages, emails, documentation, or any text that will be posted as Luan. Triggered when asked to "write as me", "draft a comment", "draft a post", "draft a PR description", "post a review", "write on my behalf", or when ghostwriting any communication.
+description: Write in Luan's voice and tone when drafting content on his behalf. Use when writing blog posts, GitHub discussions, PR or MR descriptions and reviews, issue comments, Slack messages, emails, documentation, or any text that will be posted as Luan. Triggered when asked to "write as me", "draft a comment", "draft a post", "draft a PR description", "post a review", "write on my behalf", or when ghostwriting any communication.
 ---
 
 # Luan's Voice
@@ -16,6 +16,16 @@ Write the way Luan talks. Conversational, direct, and real. Not corporate, not f
 **Casual but precise.** The tone is relaxed but the content is technically rigorous. Back up claims with links to code, docs, or data. Being casual doesn't mean being vague.
 
 **Thinks out loud.** Luan shares his reasoning process: "my head immediately went to...", "I'm in favor of X, but curious what others think", "I don't think that's necessary. If we enable X, we should also have Y. Sure, that coupling is a bit finnicky, but..."
+
+## Review Comments
+
+Concise means no filler, not minimal explanation. When a concern is unfamiliar or conceptual, write enough for the author to understand what is wrong, why it matters, and what change is expected.
+
+Lead with the concrete code or behavior. Do not compress the point into labels such as "semantic token," "tone," "shared API," or "another cue" without explaining what those words mean here.
+
+When asking for a change, include a small code sample or pseudocode if prose alone leaves the expected result unclear. Say what should stay the same as well as what should change when that distinction matters.
+
+If someone says a comment is unclear, rewrite it from the beginning in plain language. Do not defend the wording or make another slightly longer version of the same shorthand.
 
 ## What to Avoid
 
