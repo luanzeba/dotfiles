@@ -1,0 +1,695 @@
+#!/usr/bin/env node
+
+/**
+ * Minimal Linear CLI using the authenticated Linear browser session.
+ *
+ * It intentionally stores no token or cookie. GraphQL requests run inside the
+ * canonical Pi Chrome session, so Chrome remains the source of authentication.
+ */
+
+const { spawnSync } = require("node:child_process");
+const fs = require("node:fs");
+const os = require("node:os");
+const path = require("node:path");
+
+const VERSION = "0.3.0";
+const CDP_PORT = Number(process.env.LINEAR_CHROME_CDP_PORT || 9222);
+const CDP_URL = `http://127.0.0.1:${CDP_PORT}`;
+const LINEAR_URL = "https://linear.app";
+const LOGIN_URL = `${LINEAR_URL}/login`;
+const GRAPHQL_URL = "https://client-api.linear.app/graphql";
+const START_SCRIPT = process.env.LINEAR_PI_START_SCRIPT || path.join(os.homedir(), "dotfiles/skills/web-browser/scripts/start.js");
+
+const ISSUE_FIELDS = `
+  id
+  identifier
+  title
+  description
+  priority
+  estimate
+  dueDate
+  url
+  branchName
+  createdAt
+  updatedAt
+  completedAt
+  canceledAt
+  state { id name type color }
+  assignee { id name email }
+  creator { id name email }
+  team { id key name }
+  project { id name }
+  cycle { id name number }
+  labels { nodes { id name color } }
+  parent { id identifier title }
+`;
+
+function usage() {
+  console.log(`Usage: linear <command> [options]
+
+Read and write Linear issues through your authenticated browser session.
+
+Commands:
+  login [--wait]                         Open Linear login in Chrome
+  auth                                   Check browser authentication
+  issue get <issue-or-url>               Get an issue
+  issue export <issue-or-url>            Export issue content and metadata
+  issue list [--team <key>] [--limit N]  List recent issues
+  issue create --team <key> --title T    Create an issue
+  issue update <issue> [options]         Update an issue
+  issue delete <issue> --yes             Move an issue to Linear's trash
+  issue comment <issue> <body>           Add an issue comment
+  issue relation list <issue>            List issue relations
+  issue relation add <issue> [options]   Add an issue relation
+  teams                                  List accessible teams
+  states --team <key>                    List a team's workflow states
+  version                                Show version
+
+Create options:
+  --team <key-or-id>                     Team key, name, or ID (required)
+  --title <title>                        Issue title (required)
+  --description <markdown>               Description
+  --description-file <path|->            Read description from a file or stdin
+  --priority <0-4>                       No priority, urgent, high, normal, low
+  --state <name>                         Workflow state name
+  --state-id <id>                        Workflow state ID
+  --assignee-id <id>                     Assignee user ID
+  --parent <issue-or-url>                Parent issue
+
+Update options:
+  --title <title>
+  --description <markdown>
+  --description-file <path|->
+  --priority <0-4>
+  --due-date <YYYY-MM-DD|none>
+  --state <name>
+  --state-id <id>
+  --assignee-id <id|none>
+  --project-id <id|none>
+  --parent <issue-or-url|none>
+
+Relation add options:
+  --blocked-by <issue-or-url>            The other issue blocks this issue
+  --blocks <issue-or-url>                This issue blocks the other issue
+  --related <issue-or-url>               Relate the two issues
+
+Delete options:
+  --yes                                  Confirm deletion (required)
+  --permanently                          Permanently delete instead of trashing
+
+Comment options:
+  --body <markdown>
+  --body-file <path|->                   Read body from a file or stdin
+
+Examples:
+  linear login --wait
+  linear issue get CUS-543
+  linear issue get https://linear.app/beta/issue/CUS-543/example
+  linear issue update CUS-543 --priority 2
+  linear issue comment CUS-543 --body 'Investigating this now.'
+  linear issue create --team CUS --state Todo --parent CUS-561 --title 'Add exports'
+  linear issue relation add CUS-563 --blocked-by CUS-562
+
+Authentication is never copied out of Chrome. If Chrome is already open without
+remote debugging, relaunch it with: ~/dotfiles/bin/chrome-pi-debug.sh`);
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function fail(message) {
+  throw new Error(message);
+}
+
+function option(args, name) {
+  const equals = args.find((arg) => arg.startsWith(`${name}=`));
+  if (equals) return equals.slice(name.length + 1);
+  const index = args.indexOf(name);
+  if (index === -1) return undefined;
+  const value = args[index + 1];
+  if (value === undefined || value.startsWith("--")) fail(`${name} requires a value.`);
+  return value;
+}
+
+function requiredOption(args, name) {
+  const value = option(args, name);
+  if (!value) fail(`Missing required option: ${name}`);
+  return value;
+}
+
+function issueReference(value) {
+  if (!value) fail("Missing issue identifier or URL.");
+  const match = value.match(/\/issue\/([A-Za-z][A-Za-z0-9_]*-\d+)(?:\/|$)/i);
+  return (match?.[1] || value).toUpperCase();
+}
+
+function readInput(args, inlineOption, fileOption, positional = undefined) {
+  const inline = option(args, inlineOption);
+  const file = option(args, fileOption);
+  if (inline !== undefined && file !== undefined) fail(`Use either ${inlineOption} or ${fileOption}, not both.`);
+  if (inline !== undefined) return inline;
+  if (file !== undefined) return fs.readFileSync(file === "-" ? 0 : file, "utf8");
+  return positional;
+}
+
+function integerOption(args, name, { min, max } = {}) {
+  const raw = option(args, name);
+  if (raw === undefined) return undefined;
+  const value = Number(raw);
+  if (!Number.isInteger(value) || (min !== undefined && value < min) || (max !== undefined && value > max)) {
+    fail(`${name} must be an integer${min !== undefined ? ` from ${min} to ${max}` : ""}.`);
+  }
+  return value;
+}
+
+async function endpointAvailable() {
+  try {
+    const response = await fetch(`${CDP_URL}/json/version`);
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
+async function ensureBrowser() {
+  if (await endpointAvailable()) return;
+
+  if (fs.existsSync(START_SCRIPT)) {
+    const result = spawnSync(process.execPath, [START_SCRIPT], { stdio: "inherit" });
+    if (result.status === 0 && await endpointAvailable()) return;
+  }
+
+  fail(`Chrome's debugging endpoint is unavailable on port ${CDP_PORT}.\nRelaunch Chrome with: ~/dotfiles/bin/chrome-pi-debug.sh`);
+}
+
+class CdpClient {
+  constructor(socket) {
+    this.socket = socket;
+    this.nextId = 0;
+    this.pending = new Map();
+
+    socket.addEventListener("message", (event) => {
+      const message = JSON.parse(String(event.data));
+      const callback = this.pending.get(message.id);
+      if (!callback) return;
+      this.pending.delete(message.id);
+      clearTimeout(callback.timer);
+      if (message.error) callback.reject(new Error(message.error.message || "CDP request failed"));
+      else callback.resolve(message.result);
+    });
+  }
+
+  send(method, params = {}, sessionId = undefined, timeoutMs = 30_000) {
+    return new Promise((resolve, reject) => {
+      const id = ++this.nextId;
+      const message = { id, method, params };
+      if (sessionId) message.sessionId = sessionId;
+      const timer = setTimeout(() => {
+        this.pending.delete(id);
+        reject(new Error(`CDP timeout: ${method}`));
+      }, timeoutMs);
+      this.pending.set(id, { resolve, reject, timer });
+      this.socket.send(JSON.stringify(message));
+    });
+  }
+
+  async targets() {
+    const { targetInfos } = await this.send("Target.getTargets");
+    return targetInfos.filter((target) => target.type === "page");
+  }
+
+  async createTarget(url, newWindow = false) {
+    return this.send("Target.createTarget", { url, newWindow, background: false });
+  }
+
+  async attach(targetId) {
+    const { sessionId } = await this.send("Target.attachToTarget", { targetId, flatten: true });
+    return sessionId;
+  }
+
+  async evaluate(sessionId, expression, timeoutMs = 30_000) {
+    const result = await this.send("Runtime.evaluate", {
+      expression,
+      returnByValue: true,
+      awaitPromise: true,
+    }, sessionId, timeoutMs);
+    if (result.exceptionDetails) {
+      throw new Error(result.exceptionDetails.exception?.description || result.exceptionDetails.text || "Browser evaluation failed");
+    }
+    return result.result?.value;
+  }
+
+  close() {
+    this.socket.close();
+  }
+}
+
+async function connectCdp() {
+  await ensureBrowser();
+  const response = await fetch(`${CDP_URL}/json/version`);
+  const info = await response.json();
+  if (!info.webSocketDebuggerUrl) fail("Chrome did not return a debugging WebSocket URL.");
+
+  return new Promise((resolve, reject) => {
+    const socket = new WebSocket(info.webSocketDebuggerUrl);
+    const timer = setTimeout(() => {
+      socket.close();
+      reject(new Error("Timed out connecting to Chrome."));
+    }, 5_000);
+    socket.addEventListener("open", () => {
+      clearTimeout(timer);
+      resolve(new CdpClient(socket));
+    }, { once: true });
+    socket.addEventListener("error", () => {
+      clearTimeout(timer);
+      reject(new Error("Could not connect to Chrome."));
+    }, { once: true });
+  });
+}
+
+async function linearPage(cdp, { create = true, forceNew = false, newWindow = false, url = LINEAR_URL } = {}) {
+  let target = forceNew ? undefined : (await cdp.targets()).filter((page) => {
+    try {
+      return new URL(page.url).hostname === "linear.app";
+    } catch {
+      return false;
+    }
+  }).at(-1);
+  let owned = false;
+
+  if (!target && create) {
+    const created = await cdp.createTarget(url, newWindow);
+    target = { targetId: created.targetId, url };
+    owned = true;
+  }
+  if (!target) fail("No Linear page is open. Run `linear login` first.");
+
+  const sessionId = await cdp.attach(target.targetId);
+  const deadline = Date.now() + 20_000;
+  while (Date.now() < deadline) {
+    try {
+      const ready = await cdp.evaluate(sessionId, `({ host: location.hostname, ready: document.readyState !== "loading" })`);
+      if (ready?.host?.endsWith("linear.app") && ready.ready) return { targetId: target.targetId, sessionId, owned };
+    } catch {}
+    await sleep(250);
+  }
+  fail("Linear did not finish loading in Chrome.");
+}
+
+async function browserGraphql(cdp, sessionId, query, variables = {}) {
+  const expression = `(async () => {
+    let application;
+    try {
+      application = JSON.parse(localStorage.getItem("ApplicationStore") || "null");
+    } catch {}
+    const account = application?.userAccounts?.[application.currentUserAccountId];
+    const user = account?.users?.find((item) => item.id === application.currentUserId);
+    const headers = { "content-type": "application/json" };
+    if (application?.currentUserId) headers.user = application.currentUserId;
+    if (application?.currentUserAccountId) headers.userAccount = application.currentUserAccountId;
+    if (user?.organization?.id) headers.organization = user.organization.id;
+    if (localStorage.getItem("clientId")) headers["Linear-Client-ID"] = localStorage.getItem("clientId");
+
+    const response = await fetch(${JSON.stringify(GRAPHQL_URL)}, {
+      method: "POST",
+      credentials: "include",
+      headers,
+      body: JSON.stringify(${JSON.stringify({ query, variables })}),
+    });
+    return { status: response.status, text: await response.text() };
+  })()`;
+  const result = await cdp.evaluate(sessionId, expression, 60_000);
+
+  let payload;
+  try {
+    payload = JSON.parse(result.text);
+  } catch {
+    fail(`Linear API returned ${result.status}: ${String(result.text).slice(0, 500)}`);
+  }
+  if (!result.status || result.status >= 400 || payload.errors?.length) {
+    const errors = payload.errors || [];
+    const authError = result.status === 401 || errors.some((error) => error.extensions?.code === "AUTHENTICATION_ERROR");
+    if (authError) fail("Not authenticated to Linear. Run `linear login --wait`.");
+    fail(errors.map((error) => error.message).join("; ") || `Linear API returned ${result.status}`);
+  }
+  return payload.data;
+}
+
+async function withLinear(callback) {
+  const cdp = await connectCdp();
+  let page;
+  try {
+    page = await linearPage(cdp);
+    return await callback(cdp, page.sessionId);
+  } finally {
+    if (page?.owned) await cdp.send("Target.closeTarget", { targetId: page.targetId }).catch(() => {});
+    cdp.close();
+  }
+}
+
+async function getIssue(cdp, sessionId, reference) {
+  const query = `query LinearCliIssue($id: String!) {
+    issue(id: $id) { ${ISSUE_FIELDS} }
+  }`;
+  const data = await browserGraphql(cdp, sessionId, query, { id: issueReference(reference) });
+  if (!data.issue) fail(`Issue '${reference}' was not found.`);
+  return data.issue;
+}
+
+async function resolveTeam(cdp, sessionId, reference) {
+  const data = await browserGraphql(cdp, sessionId, `query LinearCliTeams {
+    teams(first: 250) { nodes { id key name } }
+  }`);
+  const wanted = reference.toLowerCase();
+  const team = data.teams.nodes.find((item) =>
+    item.id.toLowerCase() === wanted || item.key.toLowerCase() === wanted || item.name.toLowerCase() === wanted
+  );
+  if (!team) fail(`Team '${reference}' was not found.`);
+  return team;
+}
+
+async function resolveWorkflowState(cdp, sessionId, teamId, reference) {
+  const data = await browserGraphql(cdp, sessionId, `query LinearCliTeamStates($id: String!) {
+    team(id: $id) { states(first: 250) { nodes { id name type color position } } }
+  }`, { id: teamId });
+  const wanted = reference.toLowerCase();
+  const state = data.team?.states.nodes.find((item) =>
+    item.id.toLowerCase() === wanted || item.name.toLowerCase() === wanted
+  );
+  if (!state) {
+    const available = data.team?.states.nodes.map((item) => item.name).join(", ") || "none";
+    fail(`Workflow state '${reference}' was not found. Available states: ${available}`);
+  }
+  return state;
+}
+
+async function loginCommand(args) {
+  const cdp = await connectCdp();
+  try {
+    const { targetId, sessionId } = await linearPage(cdp, { create: true, forceNew: true, newWindow: true, url: LOGIN_URL });
+    await cdp.send("Page.navigate", { url: LOGIN_URL }, sessionId);
+    console.log("Opened Linear in Chrome. Complete sign-in there.");
+    if (!args.includes("--wait")) {
+      console.log("Then run: linear auth");
+      return;
+    }
+
+    console.error("Waiting for Linear authentication...");
+    const deadline = Date.now() + 5 * 60_000;
+    while (Date.now() < deadline) {
+      try {
+        // SSO may navigate through another origin and replace the execution
+        // context, so attach to the current Linear page on each attempt.
+        const page = await linearPage(cdp, { create: false });
+        const data = await browserGraphql(cdp, page.sessionId, `query LinearCliViewer { viewer { id name email } }`);
+        if (data.viewer) {
+          console.log(JSON.stringify({ authenticated: true, viewer: data.viewer }, null, 2));
+          return;
+        }
+      } catch {
+        // The login page is either unauthenticated or navigating through SSO.
+      }
+      await sleep(2_000);
+    }
+    console.log(`Timed out waiting for sign-in. The Linear window remains open (target ${targetId}).`);
+    process.exitCode = 1;
+  } finally {
+    cdp.close();
+  }
+}
+
+async function authCommand() {
+  await withLinear(async (cdp, sessionId) => {
+    const data = await browserGraphql(cdp, sessionId, `query LinearCliViewer { viewer { id name email } }`);
+    console.log(JSON.stringify({ authenticated: true, viewer: data.viewer }, null, 2));
+  });
+}
+
+async function teamsCommand() {
+  await withLinear(async (cdp, sessionId) => {
+    const data = await browserGraphql(cdp, sessionId, `query LinearCliTeams {
+      teams(first: 250) { nodes { id key name } }
+    }`);
+    console.log(JSON.stringify(data.teams.nodes, null, 2));
+  });
+}
+
+async function statesCommand(args) {
+  const teamRef = requiredOption(args, "--team");
+  await withLinear(async (cdp, sessionId) => {
+    const team = await resolveTeam(cdp, sessionId, teamRef);
+    const data = await browserGraphql(cdp, sessionId, `query LinearCliTeamStates($id: String!) {
+      team(id: $id) { states(first: 250) { nodes { id name type color position } } }
+    }`, { id: team.id });
+    console.log(JSON.stringify(data.team.states.nodes, null, 2));
+  });
+}
+
+async function issueGetCommand(args) {
+  if (!args[0]) fail("Usage: linear issue get <issue-or-url>");
+  await withLinear(async (cdp, sessionId) => {
+    console.log(JSON.stringify(await getIssue(cdp, sessionId, args[0]), null, 2));
+  });
+}
+
+async function issueExportCommand(args) {
+  if (!args[0]) fail("Usage: linear issue export <issue-or-url>");
+  await withLinear(async (cdp, sessionId) => {
+    const data = await browserGraphql(cdp, sessionId, `query LinearCliIssueExport($id: String!) {
+      issue(id: $id) {
+        ${ISSUE_FIELDS}
+        trashed
+        children(first: 250) { nodes { id identifier title url state { id name type } } }
+        comments(first: 250) {
+          nodes {
+            id body createdAt updatedAt editedAt url
+            parent { id }
+            user { id name email }
+          }
+        }
+        attachments(first: 250) {
+          nodes {
+            id title subtitle url sourceType createdAt updatedAt
+            creator { id name email }
+          }
+        }
+        relations(first: 250) {
+          nodes { id type relatedIssue { id identifier title url } }
+        }
+        inverseRelations(first: 250) {
+          nodes { id type issue { id identifier title url } }
+        }
+      }
+    }`, { id: issueReference(args[0]) });
+    if (!data.issue) fail(`Issue '${args[0]}' was not found.`);
+    console.log(JSON.stringify(data.issue, null, 2));
+  });
+}
+
+async function issueListCommand(args) {
+  const limit = integerOption(args, "--limit", { min: 1, max: 100 }) ?? 20;
+  await withLinear(async (cdp, sessionId) => {
+    const teamRef = option(args, "--team");
+    const team = teamRef ? await resolveTeam(cdp, sessionId, teamRef) : undefined;
+    const data = await browserGraphql(cdp, sessionId, `query LinearCliIssues($first: Int!, $filter: IssueFilter) {
+      issues(first: $first, filter: $filter) {
+        nodes { ${ISSUE_FIELDS} }
+      }
+    }`, {
+      first: limit,
+      filter: team ? { team: { id: { eq: team.id } } } : undefined,
+    });
+    console.log(JSON.stringify(data.issues.nodes, null, 2));
+  });
+}
+
+function issueInput(args, { create = false } = {}) {
+  const input = {};
+  const title = option(args, "--title");
+  const description = readInput(args, "--description", "--description-file");
+  const priority = integerOption(args, "--priority", { min: 0, max: 4 });
+  const stateId = option(args, "--state-id");
+  const assigneeId = option(args, "--assignee-id");
+
+  if (title !== undefined) input.title = title;
+  if (description !== undefined) input.description = description;
+  if (priority !== undefined) input.priority = priority;
+  if (stateId !== undefined) input.stateId = stateId;
+  if (assigneeId !== undefined) input.assigneeId = assigneeId === "none" ? null : assigneeId;
+
+  if (!create) {
+    const dueDate = option(args, "--due-date");
+    const projectId = option(args, "--project-id");
+    if (dueDate !== undefined) input.dueDate = dueDate === "none" ? null : dueDate;
+    if (projectId !== undefined) input.projectId = projectId === "none" ? null : projectId;
+  }
+  return input;
+}
+
+async function issueCreateCommand(args) {
+  const teamRef = requiredOption(args, "--team");
+  const title = requiredOption(args, "--title");
+  const stateRef = option(args, "--state");
+  const parentRef = option(args, "--parent");
+  if (stateRef && option(args, "--state-id")) fail("Use either --state or --state-id, not both.");
+
+  await withLinear(async (cdp, sessionId) => {
+    const team = await resolveTeam(cdp, sessionId, teamRef);
+    const input = { ...issueInput(args, { create: true }), teamId: team.id, title };
+    if (stateRef) input.stateId = (await resolveWorkflowState(cdp, sessionId, team.id, stateRef)).id;
+    if (parentRef) input.parentId = (await getIssue(cdp, sessionId, parentRef)).id;
+    const data = await browserGraphql(cdp, sessionId, `mutation LinearCliIssueCreate($input: IssueCreateInput!) {
+      issueCreate(input: $input) { success issue { ${ISSUE_FIELDS} } }
+    }`, { input });
+    if (!data.issueCreate?.success) fail("Linear did not create the issue.");
+    console.log(JSON.stringify(data.issueCreate.issue, null, 2));
+  });
+}
+
+async function issueUpdateCommand(args) {
+  if (!args[0]) fail("Usage: linear issue update <issue> [options]");
+  const input = issueInput(args);
+  const stateRef = option(args, "--state");
+  const parentRef = option(args, "--parent");
+  if (stateRef && option(args, "--state-id")) fail("Use either --state or --state-id, not both.");
+  if (Object.keys(input).length === 0 && !stateRef && !parentRef) fail("No update fields were provided.");
+
+  await withLinear(async (cdp, sessionId) => {
+    const issue = await getIssue(cdp, sessionId, args[0]);
+    if (stateRef) input.stateId = (await resolveWorkflowState(cdp, sessionId, issue.team.id, stateRef)).id;
+    if (parentRef) input.parentId = parentRef === "none" ? null : (await getIssue(cdp, sessionId, parentRef)).id;
+    const data = await browserGraphql(cdp, sessionId, `mutation LinearCliIssueUpdate($id: String!, $input: IssueUpdateInput!) {
+      issueUpdate(id: $id, input: $input) { success issue { ${ISSUE_FIELDS} } }
+    }`, { id: issue.id, input });
+    if (!data.issueUpdate?.success) fail("Linear did not update the issue.");
+    console.log(JSON.stringify(data.issueUpdate.issue, null, 2));
+  });
+}
+
+async function issueDeleteCommand(args) {
+  if (!args[0]) fail("Usage: linear issue delete <issue> --yes [--permanently]");
+  if (!args.includes("--yes")) fail("Deletion requires --yes.");
+  const permanentlyDelete = args.includes("--permanently");
+
+  await withLinear(async (cdp, sessionId) => {
+    const issue = await getIssue(cdp, sessionId, args[0]);
+    const data = await browserGraphql(cdp, sessionId, `mutation LinearCliIssueDelete($id: String!, $permanentlyDelete: Boolean!) {
+      issueDelete(id: $id, permanentlyDelete: $permanentlyDelete) { success }
+    }`, { id: issue.id, permanentlyDelete });
+    if (!data.issueDelete?.success) fail("Linear did not delete the issue.");
+    console.log(JSON.stringify({
+      success: true,
+      permanentlyDeleted: permanentlyDelete,
+      issue: { id: issue.id, identifier: issue.identifier, title: issue.title, url: issue.url },
+    }, null, 2));
+  });
+}
+
+async function issueCommentCommand(args) {
+  if (!args[0]) fail("Usage: linear issue comment <issue> <body>");
+  const body = readInput(args, "--body", "--body-file", args[1]);
+  if (!body) fail("Comment body is required as an argument, --body, or --body-file.");
+
+  await withLinear(async (cdp, sessionId) => {
+    const issue = await getIssue(cdp, sessionId, args[0]);
+    const data = await browserGraphql(cdp, sessionId, `mutation LinearCliCommentCreate($input: CommentCreateInput!) {
+      commentCreate(input: $input) {
+        success
+        comment { id body createdAt updatedAt user { id name email } }
+      }
+    }`, { input: { issueId: issue.id, body } });
+    if (!data.commentCreate?.success) fail("Linear did not create the comment.");
+    console.log(JSON.stringify(data.commentCreate.comment, null, 2));
+  });
+}
+
+async function issueRelationListCommand(args) {
+  if (!args[0]) fail("Usage: linear issue relation list <issue>");
+  await withLinear(async (cdp, sessionId) => {
+    const issue = await getIssue(cdp, sessionId, args[0]);
+    const data = await browserGraphql(cdp, sessionId, `query LinearCliIssueRelations($id: String!) {
+      issue(id: $id) {
+        relations(first: 100) { nodes { id type relatedIssue { id identifier title url } } }
+        inverseRelations(first: 100) { nodes { id type issue { id identifier title url } } }
+      }
+    }`, { id: issue.id });
+    console.log(JSON.stringify({
+      issue: { id: issue.id, identifier: issue.identifier, title: issue.title, url: issue.url },
+      outgoing: data.issue.relations.nodes,
+      incoming: data.issue.inverseRelations.nodes,
+    }, null, 2));
+  });
+}
+
+async function issueRelationAddCommand(args) {
+  if (!args[0]) fail("Usage: linear issue relation add <issue> <--blocked-by|--blocks|--related> <issue>");
+  const choices = ["--blocked-by", "--blocks", "--related"].filter((name) => option(args, name) !== undefined);
+  if (choices.length !== 1) fail("Provide exactly one of --blocked-by, --blocks, or --related.");
+
+  await withLinear(async (cdp, sessionId) => {
+    const issue = await getIssue(cdp, sessionId, args[0]);
+    const relationOption = choices[0];
+    const other = await getIssue(cdp, sessionId, option(args, relationOption));
+    const input = relationOption === "--blocked-by"
+      ? { issueId: other.id, relatedIssueId: issue.id, type: "blocks" }
+      : { issueId: issue.id, relatedIssueId: other.id, type: relationOption === "--blocks" ? "blocks" : "related" };
+    const data = await browserGraphql(cdp, sessionId, `mutation LinearCliIssueRelationCreate($input: IssueRelationCreateInput!) {
+      issueRelationCreate(input: $input) {
+        success
+        issueRelation {
+          id
+          type
+          issue { id identifier title url }
+          relatedIssue { id identifier title url }
+        }
+      }
+    }`, { input });
+    if (!data.issueRelationCreate?.success) fail("Linear did not create the issue relation.");
+    console.log(JSON.stringify(data.issueRelationCreate.issueRelation, null, 2));
+  });
+}
+
+async function issueRelationCommand(args) {
+  const [subcommand, ...rest] = args;
+  if (subcommand === "list") return issueRelationListCommand(rest);
+  if (subcommand === "add") return issueRelationAddCommand(rest);
+  fail("Usage: linear issue relation <list|add> ...");
+}
+
+async function issueCommand(args) {
+  const [subcommand, ...rest] = args;
+  if (subcommand === "get") return issueGetCommand(rest);
+  if (subcommand === "export") return issueExportCommand(rest);
+  if (subcommand === "list") return issueListCommand(rest);
+  if (subcommand === "create") return issueCreateCommand(rest);
+  if (subcommand === "update") return issueUpdateCommand(rest);
+  if (subcommand === "delete") return issueDeleteCommand(rest);
+  if (subcommand === "comment") return issueCommentCommand(rest);
+  if (subcommand === "relation") return issueRelationCommand(rest);
+  fail("Usage: linear issue <get|export|list|create|update|delete|comment|relation> ...");
+}
+
+async function main() {
+  const [command, ...args] = process.argv.slice(2);
+  if (!command || ["help", "--help", "-h"].includes(command)) return usage();
+  if (["version", "--version", "-v"].includes(command)) return console.log(`linear ${VERSION}`);
+  if (command === "login") return loginCommand(args);
+  if (command === "auth") return authCommand();
+  if (command === "teams") return teamsCommand();
+  if (command === "states") return statesCommand(args);
+  if (command === "issue") return issueCommand(args);
+
+  // Short aliases for common agent calls.
+  if (command === "get") return issueGetCommand(args);
+  if (command === "list") return issueListCommand(args);
+  if (command === "create") return issueCreateCommand(args);
+  if (command === "update") return issueUpdateCommand(args);
+  if (command === "comment") return issueCommentCommand(args);
+  fail(`Unknown command: ${command}`);
+}
+
+main().catch((error) => {
+  console.error(`linear: ${error.message}`);
+  process.exitCode = 1;
+});
