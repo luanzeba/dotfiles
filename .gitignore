@@ -10,8 +10,9 @@ nvim/lazy-lock.json
 # Runtime config files (created by install scripts)
 .config/
 
-# pi agent runtime data (sessions, todos)
+# pi agent runtime data (sessions, todos, machine-local settings)
 .pi/
+pi/settings.json
 
 # private-dotfiles clone populated by skills/install
 # (managed as its own git repo; keep it untracked in this repo)
