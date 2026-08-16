@@ -60,6 +60,7 @@ On a Hyprland installation, the installer links `hyprland.conf` into
 `~/.config/hypr/vicinae.conf` and sources it after personal bindings. It sets:
 
 - `Super+Space`: toggle Vicinae (replacing Omarchy's Walker launcher binding)
+- `Super+B`: open Google Chrome
 - `Super+Return`: create a new Ghostty through Vicinae
 
 `Super+Alt+Space` remains Omarchy Menu.
