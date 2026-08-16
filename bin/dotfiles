@@ -633,12 +633,6 @@ get_available_tools() {
 # Returns "zsh" or "bash"
 get_script_interpreter() {
     local script="$1"
-    # Check extension first
-    if [[ "$script" == *.zsh ]]; then
-        echo "zsh"
-        return
-    fi
-    # Check shebang
     local shebang
     shebang=$(head -1 "$script" 2>/dev/null)
     if [[ "$shebang" == *zsh* ]]; then

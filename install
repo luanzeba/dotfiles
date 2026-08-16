@@ -29,13 +29,6 @@ run_step() {
     fi
 }
 
-# Ensure zsh is default shell (needed on Arch, not macOS)
-ensure_zsh_default() {
-    if [[ "$SHELL" != */zsh ]]; then
-        sudo chsh -s "$(which zsh)" "$(whoami)"
-    fi
-}
-
 # Bootstrap Homebrew on macOS (only when needed for brew-dependent tools)
 ensure_homebrew() {
     if ! is_macos; then
@@ -102,10 +95,7 @@ run_step "handy/install" bash "$SCRIPT_DIR/handy/install"
 
 # Phase 4: Shell setup (after everything else)
 log_info "Phase 4: Setting up shell"
-if is_arch; then
-    ensure_zsh_default
-fi
-run_step "zsh/install.zsh" zsh "$SCRIPT_DIR/zsh/install.zsh"
+run_step "zsh/install.zsh" bash "$SCRIPT_DIR/zsh/install.zsh"
 
 # Report any failures
 if [[ ${#FAILED_STEPS[@]} -gt 0 ]]; then

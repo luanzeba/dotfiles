@@ -1,6 +1,9 @@
-#!/bin/zsh
+#!/bin/bash
+set -e
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck disable=SC1091
+source "$SCRIPT_DIR/../lib/common.sh"
 
 check_installed() {
     command -v zsh &>/dev/null
@@ -11,8 +14,21 @@ check_configured() {
 }
 
 install() {
-    # Zsh is installed via system package manager
-    :
+    if is_arch && ! command -v zsh &>/dev/null; then
+        echo "Installing zsh..."
+        sudo pacman -S --needed --noconfirm zsh
+    fi
+}
+
+ensure_zsh_default() {
+    is_arch || return 0
+
+    local zsh_path
+    zsh_path="$(command -v zsh)" || return 1
+
+    local current_shell
+    current_shell="$(getent passwd "$(id -un)" | cut -d: -f7)"
+    [[ "$current_shell" == "$zsh_path" ]] || sudo chsh -s "$zsh_path" "$(id -un)"
 }
 
 configure() {
@@ -28,6 +44,7 @@ configure() {
     ln -sf "$SCRIPT_DIR/.zlogout"   "$HOME/.zlogout"
     ln -sf "$SCRIPT_DIR/.zprofile"  "$HOME/.zprofile"
     ln -sf "$SCRIPT_DIR/.zshrc"     "$HOME/.zshrc"
+    ensure_zsh_default
 }
 
 apply() {
@@ -36,14 +53,7 @@ apply() {
     echo "Zsh config updated. Start a new terminal to apply changes."
 }
 
-# Main (only run when executed directly, not when sourced)
-# In zsh: ZSH_EVAL_CONTEXT contains 'file' when sourced
-# In bash: BASH_SOURCE[0] differs from $0 when sourced
-if [[ -z "${ZSH_EVAL_CONTEXT:-}" ]]; then
-    # Bash
-    [[ "${BASH_SOURCE[0]}" == "${0}" ]] && { install; configure; }
-elif [[ ! "$ZSH_EVAL_CONTEXT" == *:file* ]]; then
-    # Zsh executed directly (toplevel)
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     install
     configure
 fi
