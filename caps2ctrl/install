@@ -1,0 +1,74 @@
+#!/bin/bash
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SOURCE="$SCRIPT_DIR/caps2ctrl.py"
+INSTALL_DIR="/usr/local/lib/caps2ctrl"
+SERVICE="caps2ctrl.service"
+
+# shellcheck disable=SC1091
+source "$SCRIPT_DIR/../lib/common.sh"
+
+supported_platform() {
+    is_arch
+}
+
+run_as_root() {
+    if [[ "$EUID" -eq 0 ]]; then
+        "$@"
+    else
+        sudo "$@"
+    fi
+}
+
+ensure_sudo() {
+    [[ "$EUID" -eq 0 ]] && return 0
+    sudo -n true 2>/dev/null && return 0
+    [[ -t 0 ]] || {
+        echo "caps2ctrl needs sudo; run 'sudo -v && dot install caps2ctrl' in a terminal."
+        return 1
+    }
+    sudo -v
+}
+
+check_installed() {
+    supported_platform || return 0
+    python -c 'import evdev' &>/dev/null
+}
+
+check_configured() {
+    supported_platform || return 0
+    [[ -f "$INSTALL_DIR/caps2ctrl.py" ]] \
+        && systemctl is-enabled --quiet "$SERVICE" \
+        && systemctl is-active --quiet "$SERVICE"
+}
+
+install() {
+    supported_platform || return 0
+    ensure_sudo
+    run_as_root pacman -S --noconfirm --needed python-evdev
+}
+
+configure() {
+    supported_platform || return 0
+    [[ -f "$SOURCE" ]] || {
+        echo "caps2ctrl source is missing: $SOURCE"
+        return 1
+    }
+
+    ensure_sudo
+    run_as_root /usr/bin/install -Dm755 "$SOURCE" "$INSTALL_DIR/caps2ctrl.py"
+    run_as_root /usr/bin/install -Dm644 "$SCRIPT_DIR/$SERVICE" "/etc/systemd/system/$SERVICE"
+    run_as_root systemctl daemon-reload
+    run_as_root systemctl enable --now "$SERVICE"
+    run_as_root systemctl restart "$SERVICE"
+}
+
+apply() {
+    configure
+}
+
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    install
+    configure
+fi

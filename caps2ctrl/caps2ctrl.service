@@ -1,0 +1,14 @@
+[Unit]
+Description=Caps Lock to Escape/Control for the built-in keyboard
+After=systemd-udevd.service
+Wants=systemd-udevd.service
+
+[Service]
+Type=simple
+ExecStartPre=/usr/bin/modprobe uinput
+ExecStart=/usr/bin/python /usr/local/lib/caps2ctrl/caps2ctrl.py /dev/input/by-path/platform-i8042-serio-0-event-kbd
+Restart=on-failure
+RestartSec=1
+
+[Install]
+WantedBy=multi-user.target
