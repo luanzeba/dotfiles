@@ -1,5 +1,5 @@
 {
-  description = "luan's dotfiles toolchain (nix profile: base + node + go + rust + ruby + nvim + helix + jj + gh + glab + aws + git + 1password + whisper + zig + bat + vicinae + handy tooling)";
+  description = "luan's dotfiles toolchain (nix profile: base + node + go + rust + ruby + nvim + helix + jj + gh + glab + aws + git + chrome + 1password + whisper + zig + bat + vicinae + handy tooling)";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
@@ -232,6 +232,11 @@
 
           # NOTE: `hunk`/`hunkdiff` is not in nixpkgs, so it stays as an
           # `npm install -g hunkdiff` in hunk/install (using nix-provided npm).
+        } // pkgs.lib.optionalAttrs (system == "x86_64-linux") {
+          chrome =
+            let
+              unfreePkgs = pkgsAllowingUnfree [ "google-chrome" ];
+            in unfreePkgs.google-chrome;
         } // pkgs.lib.optionalAttrs pkgs.stdenv.isLinux {
           # Vicinae and Handy are Linux desktop applications.
           vicinae = vicinaeToolchain;

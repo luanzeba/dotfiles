@@ -50,7 +50,7 @@ It is configured with:
 
 ## Nix adoption (Phase 1)
 
-Base utilities, Node, Go, Rust, Ruby, Neovim, Helix, jj, gh, glab, AWS CLI, Git, 1Password CLI, Whisper, Zig, bat, Vicinae, and Handy are managed by the dotfiles Nix flake (`nix/flake.nix`) as separate installables:
+Base utilities, Node, Go, Rust, Ruby, Neovim, Helix, jj, gh, glab, AWS CLI, Git, 1Password CLI, Whisper, Zig, bat, Vicinae, and Handy are managed by the dotfiles Nix flake (`nix/flake.nix`) as separate installables. Google Chrome uses Nix on x86_64 Linux and Homebrew on macOS:
 
 - `base/install` → `path:~/dotfiles/nix#base`
   - `fzf` (required by fzf-lua; installed through Nix because distro packages can lag behind)
@@ -84,6 +84,10 @@ Base utilities, Node, Go, Rust, Ruby, Neovim, Helix, jj, gh, glab, AWS CLI, Git,
 - `git/install` → `path:~/dotfiles/nix#git`
   - `git`
   - `~/.gitconfig`, `~/.gitignore_global`, and `~/.git_template` are still managed by `git/install`
+- `chrome/install`
+  - x86_64 Linux: `path:~/dotfiles/nix#chrome` (`google-chrome`; unfree package allowed explicitly)
+  - macOS: Homebrew `google-chrome` cask
+  - on Linux, links the Nix desktop entry into `~/.local/share/applications` for launchers
 - `1password/install` → `path:~/dotfiles/nix#1password`
   - `1password-cli` (`op`; unfree package allowed explicitly for this package)
   - app integration is still configured in the 1Password app

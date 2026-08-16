@@ -3,7 +3,7 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DOTFILES_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-source "$DOTFILES_DIR/lib/common.sh"
+source "$DOTFILES_DIR/lib/nix.sh"
 
 # We intentionally use Google Chrome "external extensions" manifests instead of
 # managed policy force/recommended installs. Policy-installed extensions
@@ -15,28 +15,48 @@ EXTERNAL_EXTENSIONS_SOURCE_DIR="$SCRIPT_DIR/external-extensions"
 EXTERNAL_EXTENSIONS_TARGET_DIR="$CHROME_USER_DATA_DIR/External Extensions"
 HOTKEY_EXTENSION_REPO="luanzeba/chromium-hotkey-extension"
 HOTKEY_EXTENSION_DIR="$HOME/.local/share/chrome-extensions/chromium-hotkey-extension"
+NIX_CHROME_DESKTOP_ENTRY="$HOME/.nix-profile/share/applications/google-chrome.desktop"
+LOCAL_APPLICATIONS_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
+LOCAL_CHROME_DESKTOP_ENTRY="$LOCAL_APPLICATIONS_DIR/google-chrome.desktop"
+
+bootstrap_chrome_path() {
+    _source_nix_env || true
+    if [[ -d "$HOME/.nix-profile/bin" ]]; then
+        export PATH="$HOME/.nix-profile/bin:$PATH"
+    fi
+}
 
 chrome_app_path() {
-    if [[ -d "/Applications/Google Chrome.app" ]]; then
-        echo "/Applications/Google Chrome.app"
-        return 0
-    fi
-
-    if [[ -d "$HOME/Applications/Google Chrome.app" ]]; then
-        echo "$HOME/Applications/Google Chrome.app"
-        return 0
-    fi
+    local app_path
+    for app_path in \
+        "/Applications/Google Chrome.app" \
+        "$HOME/Applications/Google Chrome.app"; do
+        if [[ -d "$app_path" ]]; then
+            echo "$app_path"
+            return 0
+        fi
+    done
 
     return 1
 }
 
+chrome_binary_available() {
+    bootstrap_chrome_path
+    command -v google-chrome &>/dev/null || command -v google-chrome-stable &>/dev/null
+}
+
 check_installed() {
-    chrome_app_path &>/dev/null
+    if is_macos; then
+        chrome_app_path &>/dev/null
+    else
+        chrome_binary_available
+    fi
 }
 
 check_configured() {
     if ! is_macos; then
-        return 0
+        [[ ! -f "$NIX_CHROME_DESKTOP_ENTRY" || -f "$LOCAL_CHROME_DESKTOP_ENTRY" ]]
+        return
     fi
 
     local source_file
@@ -53,6 +73,20 @@ check_configured() {
     [[ -f "$HOTKEY_EXTENSION_DIR/manifest.json" ]] || return 1
 
     return 0
+}
+
+configure_desktop_entry() {
+    [[ -f "$NIX_CHROME_DESKTOP_ENTRY" ]] || return 0
+
+    mkdir -p "$LOCAL_APPLICATIONS_DIR"
+    if [[ -e "$LOCAL_CHROME_DESKTOP_ENTRY" && ! -L "$LOCAL_CHROME_DESKTOP_ENTRY" ]]; then
+        echo "Not linking Google Chrome desktop entry: $LOCAL_CHROME_DESKTOP_ENTRY already exists"
+        return 0
+    fi
+
+    ln -sfn "$NIX_CHROME_DESKTOP_ENTRY" "$LOCAL_CHROME_DESKTOP_ENTRY"
+    command -v update-desktop-database &>/dev/null && update-desktop-database "$LOCAL_APPLICATIONS_DIR"
+    systemctl --user try-restart vicinae.service 2>/dev/null || true
 }
 
 remove_quarantine() {
@@ -172,29 +206,36 @@ PY
 }
 
 install() {
-    if ! is_macos; then
-        echo "Google Chrome install currently supported on macOS only, skipping"
-        return 0
-    fi
-
     if check_installed; then
         echo "Google Chrome already installed"
         return 0
     fi
 
-    if ! command -v brew &>/dev/null; then
-        echo "Homebrew is required for Google Chrome on macOS"
-        echo "Install Homebrew first, then run: brew install --cask google-chrome"
+    if is_macos; then
+        if ! command -v brew &>/dev/null; then
+            echo "Homebrew is required for Google Chrome on macOS"
+            echo "Install Homebrew first, then run: brew install --cask google-chrome"
+            return 1
+        fi
+
+        echo "Installing Google Chrome via Homebrew..."
+        brew install --cask google-chrome
+        remove_quarantine
+        return 0
+    fi
+
+    if [[ "$(uname -m)" != "x86_64" ]]; then
+        echo "Google Chrome is unavailable through Nix on $(uname -m); install Chromium instead" >&2
         return 1
     fi
 
-    echo "Installing Google Chrome..."
-    brew install --cask google-chrome
-    remove_quarantine
+    echo "Installing Google Chrome via Nix..."
+    nix_profile_sync_chrome
 }
 
 configure() {
     if ! is_macos; then
+        configure_desktop_entry
         return 0
     fi
 
@@ -206,6 +247,7 @@ configure() {
 
 apply() {
     if ! is_macos; then
+        configure_desktop_entry
         return 0
     fi
 
@@ -215,14 +257,16 @@ apply() {
 }
 
 update() {
-    if is_macos && command -v brew &>/dev/null; then
-        echo "Updating Google Chrome via brew..."
-        brew upgrade --cask google-chrome 2>/dev/null || echo "Google Chrome already up to date"
-        remove_quarantine
-        configure_hotkey_extension
-        configure_external_extensions
-        configure_vertical_tabs_preferences
+    if is_macos; then
+        if command -v brew &>/dev/null; then
+            echo "Updating Google Chrome via Homebrew..."
+            brew upgrade --cask google-chrome 2>/dev/null || echo "Google Chrome already up to date"
+        fi
+    elif nix_profile_has_entry "$NIX_CHROME_PROFILE_NAME"; then
+        nix_profile_sync_chrome
     fi
+
+    configure
 }
 
 # Main (only run when executed directly, not when sourced)
