@@ -31,10 +31,23 @@ function shorten_path {
   }'
 }
 
+function jj_prompt_info {
+  command -v jj >/dev/null 2>&1 || return 1
+  command jj --ignore-working-copy workspace root >/dev/null 2>&1 || return 1
+
+  command jj --ignore-working-copy --no-pager log --no-graph --limit 1 --revisions @ \
+    --template 'separate(" ", "jj", change_id.shortest(4), if(conflict, "!", ""), if(empty, "(empty)", ""), if(description != "", description.first_line().substr(0, 40), ""), if(description == "" && !empty, "(no description)", ""))' 2>/dev/null
+}
+
 # Define a precmd function to update the prompt with the shortened path
 function precmd {
-  # Update Git information
-  vcs_info
+  local jj_info
+  if jj_info="$(jj_prompt_info)"; then
+    # jj's colocated Git checkout is intentionally detached, so don't show it as Git.
+    vcs_info_msg_0_="(%F{blue}${jj_info//\%/%%}%f)"
+  else
+    vcs_info
+  fi
   # Get the current path and shorten it
   local current_path="$PWD"
   local shortened_path="$(shorten_path "$current_path")"

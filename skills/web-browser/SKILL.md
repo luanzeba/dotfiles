@@ -13,6 +13,7 @@ Minimal CDP tools for collaborative site exploration.
 - **Never run Chrome headless** for this skill.
 - **Never kill Chrome processes** (`pkill`, `killall`, `kill -9`) as part of browsing setup/cleanup.
 - **Never navigate arbitrary existing tabs.** Use tracked automation windows/tabs only.
+- **Use one automation window per browsing task.** Open the first page in a new automation window, then open additional sources as tabs in that window. Close all tracked automation tabs when finished.
 
 ## Start Chrome (visible session only)
 
@@ -80,13 +81,14 @@ Hold Hyper while clicking a link to choose Home or Work and remember the matchin
 ./scripts/nav.js https://example.com --current
 ```
 
-Default behavior opens a **new automation window**.
+Default behavior opens a new automation window for the first page, then additional tabs in that tracked window.
 
 Flags:
-- `--new` opens a new automation tab
+- `--new` opens a tab in the tracked automation window (or creates the first window)
+- `--new-window` explicitly opens a separate automation window
 - `--current` navigates the currently tracked automation tab/window
 
-Prefer the default (new automation window) to avoid touching unrelated tabs.
+For multi-source research, call `nav.js <first-url>` once, then `nav.js <source-url> --new` for every additional source. Do not open a window per source. Prefer this separate tracked window over personal tabs.
 
 ## Close automation tabs/windows safely
 
@@ -95,7 +97,7 @@ Prefer the default (new automation window) to avoid touching unrelated tabs.
 ./scripts/close-tab.js --all  # Close all tracked automation tabs/windows
 ```
 
-These commands close only tracked automation targets, never arbitrary user tabs.
+These commands close only tracked automation targets, never arbitrary user tabs. Run `close-tab.js --all` when the browsing task is complete.
 
 ## Evaluate JavaScript
 

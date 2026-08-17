@@ -20,8 +20,8 @@ for (const flag of flags) {
   if (!validFlags.has(flag)) {
     console.log("Usage: nav.js <url> [--new] [--new-window] [--current]");
     console.log("\nExamples:");
-    console.log("  nav.js https://example.com              # Open in new automation window (default)");
-    console.log("  nav.js https://example.com --new        # Open in new automation tab");
+    console.log("  nav.js https://example.com              # First opens a window, then tabs in it (default)");
+    console.log("  nav.js https://example.com --new        # Open a tab in the automation window");
     console.log("  nav.js https://example.com --current    # Navigate currently tracked automation tab");
     process.exit(1);
   }
@@ -40,13 +40,13 @@ if (requestNewTab && requestNewWindow) {
 if (!url) {
   console.log("Usage: nav.js <url> [--new] [--new-window] [--current]");
   console.log("\nExamples:");
-  console.log("  nav.js https://example.com              # Open in new automation window (default)");
-  console.log("  nav.js https://example.com --new        # Open in new automation tab");
+  console.log("  nav.js https://example.com              # First opens a window, then tabs in it (default)");
+  console.log("  nav.js https://example.com --new        # Open a tab in the automation window");
   console.log("  nav.js https://example.com --current    # Navigate currently tracked automation tab");
   process.exit(1);
 }
 
-const mode = useCurrentTab ? "current" : requestNewTab ? "new" : "new-window";
+let mode = useCurrentTab ? "current" : requestNewWindow ? "new-window" : requestNewTab ? "new" : "auto";
 
 // Global timeout
 const globalTimeout = setTimeout(() => {
@@ -62,7 +62,21 @@ try {
   let targetId;
   let trackAsAutomationTarget = false;
 
+  const pages = await cdp.getPages();
+  const ownedTargetId = getPreferredOwnedTargetId(pages);
+
+  if (mode === "auto") {
+    mode = ownedTargetId ? "new" : "new-window";
+  }
+  if (mode === "new" && !ownedTargetId) {
+    mode = "new-window";
+  }
+
   if (mode === "new" || mode === "new-window") {
+    // Make the owned window active so Chrome places the new tab there.
+    if (mode === "new") {
+      await cdp.send("Target.activateTarget", { targetId: ownedTargetId });
+    }
     const { targetId: createdTargetId } = await cdp.send("Target.createTarget", {
       url: "about:blank",
       ...(mode === "new-window" ? { newWindow: true } : {}),
@@ -71,9 +85,6 @@ try {
     rememberOwnedTarget(targetId);
     trackAsAutomationTarget = true;
   } else {
-    const pages = await cdp.getPages();
-    const ownedTargetId = getPreferredOwnedTargetId(pages);
-
     if (ownedTargetId) {
       targetId = ownedTargetId;
       trackAsAutomationTarget = true;
@@ -84,7 +95,7 @@ try {
       );
     } else {
       console.error("✗ No tracked automation tab found.");
-      console.error("  Run nav.js <url> without --current (defaults to --new-window).\n");
+      console.error("  Run nav.js <url> without --current to create an automation window.\n");
       process.exit(1);
     }
   }
