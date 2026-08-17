@@ -63,7 +63,6 @@ On a Hyprland installation, the installer links `hyprland.conf` into
 - `Super+B`: open Google Chrome
 - `Super+M`: open iCloud Mail in Chrome app mode
 - `Super+V`: open/toggle Vicinae clipboard history; Enter pastes the selection
-- `Super+F`: toggle the active window floating
 - `Super+Return`: create a new Ghostty through Vicinae
 
 `Super+Alt+Space` remains Omarchy Menu.
