@@ -85,7 +85,7 @@ Base utilities, Node, Go, Rust, Ruby, Neovim, Helix, jj, gh, glab, AWS CLI, Git,
   - `git`
   - `~/.gitconfig`, `~/.gitignore_global`, and `~/.git_template` are still managed by `git/install`
 - `chrome/install`
-  - x86_64 Linux: `path:~/dotfiles/nix#chrome` (`google-chrome`; unfree package allowed explicitly)
+  - x86_64 Linux: `path:~/dotfiles/nix#chrome` (`google-chrome`; unfree package allowed explicitly), with native Wayland enabled when available
   - macOS: Homebrew `google-chrome` cask
   - on Linux, links the Nix desktop entry into `~/.local/share/applications` for launchers
 - `1password/install` → `path:~/dotfiles/nix#1password`

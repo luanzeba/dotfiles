@@ -236,7 +236,9 @@
           chrome =
             let
               unfreePkgs = pkgsAllowingUnfree [ "google-chrome" ];
-            in unfreePkgs.google-chrome;
+            in unfreePkgs.google-chrome.override {
+              commandLineArgs = "--ozone-platform-hint=auto --enable-features=WaylandWindowDecorations --enable-wayland-ime=true";
+            };
         } // pkgs.lib.optionalAttrs pkgs.stdenv.isLinux {
           # Vicinae and Handy are Linux desktop applications.
           vicinae = vicinaeToolchain;
