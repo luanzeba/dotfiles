@@ -1,0 +1,19 @@
+id = "luanv/network"
+name = "Network"
+version = "0.1.0"
+plugin_api = 12
+author = "luanv"
+license = "MIT"
+dependencies = ["networkmanager", "python", "iputils"]
+tags = ["network", "wifi"]
+icon = "antenna-bars-5"
+description = "A colorful Wi-Fi panel for the blue desktop."
+
+[[panel]]
+id = "panel"
+entry = "panel.luau"
+width = 470
+height = 800
+placement = "floating"
+position = "top_right"
+dismiss_on_outside_click = true

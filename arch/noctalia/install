@@ -7,6 +7,8 @@ DATA_HOME="${XDG_DATA_HOME:-$HOME/.local/share}"
 NOCTALIA_CONFIG_DIR="$CONFIG_HOME/noctalia"
 NOCTALIA_CONFIG="$NOCTALIA_CONFIG_DIR/config.toml"
 NOCTALIA_PALETTES="$NOCTALIA_CONFIG_DIR/palettes"
+NOCTALIA_PLUGIN_DIR="$DATA_HOME/noctalia/plugins"
+NETWORK_PLUGIN="$NOCTALIA_PLUGIN_DIR/network"
 WALLPAPER="$DATA_HOME/wallpapers/wallhaven-d8dokj-3x2.jpg"
 HYPRLAND_CONFIG="$CONFIG_HOME/hypr/hyprland.conf"
 NOCTALIA_HYPRLAND_LINK="$CONFIG_HOME/hypr/noctalia.conf"
@@ -28,6 +30,11 @@ palettes_linked() {
         && [[ "$(readlink -f "$NOCTALIA_PALETTES")" == "$SCRIPT_DIR/palettes" ]]
 }
 
+plugins_linked() {
+    [[ -L "$NETWORK_PLUGIN" ]] \
+        && [[ "$(readlink -f "$NETWORK_PLUGIN")" == "$SCRIPT_DIR/plugins/network" ]]
+}
+
 hyprland_enabled() {
     [[ -L "$NOCTALIA_HYPRLAND_LINK" ]] \
         && [[ "$(readlink -f "$NOCTALIA_HYPRLAND_LINK")" == "$SCRIPT_DIR/hyprland.conf" ]] \
@@ -45,7 +52,7 @@ check_installed() {
 
 check_configured() {
     supported_platform || return 0
-    config_linked && palettes_linked && [[ -f "$WALLPAPER" ]] && hyprland_enabled && ! has_waybar_autostart
+    config_linked && palettes_linked && plugins_linked && [[ -f "$WALLPAPER" ]] && hyprland_enabled && ! has_waybar_autostart
 }
 
 install() {
@@ -84,6 +91,17 @@ link_palettes() {
 
     ln -sfn "$SCRIPT_DIR/palettes" "$NOCTALIA_PALETTES"
     echo "Linked $NOCTALIA_PALETTES"
+}
+
+link_plugins() {
+    mkdir -p "$NOCTALIA_PLUGIN_DIR"
+    if [[ -e "$NETWORK_PLUGIN" && ! -L "$NETWORK_PLUGIN" ]]; then
+        mv "$NETWORK_PLUGIN" "$NETWORK_PLUGIN.backup.$(date +%s)"
+        echo "Backed up existing Network plugin"
+    fi
+
+    ln -sfn "$SCRIPT_DIR/plugins/network" "$NETWORK_PLUGIN"
+    echo "Linked $NETWORK_PLUGIN"
 }
 
 prepare_wallpaper() {
@@ -179,6 +197,7 @@ configure() {
     supported_platform || return 0
     link_config
     link_palettes
+    link_plugins
     prepare_wallpaper
     configure_hyprland
     stop_waybar

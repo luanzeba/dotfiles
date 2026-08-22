@@ -45,6 +45,9 @@ transition_on_startup = false
 [notification]
 enable_daemon = false
 
+[plugins]
+enabled = ["luanv/network"]
+
 [lockscreen]
 enabled = false
 
@@ -107,8 +110,11 @@ format = "{:%a %d | %H:%M}"
 [widget.network]
 color = "#f2f3f3"
 icon_color = "#f2f3f3"
-capsule_fill = "#d77561"
-capsule_border = "#d77561"
+capsule_fill = "#4dd1fe"
+capsule_border = "#4dd1fe"
+
+[widget.network.actions]
+left = "panel-toggle luanv/network:panel"
 
 [widget.brightness]
 color = "#f2f3f3"

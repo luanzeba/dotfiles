@@ -11,4 +11,4 @@ dot status arch/noctalia
 
 `arch/fontconfig` contains Fontconfig preferences only. Licensed font binaries remain private under `~/.local/share/fonts`.
 
-`arch/noctalia` starts the shell through a dedicated Hyprland source. It replaces only the duplicate Waybar; Vicinae remains the primary launcher and Mako remains the notification daemon during the trial.
+`arch/noctalia` starts the shell through a dedicated Hyprland source. It replaces only the duplicate Waybar; Vicinae remains the primary launcher and Mako remains the notification daemon during the trial. Its network panel is on `Super+Shift+W`.
