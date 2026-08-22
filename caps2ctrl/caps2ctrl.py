@@ -1,7 +1,10 @@
 #!/usr/bin/env python
-"""Make Caps Lock Escape when tapped and Control when used with another key."""
+"""Make Caps Lock Escape when tapped and Control when held or clicked."""
 
 from dataclasses import dataclass
+from glob import glob
+from selectors import DefaultSelector, EVENT_READ
+import os
 import sys
 
 EV_KEY = 1
@@ -9,6 +12,8 @@ KEY_ESC = 1
 KEY_LEFTCTRL = 29
 KEY_CAPSLOCK = 58
 KEY_RIGHTCTRL = 97
+BTN_MOUSE = 0x110
+BTN_TASK = 0x117
 
 
 @dataclass(frozen=True)
@@ -25,21 +30,29 @@ class Caps2Ctrl:
         self.left_ctrl = False
         self.right_ctrl = False
 
+    def pointer_down(self):
+        self.pending = False
+
     def handle(self, event):
         if event.type != EV_KEY:
             return [event]
 
         if event.code == KEY_CAPSLOCK:
-            if event.value == 1:
-                self.pending = True
-            elif event.value == 0:
+            if event.value == 1 and not self.pending:
+                self.pending = not (self.left_ctrl or self.right_ctrl)
                 if self.pending:
-                    self.pending = False
-                    return [Event(EV_KEY, KEY_ESC, 1), Event(EV_KEY, KEY_ESC, 0)]
+                    self.synthetic_ctrl = True
+                    return [Event(EV_KEY, KEY_LEFTCTRL, 1)]
+            elif event.value == 0:
+                output = []
                 if self.synthetic_ctrl:
                     self.synthetic_ctrl = False
                     if not self.left_ctrl:
-                        return [Event(EV_KEY, KEY_LEFTCTRL, 0)]
+                        output.append(Event(EV_KEY, KEY_LEFTCTRL, 0))
+                if self.pending:
+                    output.extend([Event(EV_KEY, KEY_ESC, 1), Event(EV_KEY, KEY_ESC, 0)])
+                self.pending = False
+                return output
             return []
 
         if event.code == KEY_LEFTCTRL and event.value != 2:
@@ -47,19 +60,34 @@ class Caps2Ctrl:
         elif event.code == KEY_RIGHTCTRL and event.value != 2:
             self.right_ctrl = event.value == 1
 
-        output = []
         if self.pending and event.value == 1:
             self.pending = False
-            if not (self.left_ctrl or self.right_ctrl):
-                self.synthetic_ctrl = True
-                output.append(Event(EV_KEY, KEY_LEFTCTRL, 1))
 
-        # Keep a synthetic left Control held while the physical key changes.
+        # Keep the synthetic left Control held while the physical key changes.
         if event.code == KEY_LEFTCTRL and self.synthetic_ctrl:
-            return output
+            return []
 
-        output.append(event)
-        return output
+        return [event]
+
+
+def is_mouse_button_down(event):
+    return event.type == EV_KEY and BTN_MOUSE <= event.code <= BTN_TASK and event.value == 1
+
+
+def mouse_devices(keyboard_path, input_device):
+    keyboard_path = os.path.realpath(keyboard_path)
+    for path in glob("/dev/input/event*"):
+        if os.path.realpath(path) == keyboard_path:
+            continue
+        try:
+            device = input_device(path)
+            buttons = device.capabilities().get(EV_KEY, [])
+            if any(BTN_MOUSE <= button <= BTN_TASK for button in buttons):
+                yield device
+            else:
+                device.close()
+        except OSError:
+            continue
 
 
 def run(path):
@@ -68,22 +96,36 @@ def run(path):
     except ImportError as error:
         raise SystemExit("Install python-evdev first.") from error
 
-    device = InputDevice(path)
+    keyboard = InputDevice(path)
     remapper = Caps2Ctrl()
-    active = device.active_keys()
+    active = keyboard.active_keys()
     remapper.left_ctrl = KEY_LEFTCTRL in active
     remapper.right_ctrl = KEY_RIGHTCTRL in active
-    device.grab()
-    ui = UInput.from_device(device, name="caps2ctrl built-in keyboard")
+    pointers = list(mouse_devices(path, InputDevice))
+    keyboard.grab()
+    ui = UInput.from_device(keyboard, name="caps2ctrl built-in keyboard")
 
     try:
-        for input_event in device.read_loop():
-            event = Event(input_event.type, input_event.code, input_event.value)
-            for output in remapper.handle(event):
-                ui.write(output.type, output.code, output.value)
+        with DefaultSelector() as selector:
+            selector.register(keyboard, EVENT_READ, True)
+            for pointer in pointers:
+                selector.register(pointer, EVENT_READ, False)
+
+            while True:
+                for key, _ in selector.select():
+                    for input_event in key.fileobj.read():
+                        event = Event(input_event.type, input_event.code, input_event.value)
+                        if key.data:
+                            for output in remapper.handle(event):
+                                ui.write(output.type, output.code, output.value)
+                        elif is_mouse_button_down(event):
+                            remapper.pointer_down()
     finally:
         ui.close()
-        device.ungrab()
+        keyboard.ungrab()
+        keyboard.close()
+        for pointer in pointers:
+            pointer.close()
 
 
 if __name__ == "__main__":

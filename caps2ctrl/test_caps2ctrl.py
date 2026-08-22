@@ -11,21 +11,34 @@ from caps2ctrl import (
 
 
 class Caps2CtrlTest(unittest.TestCase):
-    def test_tap_sends_escape(self):
+    def test_tap_sends_control_then_escape(self):
         remapper = Caps2Ctrl()
-        self.assertEqual(remapper.handle(Event(EV_KEY, KEY_CAPSLOCK, 1)), [])
+        self.assertEqual(
+            remapper.handle(Event(EV_KEY, KEY_CAPSLOCK, 1)),
+            [Event(EV_KEY, KEY_LEFTCTRL, 1)],
+        )
         self.assertEqual(
             remapper.handle(Event(EV_KEY, KEY_CAPSLOCK, 0)),
-            [Event(EV_KEY, KEY_ESC, 1), Event(EV_KEY, KEY_ESC, 0)],
+            [
+                Event(EV_KEY, KEY_LEFTCTRL, 0),
+                Event(EV_KEY, KEY_ESC, 1),
+                Event(EV_KEY, KEY_ESC, 0),
+            ],
         )
 
     def test_chord_sends_control(self):
         remapper = Caps2Ctrl()
         remapper.handle(Event(EV_KEY, KEY_CAPSLOCK, 1))
+        self.assertEqual(remapper.handle(Event(EV_KEY, 30, 1)), [Event(EV_KEY, 30, 1)])
         self.assertEqual(
-            remapper.handle(Event(EV_KEY, 30, 1)),
-            [Event(EV_KEY, KEY_LEFTCTRL, 1), Event(EV_KEY, 30, 1)],
+            remapper.handle(Event(EV_KEY, KEY_CAPSLOCK, 0)),
+            [Event(EV_KEY, KEY_LEFTCTRL, 0)],
         )
+
+    def test_pointer_click_cancels_escape(self):
+        remapper = Caps2Ctrl()
+        remapper.handle(Event(EV_KEY, KEY_CAPSLOCK, 1))
+        remapper.pointer_down()
         self.assertEqual(
             remapper.handle(Event(EV_KEY, KEY_CAPSLOCK, 0)),
             [Event(EV_KEY, KEY_LEFTCTRL, 0)],
@@ -34,7 +47,6 @@ class Caps2CtrlTest(unittest.TestCase):
     def test_real_control_keeps_ownership(self):
         remapper = Caps2Ctrl()
         remapper.handle(Event(EV_KEY, KEY_CAPSLOCK, 1))
-        remapper.handle(Event(EV_KEY, 30, 1))
         self.assertEqual(remapper.handle(Event(EV_KEY, KEY_LEFTCTRL, 1)), [])
         self.assertEqual(remapper.handle(Event(EV_KEY, KEY_CAPSLOCK, 0)), [])
         self.assertEqual(
