@@ -45,6 +45,7 @@
             jq
             eza
             ripgrep
+            openssh # ssh, ssh-keygen
             tmux
             poppler-utils # pdftotext
           ];
