@@ -1,0 +1,199 @@
+#!/bin/bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
+DATA_HOME="${XDG_DATA_HOME:-$HOME/.local/share}"
+NOCTALIA_CONFIG_DIR="$CONFIG_HOME/noctalia"
+NOCTALIA_CONFIG="$NOCTALIA_CONFIG_DIR/config.toml"
+NOCTALIA_PALETTES="$NOCTALIA_CONFIG_DIR/palettes"
+WALLPAPER="$DATA_HOME/wallpapers/wallhaven-d8dokj-3x2.jpg"
+HYPRLAND_CONFIG="$CONFIG_HOME/hypr/hyprland.conf"
+NOCTALIA_HYPRLAND_LINK="$CONFIG_HOME/hypr/noctalia.conf"
+
+# shellcheck disable=SC1091
+source "$SCRIPT_DIR/../../lib/common.sh"
+
+supported_platform() {
+    is_arch
+}
+
+config_linked() {
+    [[ -L "$NOCTALIA_CONFIG" ]] \
+        && [[ "$(readlink -f "$NOCTALIA_CONFIG")" == "$SCRIPT_DIR/config.toml" ]]
+}
+
+palettes_linked() {
+    [[ -L "$NOCTALIA_PALETTES" ]] \
+        && [[ "$(readlink -f "$NOCTALIA_PALETTES")" == "$SCRIPT_DIR/palettes" ]]
+}
+
+hyprland_enabled() {
+    [[ -L "$NOCTALIA_HYPRLAND_LINK" ]] \
+        && [[ "$(readlink -f "$NOCTALIA_HYPRLAND_LINK")" == "$SCRIPT_DIR/hyprland.conf" ]] \
+        && grep -Fqx "source = $NOCTALIA_HYPRLAND_LINK" "$HYPRLAND_CONFIG"
+}
+
+has_waybar_autostart() {
+    grep -Eq '^[[:space:]]*exec-once[[:space:]]*=.*\bwaybar\b' "$HYPRLAND_CONFIG"
+}
+
+check_installed() {
+    supported_platform || return 0
+    command -v noctalia &>/dev/null
+}
+
+check_configured() {
+    supported_platform || return 0
+    config_linked && palettes_linked && [[ -f "$WALLPAPER" ]] && hyprland_enabled && ! has_waybar_autostart
+}
+
+install() {
+    supported_platform || return 0
+
+    if command -v noctalia &>/dev/null; then
+        echo "Noctalia already installed"
+        return 0
+    fi
+
+    if ! sudo -n true 2>/dev/null; then
+        echo "Noctalia needs sudo to install its Arch package. Run 'sudo -v', then retry:"
+        echo "  dot install arch/noctalia"
+        return 1
+    fi
+
+    sudo pacman -S --needed --noconfirm noctalia
+}
+
+link_config() {
+    mkdir -p "$NOCTALIA_CONFIG_DIR"
+    if [[ -e "$NOCTALIA_CONFIG" && ! -L "$NOCTALIA_CONFIG" ]]; then
+        mv "$NOCTALIA_CONFIG" "$NOCTALIA_CONFIG.backup.$(date +%s)"
+        echo "Backed up existing Noctalia config"
+    fi
+
+    ln -sfn "$SCRIPT_DIR/config.toml" "$NOCTALIA_CONFIG"
+    echo "Linked $NOCTALIA_CONFIG"
+}
+
+link_palettes() {
+    if [[ -e "$NOCTALIA_PALETTES" && ! -L "$NOCTALIA_PALETTES" ]]; then
+        mv "$NOCTALIA_PALETTES" "$NOCTALIA_PALETTES.backup.$(date +%s)"
+        echo "Backed up existing Noctalia palettes"
+    fi
+
+    ln -sfn "$SCRIPT_DIR/palettes" "$NOCTALIA_PALETTES"
+    echo "Linked $NOCTALIA_PALETTES"
+}
+
+prepare_wallpaper() {
+    "$SCRIPT_DIR/wallpaper.sh" >/dev/null
+}
+
+set_wallpaper() {
+    local attempt
+    for attempt in {1..10}; do
+        noctalia msg wallpaper-set "$WALLPAPER" >/dev/null 2>&1 && return 0
+        sleep 0.5
+    done
+    log_warn "Noctalia is not ready; wallpaper will apply after the next dot install"
+}
+
+link_hyprland_config() {
+    mkdir -p "$(dirname "$NOCTALIA_HYPRLAND_LINK")"
+    if [[ -e "$NOCTALIA_HYPRLAND_LINK" && ! -L "$NOCTALIA_HYPRLAND_LINK" ]]; then
+        mv "$NOCTALIA_HYPRLAND_LINK" "$NOCTALIA_HYPRLAND_LINK.backup.$(date +%s)"
+        echo "Backed up existing Noctalia Hyprland config"
+    fi
+
+    ln -sfn "$SCRIPT_DIR/hyprland.conf" "$NOCTALIA_HYPRLAND_LINK"
+    echo "Linked $NOCTALIA_HYPRLAND_LINK"
+}
+
+replace_hyprland_line() {
+    local from="$1" to="$2" temporary_config="${HYPRLAND_CONFIG}.new.$$" line
+
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        [[ "$line" == "$from" ]] && line="$to"
+        printf '%s\n' "$line"
+    done < "$HYPRLAND_CONFIG" > "$temporary_config"
+    mv -f "$temporary_config" "$HYPRLAND_CONFIG"
+}
+
+configure_hyprland() {
+    [[ -f "$HYPRLAND_CONFIG" ]] || {
+        log_warn "Hyprland config not found; Noctalia will start after it is sourced manually"
+        return 0
+    }
+
+    link_hyprland_config
+
+    local source_line="source = $NOCTALIA_HYPRLAND_LINK"
+    local old_waybar_line='exec-once = waybar & mako & /usr/lib/pokit-gnome/polkit-gnome-authentication-agent-1'
+    local new_waybar_line='exec-once = mako & /usr/lib/pokit-gnome/polkit-gnome-authentication-agent-1'
+    if ! grep -Fqx "$source_line" "$HYPRLAND_CONFIG" \
+        || grep -Fqx "$old_waybar_line" "$HYPRLAND_CONFIG"; then
+        cp "$HYPRLAND_CONFIG" "$HYPRLAND_CONFIG.backup.$(date +%s)"
+    fi
+
+    if ! grep -Fqx "$source_line" "$HYPRLAND_CONFIG"; then
+        {
+            echo
+            echo "# Managed by dotfiles/arch/noctalia"
+            echo "$source_line"
+        } >> "$HYPRLAND_CONFIG"
+    fi
+
+    if grep -Fqx "$old_waybar_line" "$HYPRLAND_CONFIG"; then
+        replace_hyprland_line "$old_waybar_line" "$new_waybar_line"
+        echo "Disabled Waybar autostart; Mako and the existing Polkit agent remain active"
+    elif has_waybar_autostart; then
+        log_warn "Found a non-standard Waybar autostart; leaving it unchanged"
+    fi
+
+    hyprctl reload
+}
+
+stop_waybar() {
+    has_waybar_autostart && return 0
+
+    local pid
+    while read -r pid; do
+        [[ -n "$pid" ]] && kill -9 "$pid" 2>/dev/null || true
+    done < <(pgrep -u "$USER" -x waybar || true)
+}
+
+start_noctalia() {
+    pgrep -u "$USER" -x noctalia &>/dev/null && return 0
+
+    if [[ -z "${HYPRLAND_INSTANCE_SIGNATURE:-}" ]]; then
+        log_warn "No active Hyprland session; Noctalia will start on your next login"
+        return 0
+    fi
+
+    hyprctl dispatch exec "noctalia --daemon"
+    echo "Started Noctalia"
+}
+
+configure() {
+    supported_platform || return 0
+    link_config
+    link_palettes
+    prepare_wallpaper
+    configure_hyprland
+    stop_waybar
+    start_noctalia
+    noctalia msg config-reload >/dev/null 2>&1 || true
+    set_wallpaper
+}
+
+apply() {
+    pgrep -u "$USER" -x noctalia &>/dev/null || return 0
+    noctalia msg config-reload
+    set_wallpaper
+}
+
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    install
+    configure
+fi

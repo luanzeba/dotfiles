@@ -1,0 +1,51 @@
+#!/bin/bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
+FONTCONFIG_FILE="$CONFIG_HOME/fontconfig/fonts.conf"
+
+# shellcheck disable=SC1091
+source "$SCRIPT_DIR/../../lib/common.sh"
+
+supported_platform() {
+    is_arch
+}
+
+check_installed() {
+    supported_platform || return 0
+    [[ "$(fc-match -f '%{family}' 'Berkeley Mono' | head -1)" == "Berkeley Mono" ]]
+}
+
+check_configured() {
+    supported_platform || return 0
+    [[ -L "$FONTCONFIG_FILE" ]] \
+        && [[ "$(readlink -f "$FONTCONFIG_FILE")" == "$SCRIPT_DIR/fonts.conf" ]]
+}
+
+install() {
+    : # The licensed font files are intentionally kept outside this repository.
+}
+
+configure() {
+    supported_platform || return 0
+
+    mkdir -p "$(dirname "$FONTCONFIG_FILE")"
+    if [[ -e "$FONTCONFIG_FILE" && ! -L "$FONTCONFIG_FILE" ]]; then
+        mv "$FONTCONFIG_FILE" "$FONTCONFIG_FILE.backup.$(date +%s)"
+        echo "Backed up existing Fontconfig config"
+    fi
+
+    ln -sfn "$SCRIPT_DIR/fonts.conf" "$FONTCONFIG_FILE"
+    fc-cache -f "$HOME/.local/share/fonts"
+    echo "Linked $FONTCONFIG_FILE"
+}
+
+apply() {
+    fc-cache -f "$HOME/.local/share/fonts"
+}
+
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    install
+    configure
+fi

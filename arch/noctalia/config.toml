@@ -1,0 +1,147 @@
+# Phase 3 — railway signal board.
+# A cropped Wallhaven railway scene supplies its sky cyan, train coral,
+# crossing yellow, stop red, and coastal green. No separate theme app needed.
+
+[accessibility]
+high_contrast = true
+
+[shell]
+corner_radius_scale = 0.0
+font_family = "Berkeley Mono"
+button_borders = true
+card_borders = true
+input_borders = true
+popup_borders = true
+popup_shadows = false
+clipboard_enabled = false
+polkit_agent = false
+
+[shell.animation]
+enabled = true
+speed = 0.85
+
+[shell.shadow]
+alpha = 0.0
+
+[shell.panel]
+transparency_mode = "solid"
+borders = true
+shadow = false
+launcher_placement = "floating"
+control_center_placement = "attached"
+
+[theme]
+mode = "dark"
+source = "custom"
+custom_palette = "railway-signal"
+pure_black_dark = false
+
+[wallpaper]
+enabled = true
+fill_mode = "crop"
+transition = ["fade"]
+transition_on_startup = false
+
+[notification]
+enable_daemon = false
+
+[lockscreen]
+enabled = false
+
+[system.monitor]
+enabled = true
+
+[weather]
+enabled = false
+
+[bar.main]
+# Dense, square modules: the bar is the rail; each widget is an instrument.
+position = "top"
+thickness = 34
+background_opacity = 0.04
+border = "#f4c430"
+border_width = 0.0
+radius = 0
+margin_ends = 4
+margin_edge = 4
+padding = 5
+widget_spacing = 4
+font_weight = 650
+shadow = false
+capsule = true
+capsule_fill = "#082e49"
+capsule_border = "#f4c430"
+capsule_padding = 7
+capsule_radius = 0
+start = ["launcher", "workspaces", "active_window"]
+center = ["date"]
+end = ["network", "brightness", "volume", "temp", "ram", "battery", "control-center"]
+
+[widget.launcher]
+color = "#f2f3f3"
+icon_color = "#f2f3f3"
+capsule_fill = "#f4c430"
+capsule_border = "#f4c430"
+
+[widget.workspaces]
+color = "#f2f3f3"
+icon_color = "#f2f3f3"
+capsule_fill = "#4dd1fe"
+capsule_border = "#4dd1fe"
+
+[widget.active_window]
+color = "#f2f3f3"
+icon_color = "#f2f3f3"
+capsule_fill = "#4dd1fe"
+capsule_border = "#4dd1fe"
+max_length = 180
+
+[widget.date]
+type = "clock"
+color = "#f2f3f3"
+icon_color = "#f2f3f3"
+capsule_fill = "#f4c430"
+capsule_border = "#f4c430"
+format = "{:%a %d | %H:%M}"
+
+[widget.network]
+color = "#f2f3f3"
+icon_color = "#f2f3f3"
+capsule_fill = "#d77561"
+capsule_border = "#d77561"
+
+[widget.brightness]
+color = "#f2f3f3"
+icon_color = "#f2f3f3"
+capsule_fill = "#f4c430"
+capsule_border = "#f4c430"
+
+[widget.volume]
+color = "#f2f3f3"
+icon_color = "#f2f3f3"
+capsule_fill = "#4dd1fe"
+capsule_border = "#4dd1fe"
+
+[widget.temp]
+color = "#f2f3f3"
+icon_color = "#f2f3f3"
+capsule_fill = "#d77561"
+capsule_border = "#d77561"
+
+[widget.ram]
+color = "#f2f3f3"
+icon_color = "#f2f3f3"
+capsule_fill = "#70b85b"
+capsule_border = "#70b85b"
+
+[widget.battery]
+color = "#f2f3f3"
+icon_color = "#f2f3f3"
+capsule_fill = "#70b85b"
+capsule_border = "#70b85b"
+
+[widget.control-center]
+color = "#f2f3f3"
+icon_color = "#f2f3f3"
+capsule_fill = "#d77561"
+capsule_border = "#d77561"
