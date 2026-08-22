@@ -153,6 +153,9 @@ function launchChromeWithDebugPort({
     "--no-first-run",
     "--disable-features=ProfilePicker",
     "--disable-session-crashed-bubble",
+    // nav.js creates and tracks the first visible automation window. Starting
+    // Chrome with its usual blank window would leave an untracked extra window.
+    "--no-startup-window",
   ];
 
   if (profileDirectory) {

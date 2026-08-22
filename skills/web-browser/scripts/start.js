@@ -34,7 +34,7 @@ const invalidArg = [...args].find((arg) => !validArgs.has(arg));
 
 function printUsage(exitCode = 0) {
   console.log("Usage: start.js");
-  console.log("\nEnsures a visible debuggable multi-profile Chrome session on :9222.");
+  console.log("\nEnsures a non-headless debuggable multi-profile Chrome session on :9222.");
   console.log(`Uses the canonical Pi profile store at ${DEFAULT_ISOLATED_USER_DATA_DIR}.`);
   console.log("Never starts headless and never kills Chrome processes.");
   process.exit(exitCode);
@@ -90,7 +90,7 @@ try {
       `✓ Chrome already running on :${DEFAULT_DEBUG_PORT} (reusing existing ${listenerDescription} instance)`,
     );
   } else {
-    console.log(`✓ Chrome ready on :${DEFAULT_DEBUG_PORT} (${listenerDescription}, visible window)`);
+    console.log(`✓ Chrome ready on :${DEFAULT_DEBUG_PORT} (${listenerDescription}; nav.js opens the visible automation window)`);
   }
 
   if (listener.isIsolated) {

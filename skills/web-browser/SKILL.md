@@ -41,6 +41,7 @@ Behavior:
 - Never kills existing Chrome processes
 - Supports Home and Work windows in one multi-profile Chrome process
 - Uses the canonical Pi debug profile store at `~/.cache/pi-chrome-profile`
+- Starts without an empty startup window; the first `nav.js` call creates the one tracked automation window
 - If Chrome is running without `:9222`, it fails fast and asks for a manual relaunch
 
 If needed, relaunch your debug session via:
