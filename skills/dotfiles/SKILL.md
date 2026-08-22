@@ -40,7 +40,7 @@ See [references/tool-template.md](references/tool-template.md) for the install s
 | Rust | `rust/` | N/A | Yes (Nix flake: rustc, cargo, rustfmt, clippy, rust-analyzer) |
 | Go | `go/` | N/A | Yes (Nix flake: go, gopls, gofumpt, goimports-reviser) |
 | Ruby | `ruby/` | N/A | Yes (Nix flake: ruby_3_4) |
-| Base utilities | `base/` | N/A | Yes (Nix flake: fzf, azure-cli, fd, ffmpeg, jq, eza, ripgrep, openssh, tmux, poppler-utils) |
+| Base utilities | `base/` | N/A | Yes (Nix flake: fzf, fd, ffmpeg, jq, eza, ripgrep, openssh, tmux, poppler-utils) |
 | Node | `node/` | N/A | Yes (Nix flake: node + TypeScript tools) |
 | Hunk | `hunk/` | `~/.config/hunk/config.toml`, git aliases (`hdiff`, `hshow`) | Yes |
 | Bin | `bin/` | `~/.local/bin` | Yes (custom scripts) |

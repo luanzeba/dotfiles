@@ -54,7 +54,7 @@ Base utilities, Node, Go, Rust, Ruby, Neovim, Helix, jj, gh, glab, AWS CLI, Git,
 
 - `base/install` → `path:~/dotfiles/nix#base`
   - `fzf` (required by fzf-lua; installed through Nix because distro packages can lag behind)
-  - `azure-cli` (`az`), `fd`, `ffmpeg`, `jq`, `eza`, `ripgrep` (`rg`), `openssh` (`ssh`, `ssh-keygen`), `tmux`, `poppler-utils` (`pdftotext`)
+  - `fd`, `ffmpeg`, `jq`, `eza`, `ripgrep` (`rg`), `openssh` (`ssh`, `ssh-keygen`), `tmux`, `poppler-utils` (`pdftotext`)
 - `node/install` → `path:~/dotfiles/nix#node`
   - `nodejs_22`, Corepack-managed `pnpm`/`pnpx`, `typescript` (`tsc`), `typescript-language-server`, `prettier`, `tree-sitter`
 - `go/install` → `path:~/dotfiles/nix#go`

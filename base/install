@@ -5,7 +5,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091
 source "$SCRIPT_DIR/../lib/nix.sh"
 
-BASE_COMMANDS=(fzf az fd ffmpeg jq eza rg ssh-keygen tmux pdftotext)
+BASE_COMMANDS=(fzf fd ffmpeg jq eza rg ssh-keygen tmux pdftotext)
 
 bootstrap_base_path() {
     _source_nix_env || true
@@ -38,10 +38,6 @@ get_installed_version() {
 
     if command -v fzf &>/dev/null; then
         parts+=("fzf $(fzf --version 2>/dev/null | awk '{print $1}')")
-    fi
-
-    if command -v az &>/dev/null; then
-        parts+=("az $(az --version 2>/dev/null | awk '/^azure-cli/ {print $2; exit}')")
     fi
 
     if command -v fd &>/dev/null; then

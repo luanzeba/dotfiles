@@ -39,7 +39,6 @@
 
             # Shared machine basics previously installed through
             # Homebrew or pacman.
-            azure-cli
             fd
             ffmpeg
             jq
