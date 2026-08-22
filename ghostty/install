@@ -1,88 +1,73 @@
 #!/bin/bash
-set -e
+set -euo pipefail
 
-# Ghostty - A fast, native terminal emulator
-# https://ghostty.org
-#
-# macOS only - Ghostty doesn't support Linux yet
+# Ghostty configuration. On Linux, the package is installed separately; this
+# script only manages its config when the binary is already available.
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
+GHOSTTY_CONFIG="$CONFIG_HOME/ghostty/config"
 
 is_macos() {
     [[ "$(uname)" == "Darwin" ]]
 }
 
+supported_platform() {
+    (is_macos && [[ -d "/Applications/Ghostty.app" ]]) || command -v ghostty &>/dev/null
+}
+
 check_installed() {
-    # Ghostty is macOS-only
-    is_macos && [[ -d "/Applications/Ghostty.app" ]]
+    supported_platform
 }
 
 check_configured() {
-    # Check if config is symlinked
-    is_macos && [[ -L "$HOME/.config/ghostty/config" ]]
+    supported_platform \
+        && [[ -L "$GHOSTTY_CONFIG" ]] \
+        && [[ "$(readlink -f "$GHOSTTY_CONFIG")" == "$SCRIPT_DIR/config" ]]
 }
 
 install() {
-    if ! is_macos; then
-        echo "Ghostty is macOS-only, skipping"
-        return 0
-    fi
-
-    if [[ -d "/Applications/Ghostty.app" ]]; then
+    if command -v ghostty &>/dev/null; then
         echo "Ghostty already installed"
         return 0
     fi
 
-    echo "Installing Ghostty..."
+    if ! is_macos; then
+        echo "Ghostty is not installed; skipping config"
+        return 0
+    fi
 
     if command -v brew &>/dev/null; then
         brew install --cask ghostty
     else
-        echo "Please install Homebrew or download Ghostty manually from https://ghostty.org"
+        echo "Please install Ghostty from https://ghostty.org"
         return 1
     fi
 }
 
 configure() {
-    if ! is_macos; then
-        return 0
+    supported_platform || return 0
+
+    mkdir -p "$(dirname "$GHOSTTY_CONFIG")"
+    if [[ -e "$GHOSTTY_CONFIG" && ! -L "$GHOSTTY_CONFIG" ]]; then
+        mv "$GHOSTTY_CONFIG" "$GHOSTTY_CONFIG.backup.$(date +%s)"
+        echo "Backed up existing Ghostty config"
     fi
 
-    local config_dir="$HOME/.config/ghostty"
-    local target="$SCRIPT_DIR/config"
-
-    # Ensure config directory exists
-    mkdir -p "$config_dir"
-
-    # Symlink config file
-    if [[ -L "$config_dir/config" ]]; then
-        rm "$config_dir/config"
-    elif [[ -f "$config_dir/config" ]]; then
-        echo "Backing up existing config to $config_dir/config.bak"
-        mv "$config_dir/config" "$config_dir/config.bak"
-    fi
-
-    ln -sf "$target" "$config_dir/config"
-    echo "Symlinked $config_dir/config -> $target"
+    ln -sfn "$SCRIPT_DIR/config" "$GHOSTTY_CONFIG"
+    echo "Linked $GHOSTTY_CONFIG"
 }
 
 apply() {
-    # Ghostty automatically reloads config, nothing to do
-    :
+    : # Ghostty watches its config file.
 }
 
 update() {
-    if ! is_macos; then
-        return 0
-    fi
-
-    if command -v brew &>/dev/null; then
-        echo "Updating Ghostty via brew..."
+    if is_macos && command -v brew &>/dev/null; then
         brew upgrade --cask ghostty 2>/dev/null || true
     fi
 }
 
-# Main (only run when executed directly, not when sourced)
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     install
     configure

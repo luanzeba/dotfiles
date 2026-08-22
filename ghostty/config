@@ -22,7 +22,7 @@ palette = 13=#d699b6
 palette = 14=#83c092
 palette = 15=#d3c6aa
 
-font-family = BerkeleyMono Nerd Font
+font-family = Berkeley Mono
 cursor-style = block
 shell-integration-features = no-title
 
