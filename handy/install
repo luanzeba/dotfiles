@@ -86,8 +86,13 @@ configure_hyprland_bindings() {
     [[ -f "$HYPRLAND_CONFIG" ]] || return 0
 
     mkdir -p "$(dirname "$HANDY_HYPRLAND_LINK")"
-    backup_real_path "$HANDY_HYPRLAND_LINK"
-    ln -s "$SCRIPT_DIR/hyprland.conf" "$HANDY_HYPRLAND_LINK"
+    # Hyprland watches sourced configs. Replace this link atomically so it
+    # never reloads while the file is missing and reports a globbing error.
+    [[ -e "$HANDY_HYPRLAND_LINK" && ! -L "$HANDY_HYPRLAND_LINK" ]] \
+        && backup_real_path "$HANDY_HYPRLAND_LINK"
+    local temporary_link="${HANDY_HYPRLAND_LINK}.new.$$"
+    ln -s "$SCRIPT_DIR/hyprland.conf" "$temporary_link"
+    mv -Tf "$temporary_link" "$HANDY_HYPRLAND_LINK"
 
     local source_line="source = $HANDY_HYPRLAND_LINK"
     if ! grep -Fqx "$source_line" "$HYPRLAND_CONFIG"; then

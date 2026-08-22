@@ -22,7 +22,7 @@ check_installed() {
 }
 
 check_configured() {
-    # 1Password app integration is configured inside the app, not via dotfiles.
+    # `op` saves its sign-in locally; nothing needs configuring here.
     return 0
 }
 
@@ -45,12 +45,7 @@ configure() {
         return 0
     fi
 
-    echo ""
-    echo "To complete setup, enable CLI integration in the 1Password app:"
-    echo "  1. Open 1Password"
-    echo "  2. Go to Settings > Developer"
-    echo "  3. Enable 'Integrate with 1Password CLI'"
-    echo ""
+    echo "1Password CLI installed. Sign in with: op signin"
 }
 
 update() {

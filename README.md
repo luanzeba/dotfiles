@@ -90,7 +90,7 @@ Base utilities, Node, Go, Rust, Ruby, Neovim, Helix, jj, gh, glab, AWS CLI, Git,
   - on Linux, links the Nix desktop entry into `~/.local/share/applications` for launchers
 - `1password/install` → `path:~/dotfiles/nix#1password`
   - `1password-cli` (`op`; unfree package allowed explicitly for this package)
-  - app integration is still configured in the 1Password app
+  - sign in interactively with `op signin`
 - `whisper/install` → `path:~/dotfiles/nix#whisper`
   - `openai-whisper` (`whisper`; ffmpeg runtime is patched by nixpkgs, and the `ffmpeg` CLI is available from `base`)
   - opt-in; excluded from the default Nix bundle because of its large Python/ML closure
