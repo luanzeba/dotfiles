@@ -45,8 +45,9 @@ def parse_mr_url(value: str) -> MergeRequest:
     if marker not in path:
         raise ReviewError("expected a URL containing /-/merge_requests/<iid>")
 
-    project_path, iid_text = path.split(marker, 1)
-    if "/" in iid_text or not iid_text.isdigit():
+    project_path, iid_path = path.split(marker, 1)
+    iid_text = iid_path.split("/", 1)[0]
+    if not iid_text.isdigit():
         raise ReviewError("could not parse the merge request IID from the URL")
 
     project = unquote(project_path.strip("/"))
@@ -82,6 +83,8 @@ def glab_api(
         if result.returncode != 0:
             detail = result.stderr.strip() or result.stdout.strip()
             raise ReviewError(f"glab api failed: {detail}")
+        if not result.stdout.strip():
+            return None
         try:
             return json.loads(result.stdout)
         except json.JSONDecodeError as error:
@@ -176,7 +179,7 @@ def find_change(
 
 
 def load_changes(mr: MergeRequest) -> list[dict[str, Any]]:
-    response = glab_api(mr, f"{mr.endpoint}/changes")
+    response = glab_api(mr, f"{mr.endpoint}/changes?access_raw_diffs=true")
     if not isinstance(response, dict) or not isinstance(response.get("changes"), list):
         raise ReviewError("could not read merge request changes")
     if response.get("overflow"):
@@ -186,12 +189,84 @@ def load_changes(mr: MergeRequest) -> list[dict[str, Any]]:
     return response["changes"]
 
 
+LINE_CODE = re.compile(r"^[0-9a-f]{40}_(\d+)_(\d+)$")
+
+
+def make_line_range(
+    line_code: str,
+    side: str,
+    old_line: int | None,
+    new_line: int | None,
+) -> dict[str, Any]:
+    match = LINE_CODE.fullmatch(line_code)
+    if not match:
+        raise ReviewError("line code must be a GitLab diff anchor")
+
+    old_anchor, new_anchor = map(int, match.groups())
+    if side == "new" and new_line != new_anchor:
+        raise ReviewError("line code does not match the requested new-side line")
+    if side == "old" and old_line != old_anchor:
+        raise ReviewError("line code does not match the requested old-side line")
+
+    endpoint = {
+        "line_code": line_code,
+        "type": side,
+        "old_line": old_line,
+        "new_line": new_line,
+    }
+    return {"start": endpoint, "end": endpoint.copy()}
+
+
+def line_range_start_code(position: dict[str, Any]) -> str | None:
+    line_range = position.get("line_range")
+    if not isinstance(line_range, dict):
+        return None
+    start = line_range.get("start")
+    end = line_range.get("end")
+    if not isinstance(start, dict) or not isinstance(end, dict):
+        return None
+    start_code = start.get("line_code")
+    end_code = end.get("line_code")
+    if not isinstance(start_code, str) or not isinstance(end_code, str):
+        return None
+    return start_code
+
+
+def is_renderable_draft(draft: dict[str, Any]) -> bool:
+    position = draft.get("position")
+    if not isinstance(position, dict):
+        return False
+    if not (position.get("new_path") or position.get("old_path")):
+        return False
+    if position.get("new_line") is None and position.get("old_line") is None:
+        return False
+    line_code = line_range_start_code(position)
+    return line_code is not None and draft.get("line_code") == line_code
+
+
+def require_renderable_draft(
+    response: Any, expected_position: dict[str, Any]
+) -> None:
+    expected_line_code = line_range_start_code(expected_position)
+    if not expected_line_code:
+        raise ReviewError("expected draft position has no inline line range")
+    if not isinstance(response, dict) or not is_renderable_draft(response):
+        raise ReviewError(
+            "GitLab did not preserve a renderable inline line range for the draft"
+        )
+    if response.get("line_code") != expected_line_code:
+        raise ReviewError(
+            "GitLab returned a different inline line code for the draft position"
+        )
+
+
 def make_position(
     details: dict[str, Any],
     change: dict[str, Any],
     *,
     new_line: int | None,
     old_line: int | None,
+    line_code: str,
 ) -> dict[str, Any]:
     diff = change.get("diff") or ""
     new_to_old, old_to_new = diff_line_maps(diff)
@@ -204,6 +279,7 @@ def make_position(
         mapped_old = new_to_old[new_line]
         if mapped_old is not None:
             old_line = mapped_old
+        side = "new"
     else:
         assert old_line is not None
         if old_line not in old_to_new:
@@ -213,6 +289,7 @@ def make_position(
         mapped_new = old_to_new[old_line]
         if mapped_new is not None:
             new_line = mapped_new
+        side = "old"
 
     refs = details.get("diff_refs") or {}
     required_refs = ("base_sha", "start_sha", "head_sha")
@@ -231,6 +308,7 @@ def make_position(
         position["old_line"] = old_line
     if new_line is not None:
         position["new_line"] = new_line
+    position["line_range"] = make_line_range(line_code, side, old_line, new_line)
     return position
 
 
@@ -258,7 +336,11 @@ def command_add(args: argparse.Namespace) -> None:
     side = "new" if args.new_line is not None else "old"
     change = find_change(changes, args.file, side)
     position = make_position(
-        details, change, new_line=args.new_line, old_line=args.old_line
+        details,
+        change,
+        new_line=args.new_line,
+        old_line=args.old_line,
+        line_code=args.line_code,
     )
     response = glab_api(
         mr,
@@ -266,6 +348,15 @@ def command_add(args: argparse.Namespace) -> None:
         method="POST",
         payload={"note": read_body(args.body_file), "position": position},
     )
+    try:
+        require_renderable_draft(response, position)
+    except ReviewError as error:
+        note_id = response.get("id") if isinstance(response, dict) else None
+        if isinstance(note_id, int):
+            cleanup_details = mr_details(mr)
+            require_head(cleanup_details, args.expected_head)
+            glab_api(mr, f"{mr.endpoint}/draft_notes/{note_id}", method="DELETE")
+        raise ReviewError(f"{error}; removed the unrenderable draft") from error
     print(json.dumps(response, indent=2))
 
 
@@ -278,6 +369,11 @@ def command_update(args: argparse.Namespace) -> None:
     position = existing.get("position") if isinstance(existing, dict) else None
     if not isinstance(position, dict) or not position.get("head_sha"):
         raise ReviewError("draft note has no usable diff position")
+    if not line_range_start_code(position):
+        raise ReviewError(
+            "draft note has no renderable inline line range. Delete and recreate it "
+            "on the current diff instead of updating it."
+        )
     if position["head_sha"] != details["sha"]:
         raise ReviewError(
             "draft note belongs to an older diff. Delete and recreate it on the current diff."
@@ -290,6 +386,7 @@ def command_update(args: argparse.Namespace) -> None:
         method="PUT",
         payload={"note": read_body(args.body_file), "position": position},
     )
+    require_renderable_draft(response, position)
     print(json.dumps(response, indent=2))
 
 
@@ -310,6 +407,7 @@ def command_verify(args: argparse.Namespace) -> None:
             or (draft.get("position") or {}).get("old_line")
         )
     )
+    renderable = sum(1 for draft in drafts if is_renderable_draft(draft))
     published_by_user = sum(
         1
         for note in notes
@@ -319,12 +417,15 @@ def command_verify(args: argparse.Namespace) -> None:
         "head_sha": details.get("sha"),
         "draft_count": len(drafts),
         "positioned_draft_count": positioned,
+        "renderable_draft_count": renderable,
         "published_by_current_user": published_by_user,
     }
 
     failures: list[str] = []
     if positioned != len(drafts):
         failures.append("one or more draft notes have no diff position")
+    if renderable != len(drafts):
+        failures.append("one or more draft notes will not render inline")
     if args.expected_head and result["head_sha"] != args.expected_head:
         failures.append(
             f"expected head {args.expected_head}, got {result['head_sha']}"
@@ -363,6 +464,11 @@ def build_parser() -> argparse.ArgumentParser:
     line_group = add_parser.add_mutually_exclusive_group(required=True)
     line_group.add_argument("--new-line", type=int)
     line_group.add_argument("--old-line", type=int)
+    add_parser.add_argument(
+        "--line-code",
+        required=True,
+        help="GitLab diff anchor from the rendered changed line",
+    )
     add_parser.add_argument("--body-file", required=True, help="Markdown file or - for stdin")
     add_parser.add_argument("--expected-head", required=True)
     add_parser.set_defaults(handler=command_add)

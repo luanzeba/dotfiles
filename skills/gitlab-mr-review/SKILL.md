@@ -26,9 +26,10 @@ Use `glab` for GitLab repository and merge request data. Use browser automation 
 6. Draft comments using `../evidence-based-responses/SKILL.md` and `../voice-and-tone/SKILL.md`. When `write_for_publication` is available, use it to polish each verified comment. If it is not available, revise each comment yourself.
 7. Re-fetch the MR head and current diff after drafting. If the hunk changed, remap the comment before posting it.
 8. Record the current head SHA and the current user's published-note count before mutating anything.
-9. Add or update draft notes with `scripts/draft-notes.py`.
-10. Verify the expected draft count, positioned comments, unchanged head SHA, and unchanged published-note count.
-11. Report what remains pending. Do not submit it.
+9. For each new inline draft, capture the target line's rendered GitLab diff anchor and add it with `scripts/draft-notes.py`. Update only drafts whose stored range passes verification.
+10. Verify the expected draft count, positioned comments with stored inline ranges, unchanged head SHA, and unchanged published-note count.
+11. When inline visibility matters, open the rendered diff at each captured anchor and confirm the draft text appears before reporting completion.
+12. Report what remains pending. Do not submit it.
 
 ## Inspect the MR
 
@@ -38,7 +39,7 @@ IID=123
 HOST='gitlab.example.com'
 
 glab api --hostname "$HOST" "projects/$PROJECT/merge_requests/$IID"
-glab api --hostname "$HOST" "projects/$PROJECT/merge_requests/$IID/changes"
+glab api --hostname "$HOST" "projects/$PROJECT/merge_requests/$IID/changes?access_raw_diffs=true"
 glab api --hostname "$HOST" "projects/$PROJECT/merge_requests/$IID/discussions?per_page=100"
 glab api --hostname "$HOST" "projects/$PROJECT/merge_requests/$IID/draft_notes?per_page=100"
 ```
@@ -63,11 +64,18 @@ Use separate temporary directories for base and head when the review needs full 
 
 The helper intentionally has no publish command.
 
+### Capture the rendered diff anchor
+
+GitLab's REST change payload does not always use the same line alignment as the rendered Changes view. Before creating an inline draft, use the GitLab UI to inspect the exact target line and copy its DOM `id`, which is a value such as `<file-hash>_108_115`. The target line's draft composer exposes the same value as `form[data-line-code]`; cancel the empty composer after reading it. Load the `web-browser` skill first when browser automation is needed.
+
+Pass that value as `--line-code`. The helper sends it in `position.line_range` and rejects a response that drops or changes that range. If a browser is unavailable, stop before creating the inline draft rather than guessing an anchor.
+
 Run these commands from the skill directory (or replace `./scripts/draft-notes.py` with its absolute path):
 
 ```bash
 MR_URL='https://gitlab.example.com/group/project/-/merge_requests/123'
 HEAD_SHA='<full current head SHA>'
+LINE_CODE='<rendered GitLab line id, for example: 0123...abcd_108_42>'
 
 # Capture the baseline before adding anything.
 ./scripts/draft-notes.py verify "$MR_URL" --json
@@ -76,6 +84,7 @@ HEAD_SHA='<full current head SHA>'
 ./scripts/draft-notes.py add "$MR_URL" \
   --file src/example.ts \
   --new-line 42 \
+  --line-code "$LINE_CODE" \
   --body-file /tmp/comment.md \
   --expected-head "$HEAD_SHA"
 
@@ -93,8 +102,8 @@ HEAD_SHA='<full current head SHA>'
 
 Use the published-note count from the initial `verify` call as the final expected value. It may already be nonzero on MRs where the reviewer previously commented.
 
-GitLab may hide pending comments under **Your review → drafts** instead of rendering them inline immediately. Use the API or helper output as the source of truth.
+A draft count alone does not prove an inline note is visible. `verify` reports `renderable_draft_count`, which validates the stored range. When visibility matters, also check the rendered Changes view at the captured anchor. If either check fails, do not publish or recreate blindly. Re-read the current diff and capture its current line anchor.
 
 ## Raw API fallback
 
-Read `references/gitlab-api.md` before creating or updating draft notes manually. In particular, GitLab clears diff-position fields when an update omits the existing `position` object.
+Read `references/gitlab-api.md` before creating or updating draft notes manually. In particular, preserve the existing `position` and `line_range`, because GitLab can clear either when an update omits them.
