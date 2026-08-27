@@ -9,6 +9,15 @@ When browsing GitHub content (issues, PRs, repos, files, comments):
 - For file contents: `gh api repos/{owner}/{repo}/contents/{path}` or `gh browse` for reference
 - For issue/PR comments and details: `gh issue view <number> -R <repo> --comments`
 
+## Linear: Always Use `linear` CLI
+
+When reading or modifying Linear content:
+
+- **Always use `linear`** (`~/dotfiles/bin/linear`) instead of browser automation.
+- Run `linear --help` for available commands and options.
+- Use browser automation only when the CLI cannot perform the required operation.
+- For recurring unsupported operations, extend the CLI instead of relying on browser automation.
+
 ## Bash: Servers and Long-Running Processes
 
 When starting servers, watchers, or any long-running process:
