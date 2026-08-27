@@ -13,6 +13,7 @@ Verify the concern first, then explain it in language the author can act on. Evi
 2. Verify each technical claim with code, documentation, a focused experiment, or test output.
 3. Draft one comment per main concern.
 4. Run a clarity pass: remove unexplained jargon, state the current problem first, and include the expected code shape when asking for a change.
+5. When `review_comment_check` is available, check the final inline candidate before creating or updating it on the review platform. Pass only the exact visible diff hunk and comment, never research notes or an evidence summary.
 
 ## Writing an actionable review comment
 
@@ -38,12 +39,16 @@ Say when a sample is approximate. Do not present pseudocode as a drop-in replace
 - Concise means no filler, not minimal explanation. Write enough that the author should not need to ask what the comment means.
 - Start with the concrete behavior or code. Do not lead with labels such as “semantic,” “tone,” “shared API,” or “second cue.”
 - If a technical term helps, explain the concrete idea first and name the term afterward if it is still useful.
+- When a comment depends on a distant component, route, API, or contract, state its relationship to this hunk. Do not assume the author followed the investigation that found it.
 - Make suggestions specific. “Add another cue” is unclear; “keep the colors and use an exclamation mark inside Faulted pins” is actionable.
 - Prefer one recommended path over several vague alternatives. Mention alternatives only when the choice genuinely depends on information the reviewer does not have.
 - Explain what is wrong now. Do not make hypothetical future work the main reason for changing the current code.
 - Keep one main concern per comment. Split unrelated accessibility, correctness, and maintainability issues.
 - Avoid drive-by comments such as “this is wrong,” “nit,” or “could be cleaner” without explaining why and what better looks like.
 - If uncertain, ask a focused question rather than turning an assumption into a finding.
+- Do not narrate the investigation (for example, “I dug into…”). Keep the needed causal link in the comment itself, and use a direct source link when it helps the author evaluate that link.
+
+`review_comment_check` is a cold-reader check, not technical verification. It may follow Markdown links already in the comment, but it must receive no context the author cannot see. Revise or discard a comment when it returns `clear: false`.
 
 See [references/review-comment-examples.md](references/review-comment-examples.md) for before-and-after examples.
 

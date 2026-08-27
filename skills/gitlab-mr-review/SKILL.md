@@ -23,11 +23,13 @@ Use `glab` for GitLab repository and merge request data. Use browser automation 
 3. Fetch MR metadata, `diff_refs`, changed files, discussions, existing draft notes, and pipeline status.
 4. Read repository instructions, the complete changed files, relevant callers, and tests. Do not review from the patch alone.
 5. Check whether the same behavior appears in alternate components or code paths.
-6. Draft comments using the review guidance in `../evidence-based-responses/SKILL.md` and the voice guidance in `../voice-and-tone/SKILL.md`.
-7. Record the current head SHA and the current user's published-note count before mutating anything.
-8. Add or update draft notes with `scripts/draft-notes.py`.
-9. Verify the expected draft count, positioned comments, unchanged head SHA, and unchanged published-note count.
-10. Report what remains pending. Do not submit it.
+6. Draft comments using `../evidence-based-responses/SKILL.md` and `../voice-and-tone/SKILL.md`. Use voice for casual, direct prose; evidence rules still require a self-contained explanation instead of investigation narration.
+7. When `review_comment_check` is available, capture the exact visible hunk for each inline candidate and check it using only that hunk and the final Markdown comment. Do not pass research notes, evidence summaries, or other hidden context. Revise or discard a candidate when it returns `clear: false`.
+8. Re-fetch the MR head and current diff after the final check. If the hunk changed, remap it and run the check again.
+9. Record the current head SHA and the current user's published-note count before mutating anything.
+10. Add or update draft notes with `scripts/draft-notes.py`.
+11. Verify the expected draft count, positioned comments, unchanged head SHA, and unchanged published-note count.
+12. Report what remains pending. Do not submit it.
 
 ## Inspect the MR
 
