@@ -15,8 +15,19 @@ check_installed() {
 }
 
 check_configured() {
-    # Check if dotfiles script is accessible in ~/.local/bin
-    [[ -x "$LOCAL_BIN/dotfiles" ]]
+    # Check if dotfiles scripts are accessible in ~/.local/bin
+    [[ -x "$LOCAL_BIN/dotfiles" && -x "$LOCAL_BIN/jwt-decode" ]]
+}
+
+build_jwt_decode() {
+    local target_dir="${XDG_CACHE_HOME:-$HOME/.cache}/dotfiles/jwt-decode"
+    export PATH="$HOME/.nix-profile/bin:$PATH"
+
+    CARGO_TARGET_DIR="$target_dir" cargo build --quiet --release --locked \
+        --manifest-path "$SCRIPT_DIR/jwt-decode/Cargo.toml"
+    rm -f "$LOCAL_BIN/jwt-decode"
+    cp "$target_dir/release/jwt-decode" "$LOCAL_BIN/jwt-decode"
+    chmod 755 "$LOCAL_BIN/jwt-decode"
 }
 
 configure() {
@@ -43,12 +54,15 @@ configure() {
 
     # Symlink each script individually to ~/.local/bin
     for script in "$SCRIPT_DIR"/*; do
+        [[ -f "$script" || -L "$script" ]] || continue
         local name
         name=$(basename "$script")
         # Skip the installer and native source files.
         [[ "$name" == "install" || "$name" == *.swift ]] && continue
         ln -sf "$script" "$LOCAL_BIN/$name"
     done
+
+    build_jwt_decode
 }
 
 apply() {
