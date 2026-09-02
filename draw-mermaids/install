@@ -1,0 +1,92 @@
+#!/bin/bash
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+DOTFILES_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+# shellcheck disable=SC1091
+source "$DOTFILES_DIR/lib/common.sh"
+
+REPOSITORY="luanzeba/draw-mermaids"
+INSTALL_DIR="$HOME/.local/draw-mermaids"
+CLI="$INSTALL_DIR/cli.js"
+BIN="$HOME/.local/bin/draw-mermaids"
+
+check_installed() {
+    bootstrap_node_tooling_path >/dev/null 2>&1 || true
+    [[ -x "$CLI" && -f "$INSTALL_DIR/.installed-commit" ]]
+}
+
+check_configured() {
+    [[ -L "$BIN" && "$(readlink "$BIN")" == "$CLI" ]]
+}
+
+latest_commit() {
+    gh api "repos/$REPOSITORY/commits/main" --jq .sha
+}
+
+install() {
+    if ! ensure_npm; then
+        echo "npm not found. Install Node.js first with node/install."
+        return 1
+    fi
+    if ! command -v gh >/dev/null || ! gh auth status >/dev/null 2>&1; then
+        echo "Authenticated GitHub CLI access is required to install the private $REPOSITORY repository."
+        return 1
+    fi
+
+    local commit installed
+    commit="$(latest_commit)"
+    installed="$(cat "$INSTALL_DIR/.installed-commit" 2>/dev/null || true)"
+    if [[ -x "$CLI" && "$installed" == "$commit" ]]; then
+        echo "draw-mermaids already installed at $commit"
+        return 0
+    fi
+
+    echo "Installing draw-mermaids from $REPOSITORY..."
+    mkdir -p "$HOME/.local"
+    local archive stage backup
+    archive="$(mktemp)"
+    stage="$(mktemp -d "$HOME/.local/.draw-mermaids.XXXXXX")"
+    backup="$HOME/.local/.draw-mermaids.previous"
+
+    if ! gh api "repos/$REPOSITORY/tarball/$commit" > "$archive" \
+        || ! tar -xzf "$archive" -C "$stage" --strip-components=1 \
+        || ! npm ci --omit=dev --prefix "$stage"; then
+        rm -f "$archive"
+        rm -rf "$stage"
+        return 1
+    fi
+    rm -f "$archive"
+    printf '%s\n' "$commit" > "$stage/.installed-commit"
+
+    rm -rf "$backup"
+    [[ ! -e "$INSTALL_DIR" ]] || mv "$INSTALL_DIR" "$backup"
+    if mv "$stage" "$INSTALL_DIR"; then
+        rm -rf "$backup"
+    else
+        [[ ! -e "$backup" ]] || mv "$backup" "$INSTALL_DIR"
+        return 1
+    fi
+}
+
+configure() {
+    [[ -x "$CLI" ]] || { echo "draw-mermaids is not installed."; return 1; }
+    mkdir -p "$HOME/.local/bin"
+    ln -sfn "$CLI" "$BIN"
+    echo "Linked: $BIN -> $CLI"
+}
+
+apply() {
+    check_installed || install
+    configure
+}
+
+update() {
+    install
+    configure
+}
+
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    install
+    configure
+fi
