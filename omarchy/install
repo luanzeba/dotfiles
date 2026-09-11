@@ -1,0 +1,40 @@
+#!/bin/bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+TARGET="${XDG_CONFIG_HOME:-$HOME/.config}/hypr/bindings.lua"
+
+# shellcheck disable=SC1091
+source "$SCRIPT_DIR/../lib/common.sh"
+
+supported_platform() {
+    command -v omarchy &>/dev/null
+}
+
+check_installed() {
+    supported_platform || return 0
+}
+
+check_configured() {
+    supported_platform || return 0
+    [[ -L "$TARGET" ]] && [[ "$(readlink -f "$TARGET")" == "$SCRIPT_DIR/bindings.lua" ]]
+}
+
+install() {
+    :
+}
+
+configure() {
+    supported_platform || return 0
+
+    mkdir -p "$(dirname "$TARGET")"
+    if [[ -e "$TARGET" && ! -L "$TARGET" ]]; then
+        mv "$TARGET" "$TARGET.backup.$(date +%s)"
+    fi
+    ln -sfn "$SCRIPT_DIR/bindings.lua" "$TARGET"
+}
+
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    install
+    configure
+fi
