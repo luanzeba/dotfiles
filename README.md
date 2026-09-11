@@ -50,7 +50,7 @@ It is configured with:
 
 ## Nix adoption (Phase 1)
 
-Base utilities, Node, Go, Rust, Ruby, Neovim, Helix, jj, gh, glab, AWS CLI, Git, 1Password CLI, Zig, bat, Vicinae, and Handy are managed by the dotfiles Nix flake (`nix/flake.nix`) as separate installables. Google Chrome uses Nix on x86_64 Linux and Homebrew on macOS:
+Base utilities, Node, Go, Rust, Ruby, Neovim, Helix, jj, gh, glab, AWS CLI, Git, 1Password CLI, Zig, bat, and Handy are managed by the dotfiles Nix flake (`nix/flake.nix`) as separate installables. Google Chrome uses Nix on x86_64 Linux and Homebrew on macOS:
 
 - `base/install` → `path:~/dotfiles/nix#base`
   - `fzf` (required by fzf-lua; installed through Nix because distro packages can lag behind)
@@ -95,10 +95,6 @@ Base utilities, Node, Go, Rust, Ruby, Neovim, Helix, jj, gh, glab, AWS CLI, Git,
   - `zig` (from `mitchellh/zig-overlay` `master`, for Ziglings/dev builds), `zls`
 - `bat/install` → `path:~/dotfiles/nix#bat`
   - `bat` (used by fzf-lua previews)
-- `vicinae/install` → `path:~/dotfiles/nix#vicinae` (Arch desktop only)
-  - Vicinae from its upstream flake, plus the community Omarchy Menu and PulseAudio extensions
-  - stable imported settings, mutable GUI settings, personal script commands, and a user service
-  - clipboard-history paste needs the one-time privileged setup documented in `vicinae/README.md`
 - `handy/install` → `path:~/dotfiles/nix#handy` (Arch + Hyprland only)
   - Handy from its upstream flake, wrapped with NixGL and `wtype` for direct Wayland text input
   - an autostart user service and Omarchy's existing dictation bindings; initial model selection is manual

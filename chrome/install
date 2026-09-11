@@ -86,7 +86,6 @@ configure_desktop_entry() {
 
     ln -sfn "$NIX_CHROME_DESKTOP_ENTRY" "$LOCAL_CHROME_DESKTOP_ENTRY"
     command -v update-desktop-database &>/dev/null && update-desktop-database "$LOCAL_APPLICATIONS_DIR"
-    systemctl --user try-restart vicinae.service 2>/dev/null || true
 }
 
 remove_quarantine() {

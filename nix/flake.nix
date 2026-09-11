@@ -1,21 +1,16 @@
 {
-  description = "luan's dotfiles toolchain (nix profile: base + node + go + rust + ruby + nvim + helix + jj + gh + glab + aws + git + chrome + 1password + zig + bat + vicinae + handy tooling)";
+  description = "luan's dotfiles toolchain (nix profile: base + node + go + rust + ruby + nvim + helix + jj + gh + glab + aws + git + chrome + 1password + zig + bat + handy tooling)";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
     flake-utils.url = "github:numtide/flake-utils";
     zig.url = "github:mitchellh/zig-overlay";
     zls.url = "github:zigtools/zls";
-    vicinae.url = "github:vicinaehq/vicinae";
     handy.url = "github:cjpais/Handy";
     nixgl.url = "github:nix-community/nixGL";
-    vicinaeExtensions = {
-      url = "github:vicinaehq/extensions";
-      inputs.vicinae.follows = "vicinae";
-    };
   };
 
-  outputs = { nixpkgs, flake-utils, zig, zls, vicinae, handy, nixgl, vicinaeExtensions, ... }:
+  outputs = { nixpkgs, flake-utils, zig, zls, handy, nixgl, ... }:
     flake-utils.lib.eachDefaultSystem (system:
       let
         pkgs = nixpkgs.legacyPackages.${system};
@@ -154,27 +149,6 @@
           ];
         };
 
-        vicinaeExtensionBundle = pkgs.runCommand "dotfiles-vicinae-extensions" {} ''
-          mkdir -p "$out/share/vicinae/extensions"
-          ln -s ${vicinaeExtensions.packages.${system}."omarchy-menu"} \
-            "$out/share/vicinae/extensions/omarchy-menu"
-          ln -s ${vicinaeExtensions.packages.${system}.pulseaudio} \
-            "$out/share/vicinae/extensions/pulseaudio"
-        '';
-
-        vicinaeToolchain = pkgs.symlinkJoin {
-          name = "dotfiles-vicinae";
-          paths = [
-            vicinae.packages.${system}.default
-            vicinaeExtensionBundle
-          ];
-          nativeBuildInputs = [ pkgs.makeWrapper ];
-          postBuild = ''
-            wrapProgram "$out/bin/vicinae" \
-              --prefix XDG_DATA_DIRS : "$out/share"
-          '';
-        };
-
         handyToolchain = pkgs.runCommand "dotfiles-handy" {
           nativeBuildInputs = [ pkgs.makeWrapper ];
         } ''
@@ -229,8 +203,7 @@
               commandLineArgs = "--ozone-platform-hint=auto --enable-features=WaylandWindowDecorations --enable-wayland-ime=true";
             };
         } // pkgs.lib.optionalAttrs pkgs.stdenv.hostPlatform.isLinux {
-          # Vicinae and Handy are Linux desktop applications.
-          vicinae = vicinaeToolchain;
+          # Handy is a Linux desktop application.
           handy = handyToolchain;
         };
       });

@@ -22,7 +22,6 @@
 #   nix_profile_sync_onepassword - install/upgrade dotfiles flake #1password package
 #   nix_profile_sync_zig         - install/upgrade dotfiles flake #zig package
 #   nix_profile_sync_bat         - install/upgrade dotfiles flake #bat package
-#   nix_profile_sync_vicinae     - install/upgrade dotfiles flake #vicinae package
 #   nix_profile_sync_handy       - install/upgrade dotfiles flake #handy package
 #
 
@@ -59,7 +58,6 @@ NIX_CHROME_PROFILE_NAME="chrome"
 NIX_ONEPASSWORD_PROFILE_NAME="1password"
 NIX_ZIG_PROFILE_NAME="zig"
 NIX_BAT_PROFILE_NAME="bat"
-NIX_VICINAE_PROFILE_NAME="vicinae"
 NIX_HANDY_PROFILE_NAME="handy"
 
 # Installables exported by nix/flake.nix.
@@ -80,7 +78,6 @@ NIX_PROFILE_CHROME_INSTALLABLE="path:$NIX_FLAKE_DIR#chrome"
 NIX_PROFILE_ONEPASSWORD_INSTALLABLE="path:$NIX_FLAKE_DIR#1password"
 NIX_PROFILE_ZIG_INSTALLABLE="path:$NIX_FLAKE_DIR#zig"
 NIX_PROFILE_BAT_INSTALLABLE="path:$NIX_FLAKE_DIR#bat"
-NIX_PROFILE_VICINAE_INSTALLABLE="path:$NIX_FLAKE_DIR#vicinae"
 NIX_PROFILE_HANDY_INSTALLABLE="path:$NIX_FLAKE_DIR#handy"
 
 # Source nix into PATH for the current shell, if installed.
@@ -299,10 +296,6 @@ nix_profile_sync_zig() {
 
 nix_profile_sync_bat() {
     nix_profile_sync_installable "$NIX_BAT_PROFILE_NAME" "$NIX_PROFILE_BAT_INSTALLABLE"
-}
-
-nix_profile_sync_vicinae() {
-    nix_profile_sync_installable "$NIX_VICINAE_PROFILE_NAME" "$NIX_PROFILE_VICINAE_INSTALLABLE"
 }
 
 nix_profile_sync_handy() {

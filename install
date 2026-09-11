@@ -91,7 +91,6 @@ run_step "chrome/install" bash "$SCRIPT_DIR/chrome/install"
 run_step "chrome-router" bash "$SCRIPT_DIR/bin/chrome-router-build"
 run_step "1password/install" bash "$SCRIPT_DIR/1password/install"
 run_step "tailscale/install" bash "$SCRIPT_DIR/tailscale/install"
-run_step "vicinae/install" bash "$SCRIPT_DIR/vicinae/install"
 run_step "handy/install" bash "$SCRIPT_DIR/handy/install"
 run_step "caps2ctrl/install" bash "$SCRIPT_DIR/caps2ctrl/install"
 

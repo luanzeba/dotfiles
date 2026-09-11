@@ -14,6 +14,6 @@ writes to the previously focused Wayland window without changing the clipboard.
 
 The installer starts Handy hidden at login and replaces Omarchy's optional
 Voxtype commands at those existing dictation bindings. On first use, open
-Handy from Vicinae or run `handy`, then choose and download a speech model.
+Handy from your launcher or run `handy`, then choose and download a speech model.
 Keep Handy's paste method as **Direct** and typing tool as **Auto** (it finds
 bundled `wtype`).
