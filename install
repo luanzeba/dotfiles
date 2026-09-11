@@ -9,24 +9,24 @@ exec 2>&1
 
 FAILED_STEPS=()
 
-# Helper to run a step and track failures with persistent error logging
+# Run a step while streaming its output, retaining failures for error logging.
 run_step() {
     local name="$1"
     shift
-    local output
-    local exit_code
+    local output output_file exit_code
 
-    output=$("$@" 2>&1)
-    exit_code=$?
+    output_file=$(mktemp)
+    "$@" 2>&1 | tee "$output_file"
+    exit_code=${PIPESTATUS[0]}
 
     if [[ $exit_code -ne 0 ]]; then
+        output=$(<"$output_file")
         FAILED_STEPS+=("$name")
         log_error_persistent "install" "$name" "$exit_code" "$output"
         echo "⚠️  $name failed, continuing..."
-        echo "$output"
-    else
-        [[ -n "$output" ]] && echo "$output"
     fi
+
+    rm -f "$output_file"
 }
 
 # Bootstrap Homebrew on macOS (only when needed for brew-dependent tools)
