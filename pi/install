@@ -22,6 +22,39 @@ check_configured() {
     [[ -L "$PI_CONFIG_DIR/AGENTS.md" ]]
 }
 
+# Link every *.ts file and every directory containing index.ts. pi discovers both
+# shapes; directories are used when an extension spans several modules.
+link_extensions() {
+    local source_dir="$1" target_dir="$2"
+    mkdir -p "$target_dir"
+
+    # Drop symlinks we created earlier whose source no longer exists.
+    for linked in "$target_dir"/*; do
+        [[ -L "$linked" ]] || continue
+        local target
+        target="$(readlink "$linked")"
+        if [[ "$target" == "$source_dir/"* && ! -e "$target" ]]; then
+            rm -f "$linked"
+            echo "Removed stale extension: $linked"
+        fi
+    done
+
+    for ext in "$source_dir"/*; do
+        local name
+        name="$(basename "$ext")"
+        if [[ -f "$ext" && "$name" == *.ts ]]; then
+            :
+        elif [[ -d "$ext" && -f "$ext/index.ts" ]]; then
+            :
+        else
+            continue
+        fi
+        rm -rf "$target_dir/$name"
+        ln -s "$ext" "$target_dir/$name"
+        echo "Linked extension: $target_dir/$name"
+    done
+}
+
 pi_package_installed() {
     npm ls -g --depth=0 "$PI_NPM_PACKAGE" >/dev/null 2>&1
 }
@@ -63,26 +96,19 @@ configure() {
 
     # Symlink extensions
     if [[ -d "$SCRIPT_DIR/extensions" ]]; then
-        mkdir -p "$PI_CONFIG_DIR/extensions"
+        link_extensions "$SCRIPT_DIR/extensions" "$PI_CONFIG_DIR/extensions"
+    fi
 
-        # Remove stale symlinks to extensions managed by this dotfiles directory.
-        for linked_ext in "$PI_CONFIG_DIR/extensions"/*.ts; do
-            [[ -L "$linked_ext" ]] || continue
-            local target
-            target="$(readlink "$linked_ext")"
-            if [[ "$target" == "$SCRIPT_DIR/extensions/"* && ! -e "$target" ]]; then
-                rm -f "$linked_ext"
-                echo "Removed stale extension: $linked_ext"
-            fi
-        done
-
-        for ext in "$SCRIPT_DIR/extensions"/*.ts; do
-            [[ -f "$ext" ]] || continue
-            local name
-            name="$(basename "$ext")"
-            rm -f "$PI_CONFIG_DIR/extensions/$name"
-            ln -s "$ext" "$PI_CONFIG_DIR/extensions/$name"
-            echo "Linked extension: $PI_CONFIG_DIR/extensions/$name"
+    # Symlink agent definitions (subagent system prompts, e.g. the /review reviewer)
+    if [[ -d "$SCRIPT_DIR/agents" ]]; then
+        mkdir -p "$PI_CONFIG_DIR/agents"
+        for agent in "$SCRIPT_DIR/agents"/*.md; do
+            [[ -f "$agent" ]] || continue
+            local agent_name
+            agent_name="$(basename "$agent")"
+            rm -f "$PI_CONFIG_DIR/agents/$agent_name"
+            ln -s "$agent" "$PI_CONFIG_DIR/agents/$agent_name"
+            echo "Linked agent: $PI_CONFIG_DIR/agents/$agent_name"
         done
     fi
 }
