@@ -56,7 +56,7 @@ Base utilities, Node, Go, Rust, Ruby, Neovim, Helix, jj, gh, glab, AWS CLI, Git,
   - `fzf` (required by fzf-lua; installed through Nix because distro packages can lag behind)
   - `fd`, `ffmpeg`, `jq`, `eza`, `ripgrep` (`rg`), `openssh` (`ssh`, `ssh-keygen`), `tmux`, `poppler-utils` (`pdftotext`)
 - `node/install` → `path:~/dotfiles/nix#node`
-  - `nodejs_22`, Corepack-managed `pnpm`/`pnpx`, `typescript` (`tsc`), `typescript-language-server`, `prettier`, `tree-sitter`
+  - `nodejs_latest`, Corepack-managed `pnpm`/`pnpx`, `typescript` (`tsc`), `typescript-language-server`, `prettier`, `tree-sitter`
 - `go/install` → `path:~/dotfiles/nix#go`
   - `go`, `gopls`, `gofumpt`, `goimports-reviser`
 - `rust/install` → `path:~/dotfiles/nix#rust`
@@ -108,6 +108,8 @@ Base utilities, Node, Go, Rust, Ruby, Neovim, Helix, jj, gh, glab, AWS CLI, Git,
 
 Base utilities are exposed through `dot install base` and are also installed by the platform installers. Tool-specific install scripts stay scoped to that tool while still using one flake source; for example, `tmux/install` ensures the Nix base profile exists and then manages `~/.tmux.conf`.
 
+Node intentionally uses `nodejs_latest`. `dot update node` refreshes only Node's `nixpkgs` evaluation and leaves `nix/flake.lock` unchanged; the other Nix toolchains remain pinned.
+
 `hunk` still installs via `npm install -g hunkdiff` because `hunkdiff` is not in nixpkgs.
 For `dot install hunk`, if the full `node` toolchain is not installed, dotfiles syncs a minimal `nodeRuntime` Nix package (node+npm only) first.
 npm globals are pinned to `~/.local` (binaries in `~/.local/bin`).
@@ -124,7 +126,7 @@ After installation, use the `dotfiles` (or `dot`) command:
 | `dot install <tool>` | Install specific tool(s), e.g. `dot install base` |
 | `dot install aws` | Install AWS CLI v2 and link private SSO profiles |
 | `dot install -f <tool>` | Force reinstall (skip install check) |
-| `dot update` | Update tools (brew, nvim plugins, etc.) |
+| `dot update [tool...]` | Update all tools, or only named tool(s) |
 | `dot logs` | View recent errors |
 | `dot edit` | Open in editor |
 
