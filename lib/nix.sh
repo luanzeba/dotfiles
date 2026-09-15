@@ -39,6 +39,7 @@ fi
 
 NIX_FLAKE_DIR="$DOTFILES_ROOT/nix"
 NIX_EXPERIMENTAL_FEATURES="nix-command flakes"
+NIX_NODE_NIXPKGS_URL="github:NixOS/nixpkgs/nixpkgs-unstable"
 
 # Nix profile entry names used by dotfiles scripts.
 NIX_PROFILE_NAME="nix"
@@ -190,37 +191,44 @@ nix_profile_has_entry() {
 _nix_profile_add_installable() {
     local entry_name="$1"
     local installable="$2"
+    shift 2
 
-    local add_args=()
+    local add_priority=false
     if [[ "$entry_name" != "$NIX_PROFILE_NAME" ]] && nix_profile_has_entry "$NIX_PROFILE_NAME"; then
         # Allow per-tool entries to coexist with a legacy catch-all `nix` entry.
-        add_args+=(--priority 6)
+        add_priority=true
     fi
 
     if [[ "$entry_name" == "$NIX_NODE_RUNTIME_PROFILE_NAME" ]]; then
         # Runtime fallback for hunk should never shadow full node toolchains.
-        add_args+=(--priority 6)
+        add_priority=true
     fi
 
-    nix --extra-experimental-features "$NIX_EXPERIMENTAL_FEATURES" \
-        profile add "${add_args[@]}" "$installable"
+    if [[ "$add_priority" == true ]]; then
+        nix --extra-experimental-features "$NIX_EXPERIMENTAL_FEATURES" \
+            profile add --priority 6 "$@" "$installable"
+    else
+        nix --extra-experimental-features "$NIX_EXPERIMENTAL_FEATURES" \
+            profile add "$@" "$installable"
+    fi
 }
 
 # Generic helper to sync a specific profile entry.
-# Usage: nix_profile_sync_installable <entry_name> <installable>
+# Usage: nix_profile_sync_installable <entry_name> <installable> [nix options...]
 nix_profile_sync_installable() {
     local entry_name="$1"
     local installable="$2"
+    shift 2
 
     ensure_nix || return 1
 
     if nix_profile_has_entry "$entry_name"; then
         log_info "Upgrading nix profile entry '$entry_name'..."
         nix --extra-experimental-features "$NIX_EXPERIMENTAL_FEATURES" \
-            profile upgrade "$entry_name" 2>&1 || true
+            profile upgrade "$@" "$entry_name" 2>&1 || return 1
     else
         log_info "Installing nix profile entry '$entry_name' from $installable..."
-        _nix_profile_add_installable "$entry_name" "$installable" || return 1
+        _nix_profile_add_installable "$entry_name" "$installable" "$@" || return 1
     fi
 }
 
@@ -228,12 +236,16 @@ nix_profile_sync_base() {
     nix_profile_sync_installable "$NIX_BASE_PROFILE_NAME" "$NIX_PROFILE_BASE_INSTALLABLE"
 }
 
+# Node intentionally floats without changing the repository's flake.lock.
+# --override-input implies --no-write-lock-file.
 nix_profile_sync_node() {
-    nix_profile_sync_installable "$NIX_NODE_PROFILE_NAME" "$NIX_PROFILE_NODE_INSTALLABLE"
+    nix_profile_sync_installable "$NIX_NODE_PROFILE_NAME" "$NIX_PROFILE_NODE_INSTALLABLE" \
+        --refresh --override-input nixpkgs "$NIX_NODE_NIXPKGS_URL"
 }
 
 nix_profile_sync_node_runtime() {
-    nix_profile_sync_installable "$NIX_NODE_RUNTIME_PROFILE_NAME" "$NIX_PROFILE_NODE_RUNTIME_INSTALLABLE"
+    nix_profile_sync_installable "$NIX_NODE_RUNTIME_PROFILE_NAME" "$NIX_PROFILE_NODE_RUNTIME_INSTALLABLE" \
+        --refresh --override-input nixpkgs "$NIX_NODE_NIXPKGS_URL"
 }
 
 nix_profile_sync_go() {

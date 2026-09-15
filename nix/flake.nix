@@ -29,7 +29,9 @@
         };
       in
       let
-        nodeRuntime = pkgs.nodejs_22;
+        # The Node profile refreshes nixpkgs when it syncs, so follow the
+        # current stable release instead of pinning a major line.
+        nodeRuntime = pkgs.nodejs_latest;
 
         baseTools = pkgs.buildEnv {
           name = "dotfiles-base-tools";
@@ -55,6 +57,8 @@
           paths = with pkgs; [
             # Node runtime (replaces fnm + manual LTS install)
             nodeRuntime
+            # Node 25+ no longer bundles Corepack.
+            corepack
 
             # Node-based dev tools (replace `npm install -g ...`)
             typescript                              # tsc
@@ -239,7 +243,7 @@
             in unfreePkgs.google-chrome.override {
               commandLineArgs = "--ozone-platform-hint=auto --enable-features=WaylandWindowDecorations --enable-wayland-ime=true";
             };
-        } // pkgs.lib.optionalAttrs pkgs.stdenv.isLinux {
+        } // pkgs.lib.optionalAttrs pkgs.stdenv.hostPlatform.isLinux {
           # Vicinae and Handy are Linux desktop applications.
           vicinae = vicinaeToolchain;
           handy = handyToolchain;
