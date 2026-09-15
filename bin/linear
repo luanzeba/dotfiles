@@ -12,7 +12,7 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 
-const VERSION = "0.3.0";
+const VERSION = "0.4.0";
 const CDP_PORT = Number(process.env.LINEAR_CHROME_CDP_PORT || 9222);
 const CDP_URL = `http://127.0.0.1:${CDP_PORT}`;
 const LINEAR_URL = "https://linear.app";
@@ -74,6 +74,8 @@ Create options:
   --state <name>                         Workflow state name
   --state-id <id>                        Workflow state ID
   --assignee-id <id>                     Assignee user ID
+  --estimate <points>                    Story-point estimate
+  --label-id <id[,id]>                   Issue label ID (repeatable)
   --parent <issue-or-url>                Parent issue
 
 Update options:
@@ -85,7 +87,10 @@ Update options:
   --state <name>
   --state-id <id>
   --assignee-id <id|none>
+  --estimate <points>                    Story-point estimate
+  --label-id <id[,id]>                   Issue label ID (repeatable)
   --project-id <id|none>
+  --cycle-id <id|none>
   --parent <issue-or-url|none>
 
 Relation add options:
@@ -136,6 +141,32 @@ function requiredOption(args, name) {
   const value = option(args, name);
   if (!value) fail(`Missing required option: ${name}`);
   return value;
+}
+
+function options(args, name) {
+  const values = [];
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index];
+    if (arg.startsWith(`${name}=`)) {
+      values.push(arg.slice(name.length + 1));
+      continue;
+    }
+    if (arg !== name) continue;
+
+    const value = args[index + 1];
+    if (value === undefined || value.startsWith("--")) fail(`${name} requires a value.`);
+    values.push(value);
+    index += 1;
+  }
+  return values;
+}
+
+function idOptions(args, name) {
+  const ids = options(args, name)
+    .flatMap((value) => value.split(","))
+    .map((value) => value.trim())
+    .filter(Boolean);
+  return ids.length > 0 ? ids : undefined;
 }
 
 function issueReference(value) {
@@ -509,20 +540,26 @@ function issueInput(args, { create = false } = {}) {
   const title = option(args, "--title");
   const description = readInput(args, "--description", "--description-file");
   const priority = integerOption(args, "--priority", { min: 0, max: 4 });
+  const estimate = integerOption(args, "--estimate", { min: 0, max: 100 });
+  const labelIds = idOptions(args, "--label-id");
   const stateId = option(args, "--state-id");
   const assigneeId = option(args, "--assignee-id");
 
   if (title !== undefined) input.title = title;
   if (description !== undefined) input.description = description;
   if (priority !== undefined) input.priority = priority;
+  if (estimate !== undefined) input.estimate = estimate;
+  if (labelIds !== undefined) input.labelIds = labelIds;
   if (stateId !== undefined) input.stateId = stateId;
   if (assigneeId !== undefined) input.assigneeId = assigneeId === "none" ? null : assigneeId;
 
   if (!create) {
     const dueDate = option(args, "--due-date");
     const projectId = option(args, "--project-id");
+    const cycleId = option(args, "--cycle-id");
     if (dueDate !== undefined) input.dueDate = dueDate === "none" ? null : dueDate;
     if (projectId !== undefined) input.projectId = projectId === "none" ? null : projectId;
+    if (cycleId !== undefined) input.cycleId = cycleId === "none" ? null : cycleId;
   }
   return input;
 }
