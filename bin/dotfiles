@@ -11,7 +11,7 @@
 #   edit              Open dotfiles in editor
 #   install           Run main install script
 #   install <tools>   Install specific tool(s)
-#   update            Update installed tools (brew, nvim plugins, etc.)
+#   update [tools]    Update all tools or specific tool(s)
 #
 
 set -e
@@ -416,66 +416,112 @@ cmd_pull() {
 }
 
 cmd_update() {
-    [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]] && { show_update_help; return 0; }
-    
+    local tools=()
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            -h|--help) show_update_help; return 0 ;;
+            -*) log_error "Unknown option: $1"; show_update_help; return 1 ;;
+            *) tools+=("$1"); shift ;;
+        esac
+    done
+
+    local dir
+    dir="$(dotfiles_dir)"
+    local update_all=false
+    [[ ${#tools[@]} -eq 0 ]] && update_all=true
+
+    local tool_dirs=()
+    local unknown_tools=()
+    if [[ "$update_all" == true ]]; then
+        tool_dirs=("$dir"/*/)
+    else
+        local tool
+        for tool in "${tools[@]}"; do
+            if [[ -n "$(get_install_script "$dir/$tool")" ]]; then
+                tool_dirs+=("$dir/$tool")
+            else
+                unknown_tools+=("$tool")
+            fi
+        done
+
+        if [[ ${#unknown_tools[@]} -gt 0 ]]; then
+            log_error "Unknown tool(s): ${unknown_tools[*]}"
+            echo ""
+            echo "Available tools:"
+            get_available_tools | while read -r tool; do
+                echo "  - $tool"
+            done
+            return 1
+        fi
+    fi
+
     log_info "Updating tools..."
     local failed_tools=()
-    
-    # Homebrew (macOS only)
-    if is_macos && command -v brew &>/dev/null; then
+    local unsupported_tools=()
+    local output
+
+    # Homebrew is part of the all-tools update, not a named tool.
+    if [[ "$update_all" == true ]] && is_macos && command -v brew &>/dev/null; then
         log_info "Updating Homebrew..."
-        local output
         output=$(brew update && brew upgrade 2>&1) || {
             log_error_persistent "update" "homebrew" "$?" "$output"
             log_warn "Homebrew update failed"
         }
     fi
 
-    
-    # Call update() for each tool that has it
-    local dir
-    dir="$(dotfiles_dir)"
-    
-    for tool_dir in "$dir"/*/; do
+    for tool_dir in "${tool_dirs[@]}"; do
         local tool_name
         tool_name=$(basename "$tool_dir")
         local install_script
         install_script=$(get_install_script "$tool_dir")
-        
-        # Skip directories without install scripts
         [[ -n "$install_script" ]] || continue
-        
         local interpreter
         interpreter=$(get_script_interpreter "$install_script")
-        
-        # Check if script has update function
         local has_update
-        has_update=$($interpreter -c "source '$install_script' 2>/dev/null; declare -f update &>/dev/null && echo yes")
-        
+        has_update=$($interpreter -c "source '$install_script' 2>/dev/null; declare -f update &>/dev/null && echo yes" || true)
+
         if [[ "$has_update" == "yes" ]]; then
             log_info "Updating $tool_name..."
-            local output
             local exit_code
-            output=$($interpreter -c "source '$install_script'; update" 2>&1)
-            exit_code=$?
-            
+            if output=$($interpreter -c "source '$install_script'; update" 2>&1); then
+                exit_code=0
+            else
+                exit_code=$?
+            fi
+
             if [[ $exit_code -ne 0 ]]; then
                 log_error_persistent "update" "$tool_name" "$exit_code" "$output"
                 failed_tools+=("$tool_name")
                 log_warn "Failed to update $tool_name"
             fi
             [[ -n "$output" ]] && echo "$output"
-        else
+        elif [[ "$update_all" == true ]]; then
             log_verbose "Skipping $tool_name (no update function)"
+        else
+            unsupported_tools+=("$tool_name")
+            log_warn "$tool_name has no update() function"
         fi
     done
-    
+
+    if [[ ${#unsupported_tools[@]} -gt 0 ]]; then
+        log_warn "No update function: ${unsupported_tools[*]}"
+    fi
+
     if [[ ${#failed_tools[@]} -gt 0 ]]; then
         log_warn "Some tools failed to update: ${failed_tools[*]}"
         echo "Run 'dot logs' to see error details"
     fi
-    
-    log_success "All tools updated!"
+
+    if [[ ${#unsupported_tools[@]} -gt 0 || ${#failed_tools[@]} -gt 0 ]]; then
+        return 1
+    fi
+
+    if [[ "$update_all" == true ]]; then
+        log_success "All tools updated!"
+    else
+        log_success "Updated: ${tools[*]}"
+    fi
 }
 
 cmd_logs() {
@@ -856,10 +902,11 @@ show_update_help() {
 dot update - Update installed tools
 
 Usage:
-  dot update [-h|--help]
+  dot update [tool...] [-h|--help]
 
-Updates installed tools that have an update() function defined.
-On macOS, also runs 'brew update && brew upgrade'.
+Without tools, updates every tool that has an update() function.
+On macOS, this also runs 'brew update && brew upgrade'.
+With tool names, updates only those tools; Homebrew is skipped.
 
 Tools with update functions:
 $(
@@ -869,7 +916,7 @@ $(
         [[ -n "$install_script" ]] || continue
         tool_name=$(basename "$tool_dir")
         interpreter=$(get_script_interpreter "$install_script")
-        has_update=$($interpreter -c "source '$install_script' 2>/dev/null; declare -f update &>/dev/null && echo yes")
+        has_update=$($interpreter -c "source '$install_script' 2>/dev/null; declare -f update &>/dev/null && echo yes" || true)
         [[ "$has_update" == "yes" ]] && echo "  $tool_name"
     done
 )
@@ -915,7 +962,7 @@ Commands:
   edit              Open dotfiles in editor
   install           Run main install script
   install <tools>   Install specific tool(s), e.g. 'dotfiles install jj node'
-  update            Update installed tools (brew, nvim plugins, etc.)
+  update [tools]    Update all tools or specific tool(s)
   logs              View installation and operation error logs
   help              Show this help message
 

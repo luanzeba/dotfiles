@@ -80,7 +80,7 @@ update() {
     if command -v npm &>/dev/null; then
         setup_npm_global_prefix "$HUNK_NPM_PREFIX"
         echo "Updating hunk via npm..."
-        npm update -g "$HUNK_PACKAGE"
+        npm install -g "${HUNK_PACKAGE}@latest"
     fi
 }
 
