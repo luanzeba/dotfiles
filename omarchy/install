@@ -2,7 +2,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-TARGET="${XDG_CONFIG_HOME:-$HOME/.config}/hypr/bindings.lua"
+HYPR_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/hypr"
 
 # shellcheck disable=SC1091
 source "$SCRIPT_DIR/../lib/common.sh"
@@ -15,23 +15,34 @@ check_installed() {
     supported_platform || return 0
 }
 
+config_linked() {
+    local file="$1" target="$HYPR_DIR/$1"
+    [[ -L "$target" ]] && [[ "$(readlink -f "$target")" == "$SCRIPT_DIR/$file" ]]
+}
+
 check_configured() {
     supported_platform || return 0
-    [[ -L "$TARGET" ]] && [[ "$(readlink -f "$TARGET")" == "$SCRIPT_DIR/bindings.lua" ]]
+    config_linked bindings.lua && config_linked input.lua
 }
 
 install() {
     :
 }
 
+link_config() {
+    local file="$1" target="$HYPR_DIR/$1"
+    if [[ -e "$target" && ! -L "$target" ]]; then
+        mv "$target" "$target.backup.$(date +%s)"
+    fi
+    ln -sfn "$SCRIPT_DIR/$file" "$target"
+}
+
 configure() {
     supported_platform || return 0
 
-    mkdir -p "$(dirname "$TARGET")"
-    if [[ -e "$TARGET" && ! -L "$TARGET" ]]; then
-        mv "$TARGET" "$TARGET.backup.$(date +%s)"
-    fi
-    ln -sfn "$SCRIPT_DIR/bindings.lua" "$TARGET"
+    mkdir -p "$HYPR_DIR"
+    link_config bindings.lua
+    link_config input.lua
 }
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
