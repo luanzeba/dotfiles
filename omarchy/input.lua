@@ -4,6 +4,7 @@ hl.config({
     scroll_factor = -1,
     touchpad = {
       natural_scroll = true,
+      tap_to_click = false,
     },
   },
 })
