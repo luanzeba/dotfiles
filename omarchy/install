@@ -40,6 +40,9 @@ link_config() {
 configure() {
     supported_platform || return 0
 
+    # Tmux is installed and managed by this repository's shared Nix base profile.
+    [[ ! -x "$HOME/.nix-profile/bin/tmux" ]] || omarchy pkg drop tmux
+
     mkdir -p "$HYPR_DIR"
     link_config bindings.lua
     link_config input.lua
