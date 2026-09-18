@@ -1,0 +1,53 @@
+#!/bin/bash
+set -euo pipefail
+
+PLUGIN_ID="io.github.thisisgm.omapods"
+PLUGIN_URL="https://github.com/thisisgm/omarchy-pods"
+PLUGIN_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/omarchy/plugins/$PLUGIN_ID"
+
+# shellcheck disable=SC1091
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../../lib/common.sh"
+
+plugins_supported() {
+    is_omarchy
+}
+
+plugins_check_installed() {
+    plugins_supported || return 0
+    [[ -x "$PLUGIN_DIR/setup" && -x "$HOME/.local/bin/librepods" ]]
+}
+
+plugins_check_configured() {
+    plugins_supported || return 0
+    omarchy plugin list --json | jq -e --arg id "$PLUGIN_ID" \
+        'any(.[]; .id == $id and .enabled)' >/dev/null \
+        && systemctl --user is-enabled --quiet librepods.service
+}
+
+plugins_install() {
+    plugins_supported || return 0
+    [[ -d "$PLUGIN_DIR" ]] || omarchy plugin add "$PLUGIN_URL" --enable --yes
+    "$PLUGIN_DIR/setup"
+}
+
+plugins_configure() {
+    plugins_supported || return 0
+    omarchy plugin enable "$PLUGIN_ID"
+    systemctl --user enable --now librepods.service
+}
+
+plugins_update() {
+    plugins_supported || return 0
+    if [[ -d "$PLUGIN_DIR/.git" ]]; then
+        omarchy plugin update "$PLUGIN_ID" --yes
+        "$PLUGIN_DIR/setup"
+    else
+        plugins_install
+    fi
+    plugins_configure
+}
+
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    plugins_install
+    plugins_configure
+fi

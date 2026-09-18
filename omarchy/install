@@ -6,46 +6,49 @@ HYPR_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/hypr"
 
 # shellcheck disable=SC1091
 source "$SCRIPT_DIR/../lib/common.sh"
+# shellcheck disable=SC1091
+source "$SCRIPT_DIR/plugins/install"
 
 supported_platform() {
-    command -v omarchy &>/dev/null
+    is_omarchy
 }
 
 check_installed() {
     supported_platform || return 0
+    plugins_check_installed
 }
 
 config_linked() {
     local file="$1" target="$HYPR_DIR/$1"
-    [[ -L "$target" ]] && [[ "$(readlink -f "$target")" == "$SCRIPT_DIR/$file" ]]
+    [[ -L "$target" && "$(readlink -f "$target")" == "$SCRIPT_DIR/$file" ]]
 }
 
 check_configured() {
     supported_platform || return 0
-    config_linked bindings.lua && config_linked input.lua
+    config_linked bindings.lua && config_linked input.lua && plugins_check_configured
 }
 
 install() {
-    :
+    plugins_install
 }
 
 link_config() {
     local file="$1" target="$HYPR_DIR/$1"
-    if [[ -e "$target" && ! -L "$target" ]]; then
-        mv "$target" "$target.backup.$(date +%s)"
-    fi
+    [[ -e "$target" && ! -L "$target" ]] && mv "$target" "$target.backup.$(date +%s)"
     ln -sfn "$SCRIPT_DIR/$file" "$target"
 }
 
 configure() {
     supported_platform || return 0
-
-    # Tmux is installed and managed by this repository's shared Nix base profile.
     [[ ! -x "$HOME/.nix-profile/bin/tmux" ]] || omarchy pkg drop tmux
-
     mkdir -p "$HYPR_DIR"
     link_config bindings.lua
     link_config input.lua
+    plugins_configure
+}
+
+update() {
+    plugins_update
 }
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then

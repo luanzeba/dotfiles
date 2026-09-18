@@ -86,6 +86,7 @@ if is_macos; then
 fi
 run_step "ruby/install" bash "$SCRIPT_DIR/ruby/install"
 run_step "tmux/install" bash "$SCRIPT_DIR/tmux/install"
+run_step "omarchy/install" bash "$SCRIPT_DIR/omarchy/install"
 run_step "ghostty/install" bash "$SCRIPT_DIR/ghostty/install"
 run_step "chrome/install" bash "$SCRIPT_DIR/chrome/install"
 run_step "chrome-router" bash "$SCRIPT_DIR/bin/chrome-router-build"
