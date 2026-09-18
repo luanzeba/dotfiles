@@ -1,6 +1,8 @@
 -- Use natural scrolling for the touchpad and mouse wheel.
 hl.config({
   input = {
+    kb_layout = "us",
+    kb_variant = "mac",
     scroll_factor = -1,
     touchpad = {
       natural_scroll = true,

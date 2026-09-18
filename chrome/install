@@ -235,6 +235,7 @@ install() {
 configure() {
     if ! is_macos; then
         configure_desktop_entry
+        echo "Enable Portuguese (Brazil) spell check: chrome://settings/languages"
         return 0
     fi
 
