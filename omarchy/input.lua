@@ -7,3 +7,6 @@ hl.config({
     },
   },
 })
+
+-- Match Ghostty's touchpad scroll speed to other applications.
+o.window("com.mitchellh.ghostty", { scroll_touchpad = 0.4 })
