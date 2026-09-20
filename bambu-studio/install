@@ -1,0 +1,48 @@
+#!/bin/bash
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck disable=SC1091
+source "$SCRIPT_DIR/../lib/common.sh"
+
+APP_ID="com.bambulab.BambuStudio"
+FLATHUB_URL="https://dl.flathub.org/repo/flathub.flatpakrepo"
+
+supported_platform() {
+    is_omarchy
+}
+
+check_installed() {
+    supported_platform || return 0
+    command -v flatpak &>/dev/null && flatpak info --user "$APP_ID" &>/dev/null
+}
+
+get_installed_version() {
+    supported_platform && check_installed || return 0
+    flatpak info --user --show-version "$APP_ID"
+}
+
+install() {
+    if ! supported_platform; then
+        echo "Bambu Studio installation is currently supported only on Omarchy; skipping."
+        return 0
+    fi
+
+    command -v flatpak &>/dev/null || omarchy pkg add flatpak
+    flatpak remote-add --user --if-not-exists flathub "$FLATHUB_URL"
+    flatpak install --user --noninteractive flathub "$APP_ID"
+}
+
+configure() {
+    :
+}
+
+update() {
+    supported_platform && check_installed || return 0
+    flatpak update --user --noninteractive "$APP_ID"
+}
+
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    install
+    configure
+fi
