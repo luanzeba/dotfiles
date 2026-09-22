@@ -12,13 +12,15 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 
-const VERSION = "0.4.0";
+const VERSION = "0.4.1";
 const CDP_PORT = Number(process.env.LINEAR_CHROME_CDP_PORT || 9222);
 const CDP_URL = `http://127.0.0.1:${CDP_PORT}`;
 const LINEAR_URL = "https://linear.app";
 const LOGIN_URL = `${LINEAR_URL}/login`;
 const GRAPHQL_URL = "https://client-api.linear.app/graphql";
 const START_SCRIPT = process.env.LINEAR_PI_START_SCRIPT || path.join(os.homedir(), "dotfiles/skills/web-browser/scripts/start.js");
+// Background readers can opt out of opening Chrome or a new Linear tab.
+const EXISTING_BROWSER_ONLY = process.env.LINEAR_EXISTING_BROWSER_ONLY === "1";
 
 const ISSUE_FIELDS = `
   id
@@ -277,8 +279,15 @@ class CdpClient {
 }
 
 async function connectCdp() {
-  await ensureBrowser();
-  const response = await fetch(`${CDP_URL}/json/version`);
+  if (!EXISTING_BROWSER_ONLY) await ensureBrowser();
+  let response;
+  try {
+    response = await fetch(`${CDP_URL}/json/version`, { signal: AbortSignal.timeout(2_000) });
+  } catch {
+    fail(EXISTING_BROWSER_ONLY
+      ? "No existing Chrome debugging session is available."
+      : "Could not connect to Chrome.");
+  }
   const info = await response.json();
   if (!info.webSocketDebuggerUrl) fail("Chrome did not return a debugging WebSocket URL.");
 
@@ -371,7 +380,7 @@ async function withLinear(callback) {
   const cdp = await connectCdp();
   let page;
   try {
-    page = await linearPage(cdp);
+    page = await linearPage(cdp, { create: !EXISTING_BROWSER_ONLY });
     return await callback(cdp, page.sessionId);
   } finally {
     if (page?.owned) await cdp.send("Target.closeTarget", { targetId: page.targetId }).catch(() => {});

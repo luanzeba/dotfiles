@@ -99,18 +99,14 @@ configure() {
         link_extensions "$SCRIPT_DIR/extensions" "$PI_CONFIG_DIR/extensions"
     fi
 
-    # Symlink agent definitions (subagent system prompts, e.g. the /review reviewer)
-    if [[ -d "$SCRIPT_DIR/agents" ]]; then
-        mkdir -p "$PI_CONFIG_DIR/agents"
-        for agent in "$SCRIPT_DIR/agents"/*.md; do
-            [[ -f "$agent" ]] || continue
-            local agent_name
-            agent_name="$(basename "$agent")"
-            rm -f "$PI_CONFIG_DIR/agents/$agent_name"
-            ln -s "$agent" "$PI_CONFIG_DIR/agents/$agent_name"
-            echo "Linked agent: $PI_CONFIG_DIR/agents/$agent_name"
-        done
-    fi
+    # Remove the old review-only agent links; the prompts now live beside the extension.
+    for name in reviewer.md simplifier.md correctness-reviewer.md; do
+        local linked="$PI_CONFIG_DIR/agents/$name"
+        if [[ -L "$linked" && "$(readlink "$linked")" == "$SCRIPT_DIR/agents/$name" ]]; then
+            rm "$linked"
+        fi
+    done
+    rmdir "$PI_CONFIG_DIR/agents" 2>/dev/null || true
 }
 
 update() {

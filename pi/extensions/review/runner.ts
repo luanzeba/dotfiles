@@ -1,80 +1,70 @@
-/**
- * Run the reviewer as a separate pi process.
- *
- * Separate process, not an in-process sub-agent, for three reasons:
- *   - it runs a different model with its own provider auth
- *   - it gets its own context window, so a long review does not crowd the parent session
- *   - it keeps its own session across rounds, which is what lets round 3 say
- *     "this is the third copy of this code" and "I was wrong last round"
- *
- * Verified: two `-p` runs sharing one --session-id continue the same conversation; the
- * second does not start fresh and the session file contains both turns.
- */
+/** Run independent simplification and correctness reviews in fresh Pi sessions. */
 
+import { randomUUID } from "node:crypto";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
+import { fileURLToPath } from "node:url";
 import { cacheRoot } from "./sources/materialize";
-import type { ChangeSet, PriorComment } from "./sources/types";
+import type { ChangeSet, ExecFn, PriorComment } from "./sources/types";
+
+const promptFile = (name: string) => fileURLToPath(new URL(`./prompts/${name}.md`, import.meta.url));
+const COMMON_INSTRUCTIONS = promptFile("reviewer");
+const REVIEWERS = {
+	simplification: {
+		name: "simplification and redesign",
+		heading: "Simplification and redesign",
+		instructions: promptFile("simplifier"),
+	},
+	correctness: {
+		name: "correctness and regression",
+		heading: "Correctness and regressions",
+		instructions: promptFile("correctness-reviewer"),
+	},
+} as const;
+
+type ReviewKind = keyof typeof REVIEWERS;
 
 export interface RunnerOptions {
 	change: ChangeSet;
 	modelSpec: string;
 	thinking?: string;
-	instructionsPath: string;
+	/** Recent request and implementation summary from the parent Pi session. */
+	parentContext?: string;
 	/** Extra steering from the user, e.g. "/review focus on the date handling". */
 	focus?: string;
+	/** Forget the final reports from earlier rounds of this change. */
 	fresh?: boolean;
 	signal?: AbortSignal;
-	exec: (
-		command: string,
-		args: string[],
-		options?: { cwd?: string; timeout?: number; signal?: AbortSignal },
-	) => Promise<{ stdout: string; stderr: string; code: number }>;
+	exec: ExecFn;
 }
 
-export interface RunnerResult {
-	findings: string;
-	sessionId: string;
-}
-
-const REVIEW_TIMEOUT_MS = 1000 * 60 * 30;
 const MAX_DIFF_CHARS = 400_000;
+const STEP_TWO_PROMPT = "Step 2: perform the complete review now.";
+const REVIEW_KINDS = Object.keys(REVIEWERS) as ReviewKind[];
 
 function sessionDir(): string {
 	return path.join(cacheRoot(), "sessions");
 }
 
-function baseSessionId(change: ChangeSet): string {
-	return `pi-review-${change.reviewKey}`;
+function historyFile(change: ChangeSet, kind: ReviewKind): string {
+	return path.join(cacheRoot(), "history", `${change.reviewKey}-${kind}.md`);
 }
 
-/**
- * Which session later rounds should resume.
- *
- * `--fresh` has to change what the *next* invocation picks up, not just skip history for one
- * process, otherwise the following plain `/review` silently returns to the old transcript.
- * A pointer file keeps that decision durable: `--fresh` writes a new generation, and every
- * later round reads it.
- */
-async function currentSessionId(change: ChangeSet, fresh: boolean): Promise<string> {
-	const base = baseSessionId(change);
-	const pointer = path.join(sessionDir(), `${base}.current`);
-
-	if (fresh) {
-		const rotated = `${base}-${Date.now()}`;
-		await fs.mkdir(sessionDir(), { recursive: true });
-		await fs.writeFile(pointer, rotated, "utf8");
-		return rotated;
-	}
-
-	try {
-		const stored = (await fs.readFile(pointer, "utf8")).trim();
-		if (stored) return stored;
-	} catch {
-		// No pointer yet: this change has only ever used the base session.
-	}
-	return base;
+async function ensureInstructionFiles(): Promise<void> {
+	const files = [
+		COMMON_INSTRUCTIONS,
+		...REVIEW_KINDS.map((kind) => REVIEWERS[kind].instructions),
+	];
+	await Promise.all(
+		files.map(async (file) => {
+			try {
+				await fs.access(file);
+			} catch {
+				throw new Error(`reviewer instruction file is missing: ${file}. Restore pi/extensions/review/prompts.`);
+			}
+		}),
+	);
 }
 
 function formatPriorComments(comments: PriorComment[]): string {
@@ -84,45 +74,58 @@ function formatPriorComments(comments: PriorComment[]): string {
 		return `- ${where}(${comment.author}): ${comment.body.split("\n")[0]!.slice(0, 200)}`;
 	});
 	return [
-		"",
 		"## Comments humans already left",
 		"Do not repeat these. Say so if you disagree with one.",
 		...lines,
 	].join("\n");
 }
 
-function buildPrompt(options: RunnerOptions): string {
-	const { change, focus } = options;
-	const diff = change.diff.length > MAX_DIFF_CHARS
-		? `${change.diff.slice(0, MAX_DIFF_CHARS)}\n\n[diff truncated at ${MAX_DIFF_CHARS} characters; read the files in the folder for the rest]`
-		: change.diff;
-
-	return [
-		"# Review",
-		"",
+function buildBrief(
+	options: RunnerOptions,
+	kind: ReviewKind,
+	previous?: string,
+	fullDiffFile?: string,
+): string {
+	const { change, focus, parentContext } = options;
+	const reviewer = REVIEWERS[kind];
+	const diff =
+		change.diff.length > MAX_DIFF_CHARS
+			? `${change.diff.slice(0, MAX_DIFF_CHARS)}\n\n[diff truncated at ${MAX_DIFF_CHARS} characters; the complete unified diff is available at ${fullDiffFile}]`
+			: change.diff;
+	const sections = [
+		"# Review brief",
 		`Reviewing: ${change.label}`,
-		`Read the code here: ${change.folder}`,
+		`Reviewed repository: ${change.folder}`,
 		change.kind === "git"
-			? "This is the author's own working tree. Do not modify anything in it."
-			: "This is an isolated copy of someone else's change. The user's own work is unrelated and must not be mentioned.",
-		"",
-		`Changed files (${change.changedFiles.length}):`,
-		...change.changedFiles.slice(0, 100).map((file) => `  ${file}`),
-		change.changedFiles.length > 100 ? `  ... and ${change.changedFiles.length - 100} more` : "",
-		change.intent ? `\n## What this change is for\n${change.intent}` : "",
-		formatPriorComments(change.priorComments ?? []),
-		focus ? `\n## The user specifically asked you to focus on\n${focus}` : "",
-		"",
-		"## Diff",
-		"```diff",
-		diff,
-		"```",
-	]
-		.filter((line) => line !== "")
-		.join("\n");
+			? "This is the author's working tree. Do not modify it."
+			: "This is an isolated snapshot of someone else's change with no git metadata. Use the supplied diff and files; do not modify it or mention unrelated local work.",
+		"## Changed files",
+		...change.changedFiles.map((file) => `- ${file}`),
+	];
+
+	if (change.intent) sections.push("## Why this change exists", change.intent);
+	if (parentContext) {
+		sections.push(
+			"## Recent context from the session that requested this review",
+			"Use this for intent, implementation decisions, and checks already completed. The diff remains the source of truth.",
+			parentContext,
+		);
+	}
+	if (previous) {
+		sections.push(
+			`## Previous ${reviewer.name} review`,
+			"Determine what was addressed, what remains, and what should be withdrawn.",
+			previous,
+		);
+	}
+	const comments = formatPriorComments(change.priorComments ?? []);
+	if (comments) sections.push(comments);
+	if (focus) sections.push("## Additional focus from the user", focus);
+	sections.push("## Diff", "```diff", diff, "```");
+	return sections.join("\n\n");
 }
 
-/** Reuse pi's own launcher so the reviewer runs the same build as the parent. */
+/** Reuse Pi's own launcher so the reviewers run the same build as the parent. */
 function piInvocation(args: string[]): { command: string; args: string[] } {
 	const script = process.argv[1];
 	const isBunVirtual = script?.startsWith("/$bunfs/root/");
@@ -136,61 +139,110 @@ function piInvocation(args: string[]): { command: string; args: string[] } {
 	return { command: "pi", args };
 }
 
-export async function runReviewer(options: RunnerOptions): Promise<RunnerResult> {
-	const dir = sessionDir();
-	await fs.mkdir(dir, { recursive: true });
-
-	const id = await currentSessionId(options.change, options.fresh ?? false);
-
-	const promptDir = await fs.mkdtemp(path.join(os.tmpdir(), "pi-review-prompt-"));
-	const promptFile = path.join(promptDir, "task.md");
-	await fs.writeFile(promptFile, buildPrompt(options), { mode: 0o600 });
-
-	const args = [
+function reviewerArgs(
+	options: RunnerOptions,
+	kind: ReviewKind,
+	sessionId: string,
+	prompt: string,
+	withTools: boolean,
+): string[] {
+	return [
 		"--session-id",
-		id,
+		sessionId,
 		"--session-dir",
-		dir,
+		sessionDir(),
 		"--model",
 		options.modelSpec,
 		...(options.thinking ? ["--thinking", options.thinking] : []),
-		"--tools",
-		"read,grep,find,ls,bash",
-		// Skills and project context files carry their own instructions, including how to post
-		// review comments. Keep them out so this reviewer stays read-only; the parent session
-		// validates findings and creates pending drafts after the reviewer returns.
-		//
-		// Extension discovery stays on deliberately. Provider registration lives in an
-		// extension on this setup (the proxy that supplies the reviewer's own model), so
-		// --no-extensions makes the child unable to authenticate at all. The read-only rule is
-		// enforced by --tools and the mandate rather than by starving the child of providers.
+		...(withTools ? ["--tools", "read,grep,find,ls,bash"] : ["--no-tools"]),
+		// Skills and project context can contain instructions to modify files or publish review
+		// comments. The curated brief and read-only mandates provide only what these reviewers need.
 		"--no-skills",
 		"--no-context-files",
 		"--append-system-prompt",
-		options.instructionsPath,
-		// Text mode writes just the final assistant message to stdout; tool chatter goes to
-		// stderr. That is exactly the findings text, so there is no event stream to parse.
+		COMMON_INSTRUCTIONS,
+		"--append-system-prompt",
+		REVIEWERS[kind].instructions,
 		"--mode",
 		"text",
 		"-p",
-		`@${promptFile}`,
+		prompt,
 	];
+}
+
+async function invokeReviewer(
+	options: RunnerOptions,
+	kind: ReviewKind,
+	sessionId: string,
+	prompt: string,
+	withTools: boolean,
+): Promise<string> {
+	const pi = piInvocation(reviewerArgs(options, kind, sessionId, prompt, withTools));
+	// Extension discovery is needed for custom model providers, but the global todo extension
+	// creates .pi/todos on startup. Redirect that state outside the read-only reviewed tree.
+	const invocation = {
+		command: "env",
+		args: [`PI_TODO_PATH=${path.join(cacheRoot(), "reviewer-todos")}`, pi.command, ...pi.args],
+	};
+	const result = await options.exec(invocation.command, invocation.args, {
+		cwd: options.change.folder,
+		...(options.signal ? { signal: options.signal } : {}),
+	});
+	const output = result.stdout.trim();
+	const step = withTools ? "review" : "coverage plan";
+	if (result.code !== 0 || !output) {
+		const detail = result.stderr.trim().slice(-1_000);
+		throw new Error(
+			`${REVIEWERS[kind].name} reviewer failed during its ${step}${detail ? `:\n${detail}` : " without output"}`,
+		);
+	}
+	return output;
+}
+
+async function runPass(options: RunnerOptions, kind: ReviewKind): Promise<string> {
+	const history = historyFile(options.change, kind);
+	if (options.fresh) await fs.rm(history, { force: true });
+	const previous = await fs.readFile(history, "utf8").catch(() => undefined);
+	const sessionId = `pi-review-${options.change.reviewKey}-${kind}-${randomUUID()}`;
+	const promptDir = await fs.mkdtemp(path.join(os.tmpdir(), `pi-review-${kind}-`));
+	const briefFile = path.join(promptDir, "brief.md");
+	const fullDiffFile =
+		options.change.diff.length > MAX_DIFF_CHARS ? path.join(promptDir, "complete.diff") : undefined;
+	await Promise.all([
+		fs.writeFile(briefFile, buildBrief(options, kind, previous, fullDiffFile), { mode: 0o600 }),
+		...(fullDiffFile ? [fs.writeFile(fullDiffFile, options.change.diff, { mode: 0o600 })] : []),
+	]);
 
 	try {
-		const invocation = piInvocation(args);
-		const result = await options.exec(invocation.command, invocation.args, {
-			cwd: options.change.folder,
-			timeout: REVIEW_TIMEOUT_MS,
-			...(options.signal ? { signal: options.signal } : {}),
-		});
-
-		const findings = result.stdout.trim();
-		if (!findings) {
-			const detail = result.stderr.trim().slice(-500);
-			throw new Error(`the reviewer produced no output${detail ? `:\n${detail}` : ""}`);
-		}
-		return { findings, sessionId: id };
+		await invokeReviewer(options, kind, sessionId, `@${briefFile}`, false);
+		const findings = await invokeReviewer(options, kind, sessionId, STEP_TWO_PROMPT, true);
+		await fs.mkdir(path.dirname(history), { recursive: true });
+		await fs.writeFile(history, findings, { mode: 0o600 });
+		return findings;
 	} finally {
 		await fs.rm(promptDir, { recursive: true, force: true });
 	}
+}
+
+export async function runReviewers(options: RunnerOptions): Promise<string> {
+	await ensureInstructionFiles();
+	const results = await Promise.allSettled(REVIEW_KINDS.map((kind) => runPass(options, kind)));
+	if (options.signal?.aborted && results.every((result) => result.status === "rejected")) {
+		throw new Error("review was cancelled");
+	}
+
+	const sections = results.map((result, index) => {
+		const reviewer = REVIEWERS[REVIEW_KINDS[index]!];
+		const report =
+			result.status === "fulfilled"
+				? result.value
+				: options.signal?.aborted
+					? "Reviewer cancelled before producing a final report."
+					: `Reviewer failed before producing a final report: ${String(result.reason)}`;
+		return `## ${reviewer.heading}\n${report}`;
+	});
+	if (results.every((result) => result.status === "rejected")) {
+		throw new Error(`both reviewers failed:\n\n${sections.join("\n\n")}`);
+	}
+	return sections.join("\n\n");
 }

@@ -8,6 +8,7 @@
  */
 
 import * as path from "node:path";
+import { branchIssueIdentifier, linearIssueContext } from "./linear";
 import { type ChangeSet, type ChangeSource, type ExecFn, type ResolveOptions, slug } from "./types";
 
 async function gitRoot(cwd: string, exec: ExecFn): Promise<string | null> {
@@ -60,7 +61,9 @@ async function untrackedDiff(root: string, exec: ExecFn): Promise<{ diff: string
 
 	const chunks: string[] = [];
 	for (const file of files) {
-		const result = await exec("git", ["diff", "--no-index", "--", "/dev/null", file], { cwd: root });
+		const result = await exec("git", ["diff", "--no-color", "--no-index", "--", "/dev/null", file], {
+			cwd: root,
+		});
 		if (result.stdout.trim()) chunks.push(result.stdout);
 	}
 	return { diff: chunks.join("\n"), files };
@@ -76,31 +79,35 @@ export const gitSource: ChangeSource = {
 
 		const repo = path.basename(root);
 		const branchName = await currentBranch(root, exec);
+		const issue = branchIssueIdentifier(branchName);
 
 		if (branch) {
 			const base = await mergeBase(root, exec);
 			if (base) {
-				const diff = await exec("git", ["diff", `${base}...HEAD`], { cwd: root });
+				const diff = await exec("git", ["diff", "--no-color", `${base}...HEAD`], { cwd: root });
 				const names = await exec("git", ["diff", "--name-only", `${base}...HEAD`], { cwd: root });
 				const changedFiles = names.stdout.split("\n").map((l) => l.trim()).filter(Boolean);
 				if (!diff.stdout.trim()) throw new Error(`no commits on ${branchName} since ${base.slice(0, 8)}`);
+				const linear = issue ? await linearIssueContext([issue], exec) : undefined;
 				return {
 					kind: "git",
 					label: branchName,
 					folder: root,
 					diff: diff.stdout,
 					changedFiles,
-					reviewKey: slug(`${repo}-${branchName}`),
+					...(linear ? { intent: linear.text } : {}),
+					reviewKey: slug(`${repo}-${branchName}-branch`),
 				};
 			}
 		}
 
-		const tracked = await exec("git", ["diff", "HEAD"], { cwd: root });
+		const tracked = await exec("git", ["diff", "--no-color", "HEAD"], { cwd: root });
 		const trackedNames = await exec("git", ["diff", "--name-only", "HEAD"], { cwd: root });
 		const untracked = await untrackedDiff(root, exec);
 
 		const diff = [tracked.stdout, untracked.diff].filter((part) => part.trim()).join("\n");
 		if (!diff.trim()) throw new Error("no local changes to review");
+		const linear = issue ? await linearIssueContext([issue], exec) : undefined;
 
 		const changedFiles = [
 			...trackedNames.stdout.split("\n").map((l) => l.trim()).filter(Boolean),
@@ -113,7 +120,8 @@ export const gitSource: ChangeSource = {
 			folder: root,
 			diff,
 			changedFiles,
-			reviewKey: slug(`${repo}-${branchName}`),
+			...(linear ? { intent: linear.text } : {}),
+			reviewKey: slug(`${repo}-${branchName}-working-tree`),
 		};
 	},
 };

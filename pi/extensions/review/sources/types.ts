@@ -1,3 +1,5 @@
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+
 /**
  * The one shape everything downstream of "what am I reviewing?" consumes.
  *
@@ -26,13 +28,15 @@ export interface ChangeSet {
 	/** Unified diff, base..head. */
 	diff: string;
 	changedFiles: string[];
-	/** What the change is for: MR/PR description, linked issue text. Empty for local work. */
+	/** What the change is for: MR description, linked ticket, or a ticket named by the local branch. */
 	intent?: string;
+	/** Stable MR or ticket identifiers that make parent-session context relevant. */
+	references?: string[];
 	/** Comments humans already left, so the reviewer does not repeat them. */
 	priorComments?: PriorComment[];
 	/**
-	 * Stable identity for the reviewer's session, so repeat rounds on the same change
-	 * continue the same conversation and different changes never share memory.
+	 * Stable identity for compact prior findings. Each round gets fresh reviewer sessions,
+	 * while different changes never share review history.
 	 */
 	reviewKey: string;
 	/** Release any temporary worktree or clone this source created. */
@@ -51,11 +55,7 @@ export interface ChangeSource {
 	resolve(arg: string, options: ResolveOptions): Promise<ChangeSet>;
 }
 
-export type ExecFn = (
-	command: string,
-	args: string[],
-	options?: { cwd?: string; timeout?: number; signal?: AbortSignal },
-) => Promise<{ stdout: string; stderr: string; code: number }>;
+export type ExecFn = ExtensionAPI["exec"];
 
 /** Keep review keys filesystem- and session-id-safe. */
 export function slug(value: string): string {

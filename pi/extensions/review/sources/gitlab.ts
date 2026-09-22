@@ -3,8 +3,7 @@
  *
  * This never reads the user's working tree. You are usually mid-change on your own work
  * when someone asks you to review their MR, and their code must not be mixed with yours.
- * The only thing borrowed from a local clone is git objects, via a detached worktree that
- * leaves the checkout untouched.
+ * The head commit is downloaded from GitLab and cached separately from every checkout.
  *
  * Accepted arguments:
  *   https://gitlab.example.com/group/project/-/merge_requests/384
@@ -16,8 +15,16 @@ import { spawn } from "node:child_process";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
+import { branchIssueIdentifier, issueIdentifiers, linearIssueContext } from "./linear";
 import { cachedSnapshot, unpackTarball } from "./materialize";
-import { type ChangeSet, type ChangeSource, type ExecFn, type PriorComment, type ResolveOptions, slug } from "./types";
+import {
+	type ChangeSet,
+	type ChangeSource,
+	type ExecFn,
+	type PriorComment,
+	type ResolveOptions,
+	slug,
+} from "./types";
 
 interface MrTarget {
 	host: string;
@@ -51,13 +58,19 @@ async function targetFromRemote(iid: string, cwd: string, exec: ExecFn): Promise
 	return { host, project: parsed[2]!, iid };
 }
 
-function api(target: MrTarget, endpoint: string): string[] {
+function api(target: MrTarget, endpoint: string, paginate = false): string[] {
 	const project = encodeURIComponent(target.project);
-	return ["api", "--hostname", target.host, `projects/${project}/${endpoint}`];
+	return [
+		"api",
+		"--hostname",
+		target.host,
+		`projects/${project}/${endpoint}`,
+		...(paginate ? ["--paginate"] : []),
+	];
 }
 
-async function glabJson<T>(target: MrTarget, endpoint: string, exec: ExecFn): Promise<T> {
-	const result = await exec("glab", api(target, endpoint), { timeout: 120_000 });
+async function glabJson<T>(target: MrTarget, endpoint: string, exec: ExecFn, paginate = false): Promise<T> {
+	const result = await exec("glab", api(target, endpoint, paginate), { timeout: 120_000 });
 	if (result.code !== 0) {
 		const detail = result.stderr.trim() || result.stdout.trim();
 		throw new Error(`glab failed for ${endpoint}: ${detail || "unknown error"}`);
@@ -82,6 +95,12 @@ interface MrPayload {
 	target_branch?: string;
 	diff_refs?: { base_sha?: string; head_sha?: string };
 	sha?: string;
+	head_pipeline?: { status?: string; web_url?: string };
+}
+
+interface CommitPayload {
+	id?: string;
+	title?: string;
 }
 
 interface ChangesPayload {
@@ -235,25 +254,43 @@ export const gitlabSource: ChangeSource = {
 			mr.web_url ?? `https://${target.host}/${target.project}/-/merge_requests/${target.iid}`;
 		if (!headSha) throw new Error(`merge request !${target.iid} has no head commit`);
 
-		const changes = await glabJson<ChangesPayload>(target, `merge_requests/${target.iid}/changes`, exec);
+		const branchIssue = branchIssueIdentifier(mr.source_branch ?? "");
+		const explicitIssues = issueIdentifiers([mr.title, mr.description].filter(Boolean).join("\n"));
+		const issueCandidates = [
+			...explicitIssues,
+			...(branchIssue ? [branchIssue] : []),
+			...issueIdentifiers(mr.title ?? "", true),
+		];
+		const [changes, discussions, commits] = await Promise.all([
+			glabJson<ChangesPayload>(target, `merge_requests/${target.iid}/changes`, exec),
+			glabJson<DiscussionsPayload>(target, `merge_requests/${target.iid}/discussions`, exec),
+			glabJson<CommitPayload[]>(target, `merge_requests/${target.iid}/commits`, exec, true),
+		]);
 		const changeList = changes.changes ?? [];
 		const diff = buildDiff(changeList);
 		if (!diff.trim()) throw new Error(`merge request !${target.iid} has no changes to review`);
 
-		const discussions = await glabJson<DiscussionsPayload>(
-			target,
-			`merge_requests/${target.iid}/discussions`,
-			exec,
-		);
-
-		const folderInfo = await snapshot(target, headSha, exec);
-
+		const [folderInfo, linearContext] = await Promise.all([
+			snapshot(target, headSha, exec),
+			linearIssueContext(issueCandidates, exec),
+		]);
+		const references = [...explicitIssues, ...(linearContext?.identifiers ?? [])];
+		const commitSummary = commits
+			.filter((commit) => commit.id || commit.title)
+			.map((commit) => `- ${commit.id?.slice(0, 8) ?? "????????"} ${commit.title ?? "(untitled)"}`)
+			.join("\n");
+		const pipeline = mr.head_pipeline?.status
+			? `CI pipeline: ${mr.head_pipeline.status}${mr.head_pipeline.web_url ? ` (${mr.head_pipeline.web_url})` : ""}`
+			: "";
 		const intentParts = [
 			`Merge request !${target.iid}: ${mr.title ?? "(untitled)"}`,
 			`URL: ${reviewUrl}`,
 			mr.source_branch && mr.target_branch ? `Branch: ${mr.source_branch} -> ${mr.target_branch}` : "",
 			baseSha && headSha ? `Commits: ${baseSha.slice(0, 8)}..${headSha.slice(0, 8)}` : "",
+			pipeline,
 			mr.description?.trim() ? `\nDescription:\n${mr.description.trim()}` : "",
+			commitSummary ? `\nCommit messages:\n${commitSummary}` : "",
+			linearContext ? `\nLinked ticket:\n${linearContext.text}` : "",
 		].filter(Boolean);
 
 		return {
@@ -264,6 +301,7 @@ export const gitlabSource: ChangeSource = {
 			diff,
 			changedFiles: changeList.map((c) => c.new_path ?? c.old_path ?? "unknown"),
 			intent: intentParts.join("\n"),
+			...(references.length > 0 ? { references } : {}),
 			priorComments: collectPriorComments(discussions),
 			reviewKey: slug(`${target.host}-${target.project}-mr-${target.iid}`),
 			...(folderInfo.cleanup ? { cleanup: folderInfo.cleanup } : {}),

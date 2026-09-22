@@ -145,6 +145,9 @@ export async function resolveReviewModel(
 		);
 	}
 
+	// The BETA proxy discovers its Bedrock-backed models dynamically, so they are absent from
+	// Pi's startup catalog until the first refresh.
+	await ctx.modelRegistry.refresh({ signal: AbortSignal.timeout(15_000) }).catch(() => {});
 	const catalog = availableModels(ctx);
 	const { provider, id } = splitSpec(spec);
 	const match = catalog.find((model) =>
