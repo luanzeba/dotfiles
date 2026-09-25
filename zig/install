@@ -1,38 +1,12 @@
 #!/bin/bash
 set -e
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Zig master + zls, for Ziglings/dev builds.
+
 # shellcheck disable=SC1091
-source "$SCRIPT_DIR/../lib/nix.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/../lib/nix.sh"
 
-check_installed() {
-    nix_profile_has_entry "$NIX_ZIG_PROFILE_NAME"
-}
-
-check_configured() {
-    _source_nix_env || true
-    command -v zig &>/dev/null && command -v zls &>/dev/null
-}
-
-get_installed_version() {
-    if command -v zig &>/dev/null; then
-        zig version
-    fi
-}
-
-install() {
-    # Zig and zls are installed from nix profile entry "zig".
-    nix_profile_sync_zig
-}
-
-configure() {
-    # Nothing extra to configure; binaries come from nix profile.
-    :
-}
-
-update() {
-    nix_profile_sync_zig
-}
+nix_package_tool zig zig zls
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     install

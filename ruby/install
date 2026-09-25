@@ -1,76 +1,12 @@
 #!/bin/bash
 set -e
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Ruby.
+
 # shellcheck disable=SC1091
-source "$SCRIPT_DIR/../lib/nix.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/../lib/nix.sh"
 
-RUBY_COMMANDS=(ruby gem bundle)
-
-bootstrap_ruby_path() {
-    _source_nix_env || true
-    if [[ -d "$HOME/.nix-profile/bin" ]]; then
-        export PATH="$HOME/.nix-profile/bin:$PATH"
-    fi
-}
-
-ruby_commands_available() {
-    bootstrap_ruby_path
-
-    local cmd
-    for cmd in "${RUBY_COMMANDS[@]}"; do
-        command -v "$cmd" &>/dev/null || return 1
-    done
-}
-
-check_installed() {
-    if ! nix_profile_has_entry "$NIX_RUBY_PROFILE_NAME"; then
-        return 1
-    fi
-
-    ruby_commands_available
-}
-
-get_installed_version() {
-    bootstrap_ruby_path
-
-    local parts=()
-
-    if command -v ruby &>/dev/null; then
-        parts+=("$(ruby -v 2>/dev/null | awk '{print $1 " " $2}')")
-    fi
-
-    if command -v gem &>/dev/null; then
-        parts+=("gem $(gem --version 2>/dev/null | head -1)")
-    fi
-
-    if command -v bundle &>/dev/null; then
-        parts+=("$(bundle -v 2>/dev/null)")
-    fi
-
-    local joined=""
-    local part
-    for part in "${parts[@]}"; do
-        if [[ -n "$joined" ]]; then
-            joined+=", "
-        fi
-        joined+="$part"
-    done
-    echo "$joined"
-}
-
-install() {
-    nix_profile_sync_ruby
-}
-
-configure() {
-    # No config files; binaries come from the Nix profile.
-    :
-}
-
-update() {
-    nix_profile_sync_ruby
-}
+nix_package_tool ruby ruby gem bundle
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     install

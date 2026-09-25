@@ -1,41 +1,30 @@
 {
-  description = "luan's dotfiles toolchain (nix profile: base + node + go + rust + ruby + nvim + helix + jj + gh + glab + aws + git + chrome + 1password + zig + bat + handy tooling)";
+  description = "luan's dotfiles toolchain. Each package is one `dot install <tool>` entry in the Nix profile.";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
-    flake-utils.url = "github:numtide/flake-utils";
     zig.url = "github:mitchellh/zig-overlay";
     zls.url = "github:zigtools/zls";
     handy.url = "github:cjpais/Handy";
     nixgl.url = "github:nix-community/nixGL";
   };
 
-  outputs = { nixpkgs, flake-utils, zig, zls, handy, nixgl, ... }:
-    flake-utils.lib.eachDefaultSystem (system:
-      let
-        pkgs = nixpkgs.legacyPackages.${system};
-
-        # Keep the default package set free-only. Packages that need unfree
-        # software must opt in explicitly with their allowed package names.
-        pkgsAllowingUnfree = allowedNames: import nixpkgs {
-          inherit system;
-          config.allowUnfreePredicate = pkg:
-            builtins.elem (nixpkgs.lib.getName pkg) allowedNames;
-        };
-      in
-      let
-        # The Node profile refreshes nixpkgs when it syncs, so follow the
-        # current stable release instead of pinning a major line.
-        nodeRuntime = pkgs.nodejs_latest;
-
-        baseTools = pkgs.buildEnv {
-          name = "dotfiles-base-tools";
-          paths = with pkgs; [
-            # fzf-lua requires fzf >= 0.36; distro packages can lag behind.
-            fzf
-
-            # Shared machine basics previously installed through
-            # Homebrew or pacman.
+  outputs = { nixpkgs, zig, zls, handy, nixgl, ... }:
+    let
+      systems = [ "x86_64-linux" "aarch64-linux" "x86_64-darwin" "aarch64-darwin" ];
+    in {
+      packages = nixpkgs.lib.genAttrs systems (system:
+        let
+          pkgs = import nixpkgs {
+            inherit system;
+            # Free-only, except for packages explicitly allowed here.
+            config.allowUnfreePredicate = pkg:
+              builtins.elem (nixpkgs.lib.getName pkg) [ "1password-cli" "google-chrome" ];
+          };
+          bundle = name: paths: pkgs.buildEnv { inherit name paths; };
+        in {
+          base = bundle "dotfiles-base" (with pkgs; [
+            fzf # fzf-lua requires fzf >= 0.36; distro packages can lag behind.
             fd
             ffmpeg
             jq
@@ -45,166 +34,52 @@
             tmux
             poppler-utils # pdftotext
             uv # Python tool installer (used by whisper/install)
-          ];
-        };
-
-        nodeToolchain = pkgs.buildEnv {
-          name = "dotfiles-node-toolchain";
-          paths = with pkgs; [
-            # Node runtime (replaces fnm + manual LTS install)
-            nodeRuntime
-            # Node 25+ no longer bundles Corepack.
-            corepack
-
-            # Node-based dev tools (replace `npm install -g ...`)
-            typescript                              # tsc
-            typescript-language-server              # tsserver for editors
+          ]);
+          # The Node profile refreshes nixpkgs independently of flake.lock.
+          node = bundle "dotfiles-node" (with pkgs; [
+            nodejs_latest
+            corepack # Node 25+ does not bundle Corepack
+            typescript
+            typescript-language-server
             prettier
             tree-sitter
-          ];
-        };
-
-        goToolchain = pkgs.buildEnv {
-          name = "dotfiles-go-toolchain";
-          paths = with pkgs; [
-            go
-            gopls
-            gofumpt
-            goimports-reviser
-          ];
-        };
-
-        rustToolchain = pkgs.buildEnv {
-          name = "dotfiles-rust-toolchain";
-          paths = with pkgs; [
-            rustc
-            cargo
-            rustfmt
-            clippy
-            rust-analyzer
-          ];
-        };
-
-        rubyToolchain = pkgs.buildEnv {
-          name = "dotfiles-ruby-toolchain";
-          paths = with pkgs; [
-            ruby_3_4
-          ];
-        };
-
-        nvimToolchain = pkgs.buildEnv {
-          name = "dotfiles-nvim-toolchain";
-          paths = with pkgs; [
-            neovim
-          ];
-        };
-
-        helixToolchain = pkgs.buildEnv {
-          name = "dotfiles-helix-toolchain";
-          paths = with pkgs; [
-            helix
-          ];
-        };
-
-        jjToolchain = pkgs.buildEnv {
-          name = "dotfiles-jj-toolchain";
-          paths = with pkgs; [
-            jujutsu
-          ];
-        };
-
-        ghToolchain = pkgs.buildEnv {
-          name = "dotfiles-gh-toolchain";
-          paths = with pkgs; [
-            gh
-          ];
-        };
-
-        gitToolchain = pkgs.buildEnv {
-          name = "dotfiles-git-toolchain";
-          paths = with pkgs; [
-            git
-          ];
-        };
-
-        onePasswordCli =
-          let
-            unfreePkgs = pkgsAllowingUnfree [ "1password-cli" ];
-          in pkgs.buildEnv {
-            name = "dotfiles-1password-cli";
-            paths = [
-              unfreePkgs._1password-cli
-            ];
-          };
-
-        zigToolchain = pkgs.buildEnv {
-          name = "dotfiles-zig-toolchain";
-          paths = [
-            # ziglings tracks Zig dev builds, so use zig-overlay's latest master.
-            (zig.packages.${system}.master)
-
-            # Use zls from zigtools/zls (default branch) so it tracks Zig dev.
-            # nixpkgs' tagged zls releases can warn on Zig nightlies.
-            (zls.packages.${system}.default)
-          ];
-        };
-
-        handyToolchain = pkgs.runCommand "dotfiles-handy" {
-          nativeBuildInputs = [ pkgs.makeWrapper ];
-        } ''
-          mkdir -p "$out/bin"
-          for path in ${handy.packages.${system}.default}/*; do
-            [[ "$path" == */bin ]] || ln -s "$path" "$out/"
-          done
-
-          # NixGL supplies Mesa to the Nix WebKit process on non-NixOS hosts.
-          # wtype is on PATH for Handy's direct Wayland text insertion.
-          makeWrapper ${nixgl.packages.${system}.nixGLIntel}/bin/nixGLIntel "$out/bin/handy" \
-            --prefix PATH : "${pkgs.wtype}/bin" \
-            --add-flags "${handy.packages.${system}.default}/bin/handy"
-        '';
-      in {
-        packages = {
-          # Core utilities installed by platform installers.
-          base = baseTools;
-
-          # Individual packages used by tool-specific install scripts.
-          node = nodeToolchain;
-          nodeRuntime = nodeRuntime;
-          go = goToolchain;
-          rust = rustToolchain;
-          ruby = rubyToolchain;
-          nvim = nvimToolchain;
-          helix = helixToolchain;
-          jj = jjToolchain;
-          gh = ghToolchain;
+          ]);
+          # Minimal npm runtime for Hunk when the full Node toolchain is absent.
+          nodeRuntime = pkgs.nodejs_latest;
+          go = bundle "dotfiles-go" (with pkgs; [ go gopls gofumpt goimports-reviser ]);
+          rust = bundle "dotfiles-rust" (with pkgs; [ rustc cargo rustfmt clippy rust-analyzer ]);
+          ruby = pkgs.ruby_3_4;
+          nvim = pkgs.neovim;
+          helix = pkgs.helix;
+          jj = pkgs.jujutsu;
+          gh = pkgs.gh;
           glab = pkgs.glab;
           aws = pkgs.awscli2;
-          git = gitToolchain;
-          "1password" = onePasswordCli;
-          zig = zigToolchain;
+          git = pkgs.git;
           bat = pkgs.bat;
+          "1password" = pkgs._1password-cli;
 
-          # Optional core bundle for one-shot installs.
-          # Install: nix profile install ~/dotfiles/nix
-          # Excludes opt-in tools such as AWS CLI and glab.
-          default = pkgs.buildEnv {
-            name = "dotfiles-toolchain";
-            paths = [ baseTools nodeToolchain goToolchain rustToolchain rubyToolchain nvimToolchain helixToolchain jjToolchain ghToolchain gitToolchain onePasswordCli zigToolchain pkgs.bat ];
-          };
-
-          # NOTE: `hunk`/`hunkdiff` is not in nixpkgs, so it stays as an
-          # `npm install -g hunkdiff` in hunk/install (using nix-provided npm).
+          # Ziglings tracks Zig dev builds: zig master + zls default branch.
+          zig = bundle "dotfiles-zig" [
+            zig.packages.${system}.master
+            zls.packages.${system}.default
+          ];
         } // pkgs.lib.optionalAttrs (system == "x86_64-linux") {
-          chrome =
-            let
-              unfreePkgs = pkgsAllowingUnfree [ "google-chrome" ];
-            in unfreePkgs.google-chrome.override {
-              commandLineArgs = "--ozone-platform-hint=auto --enable-features=WaylandWindowDecorations --enable-wayland-ime=true";
-            };
+          chrome = pkgs.google-chrome.override {
+            commandLineArgs = "--ozone-platform-hint=auto --enable-features=WaylandWindowDecorations --enable-wayland-ime=true";
+          };
         } // pkgs.lib.optionalAttrs pkgs.stdenv.hostPlatform.isLinux {
-          # Handy is a Linux desktop application.
-          handy = handyToolchain;
-        };
-      });
+          # NixGL supplies Mesa to Handy's WebKit process on non-NixOS hosts;
+          # wtype is on PATH for direct Wayland text insertion.
+          handy = pkgs.runCommand "dotfiles-handy" { nativeBuildInputs = [ pkgs.makeWrapper ]; } ''
+            mkdir -p "$out/bin"
+            for path in ${handy.packages.${system}.default}/*; do
+              [[ "$path" == */bin ]] || ln -s "$path" "$out/"
+            done
+            makeWrapper ${nixgl.packages.${system}.nixGLIntel}/bin/nixGLIntel "$out/bin/handy" \
+              --prefix PATH : "${pkgs.wtype}/bin" \
+              --add-flags "${handy.packages.${system}.default}/bin/handy"
+          '';
+        });
+    };
 }

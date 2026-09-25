@@ -6,43 +6,18 @@ PRIVATE_DOTFILES_DIR="${PRIVATE_DOTFILES_DIR:-$SCRIPT_DIR/../skills/external/pri
 # shellcheck disable=SC1091
 source "$SCRIPT_DIR/../lib/nix.sh"
 
-bootstrap_aws_path() {
-    _source_nix_env || true
-    if [[ -d "$HOME/.nix-profile/bin" ]]; then
-        export PATH="$HOME/.nix-profile/bin:$PATH"
-    fi
-}
-
 private_aws_config() {
     local config="$PRIVATE_DOTFILES_DIR/aws/config"
     [[ -f "$config" ]] || return 1
     printf '%s/%s\n' "$(cd "$(dirname "$config")" && pwd)" "$(basename "$config")"
 }
 
-check_installed() {
-    if ! nix_profile_has_entry "$NIX_AWS_PROFILE_NAME"; then
-        return 1
-    fi
-
-    bootstrap_aws_path
-    command -v aws &>/dev/null
-}
+nix_package_tool aws aws
 
 check_configured() {
     local source target="$HOME/.aws/config"
     source="$(private_aws_config)" || return 1
     [[ -L "$target" && "$(readlink "$target")" == "$source" ]]
-}
-
-get_installed_version() {
-    bootstrap_aws_path
-    if command -v aws &>/dev/null; then
-        aws --version 2>&1 | awk '{print $1}'
-    fi
-}
-
-install() {
-    nix_profile_sync_aws
 }
 
 configure() {
@@ -73,15 +48,9 @@ configure() {
     ln -s "$source" "$target"
     echo "Linked private AWS config: $target"
 
-    bootstrap_aws_path
     local profile
     profile="$(aws configure list-profiles 2>/dev/null | head -1)"
     [[ -n "$profile" ]] && echo "Authenticate with: aws sso login --profile $profile"
-}
-
-update() {
-    nix_profile_has_entry "$NIX_AWS_PROFILE_NAME" || return 0
-    nix_profile_sync_aws
 }
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then

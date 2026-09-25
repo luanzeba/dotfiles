@@ -2,9 +2,8 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-DOTFILES_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 # shellcheck disable=SC1091
-source "$DOTFILES_DIR/lib/common.sh"
+source "$SCRIPT_DIR/../lib/common.sh"
 
 REPOSITORY="luanzeba/draw-mermaids"
 INSTALL_DIR="$HOME/.local/draw-mermaids"
@@ -12,7 +11,6 @@ CLI="$INSTALL_DIR/cli.js"
 BIN="$HOME/.local/bin/draw-mermaids"
 
 check_installed() {
-    bootstrap_node_tooling_path >/dev/null 2>&1 || true
     [[ -x "$CLI" && -f "$INSTALL_DIR/.installed-commit" ]]
 }
 
@@ -25,7 +23,7 @@ latest_commit() {
 }
 
 install() {
-    if ! ensure_npm; then
+    if ! command -v npm &>/dev/null; then
         echo "npm not found. Install Node.js first with node/install."
         return 1
     fi

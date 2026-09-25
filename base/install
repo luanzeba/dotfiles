@@ -1,96 +1,12 @@
 #!/bin/bash
 set -e
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Shared CLI basics (fzf, fd, ffmpeg, jq, eza, ripgrep, ssh, tmux, pdftotext).
+
 # shellcheck disable=SC1091
-source "$SCRIPT_DIR/../lib/nix.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/../lib/nix.sh"
 
-BASE_COMMANDS=(fzf fd ffmpeg jq eza rg ssh-keygen tmux pdftotext uv)
-
-bootstrap_base_path() {
-    _source_nix_env || true
-    if [[ -d "$HOME/.nix-profile/bin" ]]; then
-        export PATH="$HOME/.nix-profile/bin:$PATH"
-    fi
-}
-
-base_commands_available() {
-    bootstrap_base_path
-
-    local cmd
-    for cmd in "${BASE_COMMANDS[@]}"; do
-        command -v "$cmd" &>/dev/null || return 1
-    done
-}
-
-check_installed() {
-    if ! nix_profile_has_entry "$NIX_BASE_PROFILE_NAME"; then
-        return 1
-    fi
-
-    base_commands_available
-}
-
-get_installed_version() {
-    bootstrap_base_path
-
-    local parts=()
-
-    if command -v fzf &>/dev/null; then
-        parts+=("fzf $(fzf --version 2>/dev/null | awk '{print $1}')")
-    fi
-
-    if command -v fd &>/dev/null; then
-        parts+=("fd $(fd --version 2>/dev/null | awk '{print $2}')")
-    fi
-
-    if command -v ffmpeg &>/dev/null; then
-        parts+=("ffmpeg $(ffmpeg -version 2>/dev/null | head -1 | awk '{print $3}')")
-    fi
-
-    if command -v jq &>/dev/null; then
-        parts+=("jq $(jq --version 2>/dev/null | sed 's/^jq-//')")
-    fi
-
-    if command -v eza &>/dev/null; then
-        parts+=("eza $(eza --version 2>/dev/null | awk '/^v[0-9]/ {print $1; exit}' | sed 's/^v//')")
-    fi
-
-    if command -v rg &>/dev/null; then
-        parts+=("rg $(rg --version 2>/dev/null | head -1 | awk '{print $2}')")
-    fi
-
-    if command -v tmux &>/dev/null; then
-        parts+=("tmux $(tmux -V 2>/dev/null | awk '{print $2}')")
-    fi
-
-    if command -v pdftotext &>/dev/null; then
-        parts+=("pdftotext $(pdftotext -v 2>&1 | head -1 | awk '{print $3}')")
-    fi
-
-    local joined=""
-    local part
-    for part in "${parts[@]}"; do
-        if [[ -n "$joined" ]]; then
-            joined+=", "
-        fi
-        joined+="$part"
-    done
-    echo "$joined"
-}
-
-install() {
-    nix_profile_sync_base
-}
-
-configure() {
-    # No config files; binaries come from the Nix profile.
-    :
-}
-
-update() {
-    nix_profile_sync_base
-}
+nix_package_tool base fzf fd ffmpeg jq eza rg ssh-keygen tmux pdftotext uv
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     install

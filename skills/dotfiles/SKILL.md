@@ -31,7 +31,7 @@ See [references/tool-template.md](references/tool-template.md) for the install s
 |------|-----------|-----------------|-------------------|
 | Neovim | `nvim/` | `~/.config/nvim` | Yes (binary from Nix + config/plugin setup) |
 | Tmux | `tmux/` | `~/.tmux.conf` | Yes (binary from Nix base + config symlink) |
-| Zsh | `zsh/` | `~/.zshrc`, `~/.zsh/` | Yes (`install.zsh`) |
+| Zsh | `zsh/` | `~/.zshrc`, `~/.zsh/` | Yes |
 | Git | `git/` | `~/.gitconfig` | Yes (binary from Nix + config symlinks) |
 | Ghostty | `ghostty/` | `~/.config/ghostty` | No |
 | Helix | `helix/` | `~/.config/helix` | Yes (binary from Nix + config symlinks) |
@@ -40,7 +40,7 @@ See [references/tool-template.md](references/tool-template.md) for the install s
 | Rust | `rust/` | N/A | Yes (Nix flake: rustc, cargo, rustfmt, clippy, rust-analyzer) |
 | Go | `go/` | N/A | Yes (Nix flake: go, gopls, gofumpt, goimports-reviser) |
 | Ruby | `ruby/` | N/A | Yes (Nix flake: ruby_3_4) |
-| Base utilities | `base/` | N/A | Yes (Nix flake: fzf, fd, ffmpeg, jq, eza, ripgrep, openssh, tmux, poppler-utils, uv) |
+| Base utilities | `base/` | N/A | Yes (Nix flake: fzf, fd, ffmpeg, jq, eza, ripgrep, openssh, tmux, poppler-utils) |
 | Node | `node/` | N/A | Yes (Nix flake: node + TypeScript tools) |
 | Hunk | `hunk/` | `~/.config/hunk/config.toml`, git aliases (`hdiff`, `hshow`) | Yes |
 | Bin | `bin/` | `~/.local/bin` | Yes (custom scripts) |
@@ -80,16 +80,16 @@ After creating or modifying files in `~/dotfiles/`, run the appropriate install 
 
 ## Key Principles
 
-- **Always install latest versions**: Install scripts should always fetch the latest stable/LTS version of tools, not pin to specific versions. Use `@latest` tags, `--lts` flags, or omit version specifiers where possible.
+- **Consistent versions via Nix**: Most Nix-managed tools are pinned by `nix/flake.lock`; Node deliberately refreshes nixpkgs outside the lock. Bump pinned tools with `nix flake update --flake ~/dotfiles/nix`. Whisper uses pinned `mlx-whisper` via uv on Apple Silicon.
 - **Idempotent scripts**: Install scripts must be safe to run multiple times without side effects.
 - **Platform-aware**: Use platform detection to handle differences between macOS and Arch.
 - **Script pattern**: Each tool script should have `install()`, `configure()`, and optionally `apply()` and `update()` functions.
 
 ### Installation Preference Hierarchy
 
-1. **Direct GitHub releases** - Preferred for tools with prebuilt binaries not yet managed by Nix
-2. **Nix flake profile** - Preferred for shared language runtimes/toolchains and base utilities managed in dotfiles (currently base utilities, Node + TypeScript tools, Go, Rust, Ruby, Neovim, Helix, jj, gh, glab, AWS CLI, Git, 1Password CLI, Zig, bat)
-3. **Package managers** - Only when no prebuilt binaries or Nix packages fit (system tools via pacman, GUI apps via brew casks)
+1. **Nix flake package** - Default for CLI tools and toolchains (see `nix/flake.nix`; one package per tool directory)
+2. **npm global** (via Nix node) - For tools not in nixpkgs (`hunk`, `pi`, `qmd`)
+3. **Package managers** - System integration and GUI apps (pacman/`omarchy pkg`, brew casks, flatpak)
 
 Homebrew is installed lazily in Phase 3 of `install`, only when needed for brew-dependent tools.
 
@@ -140,7 +140,7 @@ The `dot` command (symlinked to `~/.local/bin/` from `bin/dotfiles`) provides ea
 dotfiles status   # Check install/config health
 dotfiles pull     # Pull latest and apply changes (skipped on Omarchy)
 dotfiles edit     # Open dotfiles in $EDITOR
-dotfiles update   # Update tools (brew, Nix profiles, nvim plugins, etc.)
+dotfiles update [tools]   # Update all installed tools or only the named ones
 ```
 
 The CLI uses jj (Jujutsu) if available, falling back to git.
@@ -181,7 +181,7 @@ Key locations:
 # Tool-specific installs
 ~/dotfiles/base/install
 ~/dotfiles/nvim/install
-~/dotfiles/zsh/install.zsh
+~/dotfiles/zsh/install
 ~/dotfiles/skills/install
 ~/dotfiles/aws/install
 ~/dotfiles/node/install
@@ -192,15 +192,31 @@ Key locations:
 
 ## Shared Utilities
 
-The `lib/common.sh` file provides shared functions for all scripts:
+`lib/common.sh` (sourced by every script) puts `~/.local/bin` and the Nix profile on `PATH`, sets `NPM_CONFIG_PREFIX=~/.local`, and provides:
 
 ```bash
-source "$DOTFILES_DIR/lib/common.sh"
-
-dotfiles_dir    # Get dotfiles path
-is_macos        # Check if running on macOS
-is_arch         # Check if running on Arch Linux
-is_omarchy      # Check if running on Omarchy
-vcs_cmd         # Run jj or git command
-log_info/log_success/log_warn/log_error  # Logging helpers
+dotfiles_dir                      # Get dotfiles path
+is_macos / is_arch / is_omarchy   # Platform checks
+log_info/log_success/log_warn/log_error
 ```
+
+`lib/nix.sh` (sources common.sh) is for Nix-backed tools:
+
+```bash
+nix_package_tool <entry> <cmd>... # Define check_installed/get_installed_version/install/update
+nix_sync <entry>                  # Install or upgrade a flake package in the Nix profile
+nix_installed <entry>             # Is the profile entry present?
+```
+
+### Adding a Nix-backed tool
+
+1. Add the package to `nix/flake.nix` under the tool's name.
+2. Create `<tool>/install`:
+   ```bash
+   #!/bin/bash
+   set -e
+   source "$(dirname "${BASH_SOURCE[0]}")/../lib/nix.sh"
+   nix_package_tool <tool> <command>...
+   # Override configure()/check_configured() if the tool has config files.
+   if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then install; configure; fi
+   ```

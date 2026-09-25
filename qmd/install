@@ -2,13 +2,10 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-DOTFILES_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-source "$DOTFILES_DIR/lib/common.sh"
+# shellcheck disable=SC1091
+source "$SCRIPT_DIR/../lib/common.sh"
 
-# Use a user-writable npm prefix. npm may resolve to either repo-vendored
-# Node or Nix Node, whose default global prefixes are not stable/writable.
-QMD_NPM_PREFIX="$HOME/.local"
-QMD_BIN="$QMD_NPM_PREFIX/bin/qmd"
+QMD_BIN="$NPM_CONFIG_PREFIX/bin/qmd"
 
 OBSIDIAN_VAULT="$HOME/Obsidian/Personal"
 LAUNCHAGENT_LABEL="luan.qmd-reindex"
@@ -16,8 +13,7 @@ LAUNCHAGENT_PLIST="$HOME/Library/LaunchAgents/${LAUNCHAGENT_LABEL}.plist"
 QMD_REINDEX_SCRIPT="$HOME/.local/bin/qmd-reindex"
 
 check_installed() {
-    bootstrap_node_tooling_path >/dev/null 2>&1 || true
-    [[ -x "$QMD_BIN" ]]
+    [ -x "$QMD_BIN" ]]
 }
 
 check_configured() {
@@ -26,12 +22,10 @@ check_configured() {
 }
 
 install() {
-    if ! ensure_npm; then
+    if ! command -v npm &>/dev/null; then
         echo "npm not found. Please install Node.js first (node/install)"
         return 1
     fi
-
-    setup_npm_global_prefix "$QMD_NPM_PREFIX"
 
     if [[ -x "$QMD_BIN" ]]; then
         echo "qmd already installed"
@@ -95,12 +89,10 @@ configure_launchagent() {
 }
 
 update() {
-    if ! ensure_npm; then
+    if ! command -v npm &>/dev/null; then
         echo "npm not found, cannot update qmd"
         return 1
     fi
-
-    setup_npm_global_prefix "$QMD_NPM_PREFIX"
 
     echo "Updating qmd..."
     npm update -g @tobilu/qmd

@@ -20,21 +20,8 @@ done
 SCRIPT_DIR="$(cd -P "$(dirname "$REAL_SCRIPT")" && pwd)"
 DOTFILES_DIR="$(cd -P "$SCRIPT_DIR/.." && pwd)"
 
-if [[ -f "$DOTFILES_DIR/lib/common.sh" ]]; then
-    # shellcheck disable=SC1091
-    source "$DOTFILES_DIR/lib/common.sh"
-    bootstrap_node_tooling_path >/dev/null 2>&1 || true
-else
-    # Fallback bootstrap when dotfiles cannot be resolved.
-    if [[ -d "$HOME/.nix-profile/bin" && ":$PATH:" != *":$HOME/.nix-profile/bin:"* ]]; then
-        export PATH="$HOME/.nix-profile/bin:$PATH"
-    fi
-    if [[ -d "$HOME/.local/bin" && ":$PATH:" != *":$HOME/.local/bin:"* ]]; then
-        export PATH="$HOME/.local/bin:$PATH"
-    fi
-fi
-
-export PATH="$HOME/.local/bin:$PATH"
+# shellcheck disable=SC1091
+source "$DOTFILES_DIR/lib/common.sh"  # puts Nix + ~/.local/bin on PATH
 
 if ! command -v qmd &>/dev/null; then
     echo "$(date -Iseconds) qmd not found in PATH" >> "$LOG_FILE"

@@ -8,15 +8,11 @@ HUNK_CONFIG_FILE="$HUNK_CONFIG_DIR/config.toml"
 HUNK_PACKAGE="hunkdiff"
 HUNK_GIT_ALIAS_DIFF='-c core.pager="hunk pager" diff'
 HUNK_GIT_ALIAS_SHOW='-c core.pager="hunk pager" show'
-# Use a user-writable npm prefix. npm may resolve to either repo-vendored
-# Node or Nix Node, whose default global prefixes are not stable/writable.
-HUNK_NPM_PREFIX="$HOME/.local"
 
 # shellcheck disable=SC1091
 source "$SCRIPT_DIR/../lib/nix.sh"
 
 check_installed() {
-    bootstrap_node_tooling_path >/dev/null 2>&1 || true
     command -v hunk &>/dev/null
 }
 
@@ -28,33 +24,21 @@ check_configured() {
     return 0
 }
 
+# Hunk is an npm global; install only a minimal Node runtime if npm is missing.
+ensure_hunk_npm() {
+    command -v npm &>/dev/null && return 0
+    nix_sync nodeRuntime
+    command -v npm &>/dev/null
+}
+
 install() {
-    _source_nix_env || true
-    bootstrap_node_tooling_path >/dev/null 2>&1 || true
+    ensure_hunk_npm || return 1
 
-    # If full node toolchain isn't installed, install only minimal node runtime
-    # needed for npm-based hunk installation.
-    if ! nix_profile_has_entry "$NIX_NODE_PROFILE_NAME"; then
-        nix_profile_sync_node_runtime
-        _source_nix_env || true
-        bootstrap_node_tooling_path >/dev/null 2>&1 || true
+    if ! command -v hunk &>/dev/null; then
+        echo "Installing hunk via npm..."
+        npm install -g "$HUNK_PACKAGE"
     fi
-
-    if ! command -v npm &>/dev/null; then
-        echo "npm not on PATH after node runtime sync"
-        return 1
-    fi
-
-    setup_npm_global_prefix "$HUNK_NPM_PREFIX"
-
-    if [[ -x "$HUNK_NPM_PREFIX/bin/hunk" ]]; then
-        echo "hunk already installed: $($HUNK_NPM_PREFIX/bin/hunk --version | head -1)"
-        return 0
-    fi
-
-    echo "Installing hunk via npm..."
-    npm install -g "$HUNK_PACKAGE"
-    echo "hunk installed: $($HUNK_NPM_PREFIX/bin/hunk --version | head -1)"
+    echo "hunk installed: $(hunk --version | head -1)"
 }
 
 configure() {
@@ -68,20 +52,10 @@ configure() {
 }
 
 update() {
-    _source_nix_env || true
-    bootstrap_node_tooling_path >/dev/null 2>&1 || true
-
-    if ! nix_profile_has_entry "$NIX_NODE_PROFILE_NAME"; then
-        nix_profile_sync_node_runtime
-        _source_nix_env || true
-        bootstrap_node_tooling_path >/dev/null 2>&1 || true
-    fi
-
-    if command -v npm &>/dev/null; then
-        setup_npm_global_prefix "$HUNK_NPM_PREFIX"
-        echo "Updating hunk via npm..."
-        npm install -g "${HUNK_PACKAGE}@latest"
-    fi
+    check_installed || return 0
+    ensure_hunk_npm || return 1
+    echo "Updating hunk via npm..."
+    npm install -g "${HUNK_PACKAGE}@latest"
 }
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then

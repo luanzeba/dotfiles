@@ -1,34 +1,22 @@
 #!/bin/bash
 set -e
 
+# Latest Node.js + TypeScript tooling; pnpm via Corepack.
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091
 source "$SCRIPT_DIR/../lib/nix.sh"
 
-check_installed() {
-    nix_profile_has_entry "$NIX_NODE_PROFILE_NAME"
-}
+nix_package_tool node node npm corepack tsc typescript-language-server prettier tree-sitter
 
 check_configured() {
-    bootstrap_node_tooling_path || return 1
-    command -v node &>/dev/null \
-        && command -v npm &>/dev/null \
-        && command -v corepack &>/dev/null \
-        && [[ -L "$HOME/.local/bin/pnpm" && -x "$HOME/.local/bin/pnpm" ]] \
-        && [[ -L "$HOME/.local/bin/pnpx" && -x "$HOME/.local/bin/pnpx" ]] \
-        && command -v tsc &>/dev/null \
-        && command -v typescript-language-server &>/dev/null \
-        && command -v prettier &>/dev/null \
-        && command -v tree-sitter &>/dev/null
-}
-
-install() {
-    nix_profile_sync_node
+    [[ -x "$HOME/.local/bin/pnpm" && -x "$HOME/.local/bin/pnpx" ]]
 }
 
 configure() {
-    bootstrap_node_tooling_path || return 1
     mkdir -p "$HOME/.local/bin"
+    # Nix's node prefix is read-only; send interactive `npm i -g` to ~/.local too.
+    npm config set prefix "$NPM_CONFIG_PREFIX"
     corepack enable --install-directory "$HOME/.local/bin" pnpm
 }
 
@@ -38,7 +26,8 @@ apply() {
 }
 
 update() {
-    nix_profile_sync_node
+    nix_installed node || return 0
+    nix_sync node
     configure
 }
 

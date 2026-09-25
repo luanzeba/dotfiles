@@ -2,19 +2,14 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-DOTFILES_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 PI_CONFIG_DIR="$HOME/.pi/agent"
-# Use a user-writable npm prefix. npm may resolve to either repo-vendored
-# Node or Nix Node, whose default global prefixes are not stable/writable.
-PI_NPM_PREFIX="$HOME/.local"
 PI_NPM_PACKAGE="@earendil-works/pi-coding-agent"
-PI_BIN="$PI_NPM_PREFIX/bin/pi"
 
 # shellcheck disable=SC1091
-source "$DOTFILES_DIR/lib/common.sh"
+source "$SCRIPT_DIR/../lib/common.sh"
+PI_BIN="$NPM_CONFIG_PREFIX/bin/pi"
 
 check_installed() {
-    bootstrap_node_tooling_path >/dev/null 2>&1 || true
     [[ -x "$PI_BIN" ]]
 }
 
@@ -61,13 +56,10 @@ pi_package_installed() {
 
 # Install pi coding agent via npm
 install() {
-    # Ensure npm is available.
-    if ! ensure_npm; then
+    if ! command -v npm &>/dev/null; then
         echo "npm not found. Please install Node.js first (node/install)"
         return 1
     fi
-
-    setup_npm_global_prefix "$PI_NPM_PREFIX"
 
     if pi_package_installed && [[ -x "$PI_BIN" ]]; then
         echo "pi already installed"
@@ -110,12 +102,10 @@ configure() {
 }
 
 update() {
-    if ! ensure_npm; then
+    if ! command -v npm &>/dev/null; then
         echo "npm not found, cannot update pi"
         return 1
     fi
-
-    setup_npm_global_prefix "$PI_NPM_PREFIX"
 
     echo "Updating pi coding agent ($PI_NPM_PACKAGE)..."
     npm update -g "$PI_NPM_PACKAGE"

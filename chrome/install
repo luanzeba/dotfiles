@@ -2,8 +2,8 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-DOTFILES_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-source "$DOTFILES_DIR/lib/nix.sh"
+# shellcheck disable=SC1091
+source "$SCRIPT_DIR/../lib/nix.sh"
 
 # We intentionally use Google Chrome "external extensions" manifests instead of
 # managed policy force/recommended installs. Policy-installed extensions
@@ -18,13 +18,6 @@ HOTKEY_EXTENSION_DIR="$HOME/.local/share/chrome-extensions/chromium-hotkey-exten
 NIX_CHROME_DESKTOP_ENTRY="$HOME/.nix-profile/share/applications/google-chrome.desktop"
 LOCAL_APPLICATIONS_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
 LOCAL_CHROME_DESKTOP_ENTRY="$LOCAL_APPLICATIONS_DIR/google-chrome.desktop"
-
-bootstrap_chrome_path() {
-    _source_nix_env || true
-    if [[ -d "$HOME/.nix-profile/bin" ]]; then
-        export PATH="$HOME/.nix-profile/bin:$PATH"
-    fi
-}
 
 chrome_app_path() {
     local app_path
@@ -41,7 +34,6 @@ chrome_app_path() {
 }
 
 chrome_binary_available() {
-    bootstrap_chrome_path
     command -v google-chrome &>/dev/null || command -v google-chrome-stable &>/dev/null
 }
 
@@ -229,7 +221,7 @@ install() {
     fi
 
     echo "Installing Google Chrome via Nix..."
-    nix_profile_sync_chrome
+    nix_sync chrome
 }
 
 configure() {
@@ -262,8 +254,8 @@ update() {
             echo "Updating Google Chrome via Homebrew..."
             brew upgrade --cask google-chrome 2>/dev/null || echo "Google Chrome already up to date"
         fi
-    elif nix_profile_has_entry "$NIX_CHROME_PROFILE_NAME"; then
-        nix_profile_sync_chrome
+    elif nix_installed chrome; then
+        nix_sync chrome
     fi
 
     configure

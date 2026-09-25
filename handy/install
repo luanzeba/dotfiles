@@ -16,11 +16,6 @@ supported_platform() {
     is_arch
 }
 
-bootstrap_handy_path() {
-    _source_nix_env || true
-    export PATH="$HOME/.nix-profile/bin:$PATH"
-}
-
 hyprland_bindings_configured() {
     [[ ! -f "$HYPRLAND_CONFIG" ]] && return 0
 
@@ -31,8 +26,7 @@ hyprland_bindings_configured() {
 
 check_installed() {
     supported_platform || return 0
-    nix_profile_has_entry "$NIX_HANDY_PROFILE_NAME" || return 1
-    bootstrap_handy_path
+    nix_installed handy || return 1
     command -v handy &>/dev/null
 }
 
@@ -45,7 +39,7 @@ check_configured() {
 
 install() {
     supported_platform || return 0
-    nix_profile_sync_handy
+    nix_sync handy
 }
 
 backup_real_path() {
@@ -118,6 +112,7 @@ apply() {
 }
 
 update() {
+    nix_installed handy || return 0
     install
     configure
 }

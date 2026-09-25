@@ -6,7 +6,7 @@
 #   dotfiles <command> [args]
 #
 # Commands:
-#   status            Show VCS status of dotfiles repo
+#   status            Show install/config health of each tool
 #   pull              Pull latest changes and apply them
 #   edit              Open dotfiles in editor
 #   install           Run main install script
@@ -31,44 +31,65 @@ done
 SCRIPT_DIR="$(cd -P "$(dirname "$REAL_SCRIPT")/.." && pwd)"
 source "$SCRIPT_DIR/lib/common.sh"
 
-# Helper for verbose logging
 log_verbose() {
     if [[ "$VERBOSE" == true ]]; then
         echo "  $*"
     fi
 }
 
-# Get the install script for a tool (returns path or empty string)
-get_install_script() {
-    local tool_dir="$1"
-    if [[ -f "$tool_dir/install" ]]; then
-        echo "$tool_dir/install"
-    elif [[ -f "$tool_dir/install.zsh" ]]; then
-        echo "$tool_dir/install.zsh"
-    fi
+# Every top-level directory with an `install` script is a tool.
+get_available_tools() {
+    local d
+    for d in "$(dotfiles_dir)"/*/install; do
+        [[ -f "$d" ]] && basename "$(dirname "$d")"
+    done
+}
+
+# Run a function from a tool's install script in a subshell.
+# Usage: tool_run <tool> <function> [args...]
+tool_run() {
+    local tool="$1"
+    shift
+    (
+        set +e
+        # shellcheck disable=SC1090
+        source "$(dotfiles_dir)/$tool/install" >/dev/null || exit 1
+        "$@"
+    )
+}
+
+# Usage: tool_has <tool> <function>
+tool_has() {
+    tool_run "$1" declare -F "$2" &>/dev/null
+}
+
+# Print a health-check result: yes, no, or <fallback> if the hook is missing.
+# Usage: tool_check <tool> <check_installed|check_configured> <fallback>
+tool_check() {
+    local tool="$1" check="$2" fallback="$3"
+    tool_run "$tool" eval "
+        if ! declare -F $check >/dev/null; then echo $fallback
+        elif $check &>/dev/null; then echo yes
+        else echo no; fi
+    " 2>/dev/null
 }
 
 # Commands
 
 cmd_status() {
     [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]] && { show_status_help; return 0; }
-    
-    local dir
-    dir="$(dotfiles_dir)"
-    
-    # If a tool name is provided, show detailed status for that tool
+
     if [[ -n "${1:-}" ]]; then
         cmd_status_tool "$1"
         return $?
     fi
-    
+
     echo "Dotfiles Status"
     echo "==============="
     echo ""
-    echo "Location: $dir"
+    echo "Location: $(dotfiles_dir)"
     echo ""
-    
-    # Check platform
+
     echo -n "Platform: "
     if is_omarchy; then
         echo "Omarchy (Arch Linux)"
@@ -80,95 +101,43 @@ cmd_status() {
         echo "Unknown"
     fi
     echo ""
-    
-    # Collect tool status into parallel arrays
-    local tool_names=()
-    local installed_statuses=()
-    local configured_statuses=()
-    
-    for tool_dir in "$dir"/*/; do
-        local tool_name
-        tool_name=$(basename "$tool_dir")
-        local install_script
-        install_script=$(get_install_script "$tool_dir")
-        
-        # Skip directories without install scripts
-        [[ -n "$install_script" ]] || continue
-        
-        tool_names+=("$tool_name")
-        
-        # Get the right interpreter for this script
-        local interpreter
-        interpreter=$(get_script_interpreter "$install_script")
-        
-        # Check installed and configured status
-        local statuses
-        statuses=$($interpreter -c "
-            source '$install_script'
-            
-            # Check installed (redirect check function stdout to avoid pollution)
-            if declare -f check_installed &>/dev/null; then
-                if check_installed &>/dev/null; then
-                    echo -n 'yes '
-                else
-                    echo -n 'no '
-                fi
-            else
-                echo -n 'unknown '
-            fi
-            
-            # Check configured (redirect check function stdout to avoid pollution)
-            if declare -f check_configured &>/dev/null; then
-                if check_configured &>/dev/null; then
-                    echo 'yes'
-                else
-                    echo 'no'
-                fi
-            else
-                echo 'na'  # Not applicable / no config needed
-            fi
-        " 2>/dev/null)
-        
-        local inst_status conf_status
-        read -r inst_status conf_status <<< "$statuses"
-        installed_statuses+=("$inst_status")
-        configured_statuses+=("$conf_status")
+
+    local tools=() tool width=4
+    mapfile -t tools < <(get_available_tools)
+    for tool in "${tools[@]}"; do
+        (( ${#tool} > width )) && width=${#tool}
     done
-    
-    # Calculate column widths dynamically
-    local tool_width
-    tool_width=$(max_width 4 "${tool_names[@]}")
-    local inst_width=9   # "Installed"
-    local conf_width=10  # "Configured"
-    
-    # Print table header
-    print_table_line "─" "$tool_width" "$inst_width" "$conf_width"
-    print_table_row "$tool_width" "Tool" "$inst_width" "Installed" "$conf_width" "Configured"
-    print_table_separator "$tool_width" "$inst_width" "$conf_width"
-    
-    # Print each tool's status
-    local fully_configured=0
-    local total=${#tool_names[@]}
-    local i
-    
-    for ((i=0; i<total; i++)); do
-        local tool="${tool_names[$i]}"
-        local inst="${installed_statuses[$i]}"
-        local conf="${configured_statuses[$i]}"
-        
-        # Convert to colored display indicators
-        local inst_display conf_display
+
+    local bar_tool bar_inst bar_conf
+    bar_tool=$(printf '%*s' $((width + 2)) '' | sed 's/ /─/g')
+    bar_inst=$(printf '%*s' 11 '' | sed 's/ /─/g')
+    bar_conf=$(printf '%*s' 12 '' | sed 's/ /─/g')
+
+    echo "┌${bar_tool}┬${bar_inst}┬${bar_conf}┐"
+    printf "│ %-${width}s │ Installed │ Configured │\n" "Tool"
+    echo "├${bar_tool}┼${bar_inst}┼${bar_conf}┤"
+
+    local fully_configured=0 inst conf inst_display conf_display
+    for tool in "${tools[@]}"; do
+        read -r inst conf < <(tool_run "$tool" eval '
+            if ! declare -F check_installed >/dev/null; then echo -n "unknown "
+            elif check_installed &>/dev/null; then echo -n "yes "
+            else echo -n "no "; fi
+            if ! declare -F check_configured >/dev/null; then echo na
+            elif check_configured &>/dev/null; then echo yes
+            else echo no; fi
+        ' 2>/dev/null)
+
         case "$inst" in
             yes) inst_display="${GREEN}[OK]${NC}" ;;
             no)  inst_display="${RED}[NO]${NC}" ;;
             *)   inst_display="${YELLOW}[??]${NC}" ;;
         esac
-        
         case "$conf" in
             yes) conf_display="${GREEN}[OK]${NC}" ;;
             no)  conf_display="${RED}[NO]${NC}" ;;
-            na) 
-                # If installed and no config needed, show OK
+            na)
+                # No config needed: OK once installed.
                 if [[ "$inst" == "yes" ]]; then
                     conf_display="${GREEN}[OK]${NC}"
                 else
@@ -177,29 +146,22 @@ cmd_status() {
                 ;;
             *)   conf_display="${YELLOW}[??]${NC}" ;;
         esac
-        
-        # Count fully configured (installed + configured or no config needed)
+
         if [[ "$inst" == "yes" && ("$conf" == "yes" || "$conf" == "na") ]]; then
             fully_configured=$((fully_configured + 1))
         fi
-        
-        # Print row with proper alignment (ANSI codes don't affect printf width)
-        # [OK] is 4 chars, inst_width=9 needs 11 chars between │: 3 + 4 + 4 = 11
-        # [OK] is 4 chars, conf_width=10 needs 12 chars between │: 4 + 4 + 4 = 12
-        printf "│ %-${tool_width}s │   %b    │    %b    │\n" "$tool" "$inst_display" "$conf_display"
+
+        printf "│ %-${width}s │   %b    │    %b    │\n" "$tool" "$inst_display" "$conf_display"
     done
-    
-    print_table_bottom "$tool_width" "$inst_width" "$conf_width"
+
+    echo "└${bar_tool}┴${bar_inst}┴${bar_conf}┘"
     echo ""
-    
-    # Summary
-    echo "$fully_configured/$total tools fully configured"
-    
-    if [[ $fully_configured -lt $total ]]; then
+
+    echo "$fully_configured/${#tools[@]} tools fully configured"
+    if [[ $fully_configured -lt ${#tools[@]} ]]; then
         echo "Run 'dot install <tool>' to install/configure missing tools"
     fi
-    
-    # Show recent errors if any
+
     local err_count
     err_count=$(error_count)
     if [[ "$err_count" -gt 0 ]]; then
@@ -214,104 +176,38 @@ cmd_status() {
 # Show detailed status for a specific tool
 cmd_status_tool() {
     local tool_name="$1"
-    local dir
-    dir="$(dotfiles_dir)"
-    local tool_dir="$dir/$tool_name"
-    
-    # Check if tool exists
-    if [[ ! -d "$tool_dir" ]]; then
+
+    if [[ ! -f "$(dotfiles_dir)/$tool_name/install" ]]; then
         log_error "Unknown tool: $tool_name"
         echo ""
         echo "Available tools:"
-        for d in "$dir"/*/; do
-            local name
-            name=$(basename "$d")
-            local script
-            script=$(get_install_script "$d")
-            [[ -n "$script" ]] && echo "  $name"
-        done
+        get_available_tools | sed 's/^/  /'
         return 1
     fi
-    
-    local install_script
-    install_script=$(get_install_script "$tool_dir")
-    
-    if [[ -z "$install_script" ]]; then
-        log_error "Tool '$tool_name' has no install script"
-        return 1
-    fi
-    
-    local interpreter
-    interpreter=$(get_script_interpreter "$install_script")
-    
+
     echo "Tool: $tool_name"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo ""
-    
-    # Get installed status and version
-    local inst_status version_info
-    inst_status=$($interpreter -c "
-        source '$install_script'
-        if declare -f check_installed &>/dev/null; then
-            if check_installed &>/dev/null; then
-                echo 'yes'
-            else
-                echo 'no'
-            fi
-        else
-            echo 'unknown'
-        fi
-    " 2>/dev/null)
-    
-    # Try to get version
-    version_info=""
+
+    local inst_status conf_status version_info=""
+    inst_status=$(tool_check "$tool_name" check_installed unknown)
+    conf_status=$(tool_check "$tool_name" check_configured na)
+
     if [[ "$inst_status" == "yes" ]]; then
-        # First try get_installed_version from install script
-        version_info=$($interpreter -c "
-            source '$install_script'
-            if declare -f get_installed_version &>/dev/null; then
-                get_installed_version
-            fi
-        " 2>/dev/null)
-        
-        # If not available, try common version flags
+        version_info=$(tool_run "$tool_name" eval 'declare -F get_installed_version >/dev/null && get_installed_version' 2>/dev/null) || true
         if [[ -z "$version_info" ]] && command -v "$tool_name" &>/dev/null; then
-            version_info=$("$tool_name" --version 2>/dev/null | head -1) || \
-            version_info=$("$tool_name" -v 2>/dev/null | head -1) || \
-            version_info=$("$tool_name" version 2>/dev/null | head -1) || \
-            version_info=""
+            version_info=$("$tool_name" --version 2>/dev/null | head -1) || true
         fi
     fi
-    
-    # Print installed status
+
     printf "Installed:  "
     case "$inst_status" in
-        yes)
-            printf "${GREEN}[OK]${NC}"
-            if [[ -n "$version_info" ]]; then
-                printf " %s" "$version_info"
-            fi
-            ;;
+        yes) printf "${GREEN}[OK]${NC}"; [[ -n "$version_info" ]] && printf " %s" "$version_info" ;;
         no)  printf "${RED}[NO]${NC} (not installed)" ;;
         *)   printf "${YELLOW}[??]${NC} (no check defined)" ;;
     esac
     echo ""
-    
-    # Get configured status
-    local conf_status
-    conf_status=$($interpreter -c "
-        source '$install_script'
-        if declare -f check_configured &>/dev/null; then
-            if check_configured &>/dev/null; then
-                echo 'yes'
-            else
-                echo 'no'
-            fi
-        else
-            echo 'na'
-        fi
-    " 2>/dev/null)
-    
+
     printf "Configured: "
     case "$conf_status" in
         yes) printf "${GREEN}[OK]${NC}" ;;
@@ -321,17 +217,14 @@ cmd_status_tool() {
     esac
     echo ""
     echo ""
-    
-    # Show recent errors for this tool
-    # Match tool name in the tool field (which may be "tool" or "tool/script")
-    if [[ -f "$ERROR_LOG" ]] && grep -qE "\|${tool_name}(/|\|)" "$ERROR_LOG" 2>/dev/null; then
-        local err_count
-        err_count=$(grep -cE "\|${tool_name}(/|\|)" "$ERROR_LOG")
-        echo "Recent errors ($err_count total):"
-        grep -E "\|${tool_name}(/|\|)" "$ERROR_LOG" | tail -3 | while IFS='|' read -r ts cmd tool code short _full; do
+
+    # Tool field may be "tool" or "tool/script".
+    local pattern="\|${tool_name}(/|\|)"
+    if [[ -f "$ERROR_LOG" ]] && grep -qE "$pattern" "$ERROR_LOG"; then
+        echo "Recent errors ($(grep -cE "$pattern" "$ERROR_LOG") total):"
+        grep -E "$pattern" "$ERROR_LOG" | tail -3 | while IFS='|' read -r ts cmd _tool _code short _full; do
             local date_part="${ts:0:16}"
-            date_part="${date_part/T/ }"
-            printf "  %-16s %-8s %s\n" "$date_part" "$cmd" "$short"
+            printf "  %-16s %-8s %s\n" "${date_part/T/ }" "$cmd" "$short"
         done
         echo ""
         echo "Run 'dot logs $tool_name' for full details"
@@ -342,19 +235,26 @@ cmd_status_tool() {
 
 cmd_edit() {
     [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]] && { show_edit_help; return 0; }
-    
-    local dir
-    dir="$(dotfiles_dir)"
-    
-    if [[ -n "$EDITOR" ]]; then
-        $EDITOR "$dir"
-    elif command -v nvim &>/dev/null; then
-        nvim "$dir"
-    elif command -v vim &>/dev/null; then
-        vim "$dir"
+
+    local editor="${EDITOR:-}"
+    if [[ -z "$editor" ]]; then
+        editor=$(command -v nvim || command -v vim) || {
+            echo "No editor found. Set \$EDITOR or install nvim/vim."
+            exit 1
+        }
+    fi
+    $editor "$(dotfiles_dir)"
+}
+
+vcs_pull() {
+    if [[ -d .jj ]] && command -v jj &>/dev/null; then
+        jj git fetch && jj rebase -d main@origin || return 1
+        if [[ -n "$(jj log -r 'conflicts() & ::@' --no-graph -T 'change_id ++ "\n"')" ]]; then
+            log_error "Pull introduced unresolved jj conflicts; resolve them before applying changes."
+            return 1
+        fi
     else
-        echo "No editor found. Set \$EDITOR or install nvim/vim."
-        exit 1
+        git pull --rebase --autostash
     fi
 }
 
@@ -363,43 +263,21 @@ cmd_pull() {
 
     while [[ $# -gt 0 ]]; do
         case "$1" in
-            -h|--help)
-                show_pull_help
-                return 0
-                ;;
-            --apply)
-                force_apply=true
-                ;;
-            *)
-                log_error "Unknown option: $1"
-                show_pull_help
-                return 1
-                ;;
+            -h|--help) show_pull_help; return 0 ;;
+            --apply) force_apply=true ;;
+            *) log_error "Unknown option: $1"; show_pull_help; return 1 ;;
         esac
         shift
     done
 
-    local dir
-    dir="$(dotfiles_dir)"
-    cd "$dir" || exit 1
+    cd "$(dotfiles_dir)" || exit 1
 
-    clear_error_log  # Clear errors before pull
+    clear_error_log
     log_info "Pulling latest changes..."
-
-    local output
-    local exit_code
-    set +e
-    output=$(vcs_pull 2>&1)
-    exit_code=$?
-    set -e
-
-    if [[ $exit_code -ne 0 ]]; then
-        log_error_persistent "pull" "-" "$exit_code" "$output"
+    if ! run_logged "pull" "-" vcs_pull; then
         log_error "Pull failed"
-        echo "$output"
-        return $exit_code
+        return 1
     fi
-    [[ -n "$output" ]] && echo "$output"
 
     if is_omarchy && [[ "$force_apply" != "true" ]]; then
         log_info "Omarchy detected: pulled latest changes."
@@ -415,9 +293,20 @@ cmd_pull() {
     log_success "Done!"
 }
 
-cmd_update() {
-    local tools=()
+apply_all() {
+    local tool
+    for tool in $(get_available_tools); do
+        if tool_has "$tool" apply; then
+            log_info "Applying $tool..."
+            run_logged "pull" "$tool" tool_run "$tool" apply || log_warn "Failed to apply $tool"
+        else
+            log_verbose "Skipping $tool (no apply function)"
+        fi
+    done
+}
 
+cmd_update() {
+    local tools=() tool update_all=false
     while [[ $# -gt 0 ]]; do
         case "$1" in
             -h|--help) show_update_help; return 0 ;;
@@ -426,97 +315,50 @@ cmd_update() {
         esac
     done
 
-    local dir
-    dir="$(dotfiles_dir)"
-    local update_all=false
-    [[ ${#tools[@]} -eq 0 ]] && update_all=true
-
-    local tool_dirs=()
-    local unknown_tools=()
-    if [[ "$update_all" == true ]]; then
-        tool_dirs=("$dir"/*/)
+    if [[ ${#tools[@]} -eq 0 ]]; then
+        update_all=true
+        mapfile -t tools < <(get_available_tools)
     else
-        local tool
+        local unknown=()
         for tool in "${tools[@]}"; do
-            if [[ -n "$(get_install_script "$dir/$tool")" ]]; then
-                tool_dirs+=("$dir/$tool")
-            else
-                unknown_tools+=("$tool")
-            fi
+            [[ -f "$(dotfiles_dir)/$tool/install" ]] || unknown+=("$tool")
         done
-
-        if [[ ${#unknown_tools[@]} -gt 0 ]]; then
-            log_error "Unknown tool(s): ${unknown_tools[*]}"
-            echo ""
+        if [[ ${#unknown[@]} -gt 0 ]]; then
+            log_error "Unknown tool(s): ${unknown[*]}"
             echo "Available tools:"
-            get_available_tools | while read -r tool; do
-                echo "  - $tool"
-            done
+            get_available_tools | sed 's/^/  - /'
             return 1
         fi
     fi
 
     log_info "Updating tools..."
-    local failed_tools=()
-    local unsupported_tools=()
-    local output
-
-    # Homebrew is part of the all-tools update, not a named tool.
+    local failed_tools=() unsupported_tools=()
     if [[ "$update_all" == true ]] && is_macos && command -v brew &>/dev/null; then
         log_info "Updating Homebrew..."
-        output=$(brew update && brew upgrade 2>&1) || {
-            log_error_persistent "update" "homebrew" "$?" "$output"
-            log_warn "Homebrew update failed"
-        }
+        run_logged "update" "homebrew" sh -c 'brew update && brew upgrade' || failed_tools+=("homebrew")
     fi
 
-    for tool_dir in "${tool_dirs[@]}"; do
-        local tool_name
-        tool_name=$(basename "$tool_dir")
-        local install_script
-        install_script=$(get_install_script "$tool_dir")
-        [[ -n "$install_script" ]] || continue
-        local interpreter
-        interpreter=$(get_script_interpreter "$install_script")
-        local has_update
-        has_update=$($interpreter -c "source '$install_script' 2>/dev/null; declare -f update &>/dev/null && echo yes" || true)
-
-        if [[ "$has_update" == "yes" ]]; then
-            log_info "Updating $tool_name..."
-            local exit_code
-            if output=$($interpreter -c "source '$install_script'; update" 2>&1); then
-                exit_code=0
-            else
-                exit_code=$?
+    for tool in "${tools[@]}"; do
+        if tool_has "$tool" update; then
+            log_info "Updating $tool..."
+            if ! run_logged "update" "$tool" tool_run "$tool" update; then
+                failed_tools+=("$tool")
+                log_warn "Failed to update $tool"
             fi
-
-            if [[ $exit_code -ne 0 ]]; then
-                log_error_persistent "update" "$tool_name" "$exit_code" "$output"
-                failed_tools+=("$tool_name")
-                log_warn "Failed to update $tool_name"
-            fi
-            [[ -n "$output" ]] && echo "$output"
-        elif [[ "$update_all" == true ]]; then
-            log_verbose "Skipping $tool_name (no update function)"
+        elif [[ "$update_all" == false ]]; then
+            unsupported_tools+=("$tool")
+            log_warn "$tool has no update() function"
         else
-            unsupported_tools+=("$tool_name")
-            log_warn "$tool_name has no update() function"
+            log_verbose "Skipping $tool (no update function)"
         fi
     done
 
-    if [[ ${#unsupported_tools[@]} -gt 0 ]]; then
-        log_warn "No update function: ${unsupported_tools[*]}"
-    fi
-
+    [[ ${#unsupported_tools[@]} -eq 0 ]] || log_warn "No update function: ${unsupported_tools[*]}"
     if [[ ${#failed_tools[@]} -gt 0 ]]; then
         log_warn "Some tools failed to update: ${failed_tools[*]}"
         echo "Run 'dot logs' to see error details"
     fi
-
-    if [[ ${#unsupported_tools[@]} -gt 0 || ${#failed_tools[@]} -gt 0 ]]; then
-        return 1
-    fi
-
+    [[ ${#failed_tools[@]} -eq 0 && ${#unsupported_tools[@]} -eq 0 ]] || return 1
     if [[ "$update_all" == true ]]; then
         log_success "All tools updated!"
     else
@@ -631,131 +473,31 @@ cmd_logs() {
     echo "Run 'dot logs --clear' to clear"
 }
 
-apply_all() {
-    local dir
-    dir="$(dotfiles_dir)"
-    
-    for tool_dir in "$dir"/*/; do
-        local tool_name
-        tool_name=$(basename "$tool_dir")
-        local install_script
-        install_script=$(get_install_script "$tool_dir")
-        
-        # Skip directories without install scripts
-        [[ -n "$install_script" ]] || continue
-        
-        local interpreter
-        interpreter=$(get_script_interpreter "$install_script")
-        
-        # Check if script has apply function and run it
-        local has_apply
-        has_apply=$($interpreter -c "source '$install_script' 2>/dev/null; declare -f apply &>/dev/null && echo yes")
-        
-        if [[ "$has_apply" == "yes" ]]; then
-            log_info "Applying $tool_name..."
-            $interpreter -c "source '$install_script'; apply"
-        else
-            log_verbose "Skipping $tool_name (no apply function)"
-        fi
-    done
-}
 
-# Get list of available tools (directories with install scripts)
-get_available_tools() {
-    local dir
-    dir="$(dotfiles_dir)"
-    
-    for tool_dir in "$dir"/*/; do
-        local tool_name
-        tool_name=$(basename "$tool_dir")
-        # Check for install script (could be 'install' or 'install.zsh')
-        if [[ -f "$tool_dir/install" ]] || [[ -f "$tool_dir/install.zsh" ]]; then
-            echo "$tool_name"
-        fi
-    done | sort
-}
-
-# Get the appropriate interpreter for a script
-# Returns "zsh" or "bash"
-get_script_interpreter() {
-    local script="$1"
-    local shebang
-    shebang=$(head -1 "$script" 2>/dev/null)
-    if [[ "$shebang" == *zsh* ]]; then
-        echo "zsh"
-    else
-        echo "bash"
-    fi
-}
-
-# Run install script for a single tool
+# Run install for a single tool. If it's already installed (and not forced),
+# only configure() runs.
 # Usage: install_tool <tool> [force]
 install_tool() {
-    local tool="$1"
-    local force="${2:-false}"
-    local dir
-    dir="$(dotfiles_dir)"
-    
-    local install_script=""
-    if [[ -f "$dir/$tool/install" ]]; then
-        install_script="$dir/$tool/install"
-    elif [[ -f "$dir/$tool/install.zsh" ]]; then
-        install_script="$dir/$tool/install.zsh"
-    fi
-    
-    if [[ -z "$install_script" ]]; then
-        return 1
-    fi
-    
-    local interpreter
-    interpreter=$(get_script_interpreter "$install_script")
-    
-    # Check if already installed (unless forcing)
-    local already_installed=false
-    if [[ "$force" != "true" ]]; then
-        already_installed=$($interpreter -c "source '$install_script'; if declare -f check_installed &>/dev/null && check_installed; then echo true; else echo false; fi" 2>/dev/null)
-    fi
-    
-    local output
-    local exit_code
-    
-    if [[ "$already_installed" == "true" ]]; then
-        # Already installed: only run configure()
+    local tool="$1" force="${2:-false}"
+    local script
+    script="$(dotfiles_dir)/$tool/install"
+
+    if [[ "$force" != "true" ]] && [[ "$(tool_check "$tool" check_installed no)" == "yes" ]]; then
         log_info "$tool already installed, configuring only..."
-        output=$($interpreter -c "source '$install_script'; if declare -f configure &>/dev/null; then configure; fi" 2>&1)
-        exit_code=$?
+        run_logged "install" "$tool" tool_run "$tool" eval 'declare -F configure >/dev/null && configure || true'
     else
-        # Not installed or forcing: run full install script
         if [[ "$force" == "true" ]]; then
             log_info "Force reinstalling $tool..."
         else
             log_info "Installing $tool..."
         fi
-        
-        # Run with appropriate interpreter
-        output=$($interpreter "$install_script" 2>&1)
-        exit_code=$?
+        run_logged "install" "$tool" bash "$script"
     fi
-    
-    # Log error if failed
-    if [[ $exit_code -ne 0 ]]; then
-        log_error_persistent "install" "$tool" "$exit_code" "$output"
-        echo "$output"  # Show output to user
-        return $exit_code
-    fi
-    
-    # Show output on success too (for progress visibility)
-    [[ -n "$output" ]] && echo "$output"
-    return 0
 }
 
 cmd_install() {
-    local dir
-    dir="$(dotfiles_dir)"
-    local force=false
-    local tools=()
-    
-    # Parse arguments
+    local force=false tools=() tool
+
     while [[ $# -gt 0 ]]; do
         case "$1" in
             -f|--force) force=true; shift ;;
@@ -764,51 +506,40 @@ cmd_install() {
             *) tools+=("$1"); shift ;;
         esac
     done
-    
-    # No tools specified: run main install script
+
     if [[ ${#tools[@]} -eq 0 ]]; then
-        clear_error_log  # Clear errors before full install
+        clear_error_log
         log_info "Running main install script..."
-        "$dir/install"
+        "$(dotfiles_dir)/install"
         return $?
     fi
-    
-    # With tools specified: install each one
-    local failed_tools=()
-    local unknown_tools=()
-    
+
+    local failed_tools=() unknown_tools=()
     for tool in "${tools[@]}"; do
-        if [[ -f "$dir/$tool/install" ]] || [[ -f "$dir/$tool/install.zsh" ]]; then
-            if ! install_tool "$tool" "$force"; then
-                failed_tools+=("$tool")
-            fi
+        if [[ -f "$(dotfiles_dir)/$tool/install" ]]; then
+            install_tool "$tool" "$force" || failed_tools+=("$tool")
         else
             unknown_tools+=("$tool")
         fi
     done
-    
-    # Report unknown tools
+
     if [[ ${#unknown_tools[@]} -gt 0 ]]; then
         echo ""
         log_error "Unknown tool(s): ${unknown_tools[*]}"
         echo ""
         echo "Available tools:"
-        get_available_tools | while read -r t; do
-            echo "  - $t"
-        done
+        get_available_tools | sed 's/^/  - /'
         echo ""
     fi
-    
-    # Report failed tools
+
     if [[ ${#failed_tools[@]} -gt 0 ]]; then
         log_warn "Failed to install: ${failed_tools[*]}"
     fi
-    
-    # Exit with error if any issues
+
     if [[ ${#unknown_tools[@]} -gt 0 ]] || [[ ${#failed_tools[@]} -gt 0 ]]; then
         return 1
     fi
-    
+
     log_success "Done!"
 }
 
@@ -904,22 +635,12 @@ dot update - Update installed tools
 Usage:
   dot update [tool...] [-h|--help]
 
-Without tools, updates every tool that has an update() function.
-On macOS, this also runs 'brew update && brew upgrade'.
+Without tools, updates every installed tool with an update() function.
+On macOS, also runs 'brew update && brew upgrade'.
 With tool names, updates only those tools; Homebrew is skipped.
 
 Tools with update functions:
-$(
-    dir="$(dotfiles_dir)"
-    for tool_dir in "$dir"/*/; do
-        install_script=$(get_install_script "$tool_dir")
-        [[ -n "$install_script" ]] || continue
-        tool_name=$(basename "$tool_dir")
-        interpreter=$(get_script_interpreter "$install_script")
-        has_update=$($interpreter -c "source '$install_script' 2>/dev/null; declare -f update &>/dev/null && echo yes" || true)
-        [[ "$has_update" == "yes" ]] && echo "  $tool_name"
-    done
-)
+$(for tool in $(get_available_tools); do tool_has "$tool" update && echo "  $tool"; done)
 EOF
 }
 

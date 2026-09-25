@@ -1,84 +1,12 @@
 #!/bin/bash
 set -e
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Rust toolchain.
+
 # shellcheck disable=SC1091
-source "$SCRIPT_DIR/../lib/nix.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/../lib/nix.sh"
 
-RUST_COMMANDS=(rustc cargo rustfmt cargo-clippy clippy-driver rust-analyzer)
-
-bootstrap_rust_path() {
-    _source_nix_env || true
-    if [[ -d "$HOME/.nix-profile/bin" ]]; then
-        export PATH="$HOME/.nix-profile/bin:$PATH"
-    fi
-}
-
-rust_commands_available() {
-    bootstrap_rust_path
-
-    local cmd
-    for cmd in "${RUST_COMMANDS[@]}"; do
-        command -v "$cmd" &>/dev/null || return 1
-    done
-}
-
-check_installed() {
-    if ! nix_profile_has_entry "$NIX_RUST_PROFILE_NAME"; then
-        return 1
-    fi
-
-    rust_commands_available
-}
-
-get_installed_version() {
-    bootstrap_rust_path
-
-    local parts=()
-
-    if command -v rustc &>/dev/null; then
-        parts+=("$(rustc --version 2>/dev/null | awk '{print $1 " " $2}')")
-    fi
-
-    if command -v cargo &>/dev/null; then
-        parts+=("$(cargo --version 2>/dev/null | awk '{print $1 " " $2}')")
-    fi
-
-    if command -v rustfmt &>/dev/null; then
-        parts+=("$(rustfmt --version 2>/dev/null | awk '{print $1 " " $2}')")
-    fi
-
-    if command -v cargo-clippy &>/dev/null; then
-        parts+=("clippy $(cargo clippy --version 2>/dev/null | awk '{print $2; exit}')")
-    fi
-
-    if command -v rust-analyzer &>/dev/null; then
-        parts+=("rust-analyzer $(rust-analyzer --version 2>/dev/null | awk '{print $2; exit}')")
-    fi
-
-    local joined=""
-    local part
-    for part in "${parts[@]}"; do
-        if [[ -n "$joined" ]]; then
-            joined+=", "
-        fi
-        joined+="$part"
-    done
-    echo "$joined"
-}
-
-install() {
-    nix_profile_sync_rust
-}
-
-configure() {
-    # No config files; binaries come from the Nix profile.
-    :
-}
-
-update() {
-    nix_profile_sync_rust
-}
+nix_package_tool rust rustc cargo rustfmt cargo-clippy rust-analyzer
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     install

@@ -2,50 +2,20 @@
 set -e
 
 # jj (Jujutsu) - A Git-compatible VCS
-# https://github.com/jj-vcs/jj
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091
 source "$SCRIPT_DIR/../lib/nix.sh"
 
-bootstrap_jj_path() {
-    _source_nix_env || true
-    if [[ -d "$HOME/.nix-profile/bin" ]]; then
-        export PATH="$HOME/.nix-profile/bin:$PATH"
-    fi
-}
-
-check_installed() {
-    if ! nix_profile_has_entry "$NIX_JJ_PROFILE_NAME"; then
-        return 1
-    fi
-
-    bootstrap_jj_path
-    command -v jj &>/dev/null
-}
+nix_package_tool jj jj
 
 check_configured() {
     [[ -L "$HOME/.config/jj/config.toml" ]]
 }
 
-get_installed_version() {
-    bootstrap_jj_path
-    if command -v jj &>/dev/null; then
-        jj --version 2>/dev/null
-    fi
-}
-
-install() {
-    nix_profile_sync_jj
-}
-
 configure() {
     mkdir -p "$HOME/.config/jj"
     ln -sf "$SCRIPT_DIR/config.toml" "$HOME/.config/jj/config.toml"
-}
-
-update() {
-    nix_profile_sync_jj
 }
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then

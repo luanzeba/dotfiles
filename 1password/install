@@ -1,55 +1,15 @@
 #!/bin/bash
 set -e
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# 1Password CLI (op). Sign-in is machine-local: `op signin`.
+
 # shellcheck disable=SC1091
-source "$SCRIPT_DIR/../lib/nix.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/../lib/nix.sh"
 
-bootstrap_onepassword_path() {
-    _source_nix_env || true
-    if [[ -d "$HOME/.nix-profile/bin" ]]; then
-        export PATH="$HOME/.nix-profile/bin:$PATH"
-    fi
-}
-
-check_installed() {
-    if ! nix_profile_has_entry "$NIX_ONEPASSWORD_PROFILE_NAME"; then
-        return 1
-    fi
-
-    bootstrap_onepassword_path
-    command -v op &>/dev/null
-}
-
-check_configured() {
-    # `op` saves its sign-in locally; nothing needs configuring here.
-    return 0
-}
-
-get_installed_version() {
-    bootstrap_onepassword_path
-    if command -v op &>/dev/null; then
-        op --version 2>/dev/null | awk '{print "op " $1}'
-    fi
-}
-
-install() {
-    nix_profile_sync_onepassword
-}
+nix_package_tool 1password op
 
 configure() {
-    bootstrap_onepassword_path
-
-    if ! command -v op &>/dev/null; then
-        echo "1Password CLI not installed, skipping configuration"
-        return 0
-    fi
-
     echo "1Password CLI installed. Sign in with: op signin"
-}
-
-update() {
-    nix_profile_sync_onepassword
 }
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then

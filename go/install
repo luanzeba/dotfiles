@@ -1,80 +1,12 @@
 #!/bin/bash
 set -e
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Go toolchain.
+
 # shellcheck disable=SC1091
-source "$SCRIPT_DIR/../lib/nix.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/../lib/nix.sh"
 
-GO_COMMANDS=(go gopls gofumpt goimports-reviser)
-
-bootstrap_go_path() {
-    _source_nix_env || true
-    if [[ -d "$HOME/.nix-profile/bin" ]]; then
-        export PATH="$HOME/.nix-profile/bin:$PATH"
-    fi
-}
-
-go_commands_available() {
-    bootstrap_go_path
-
-    local cmd
-    for cmd in "${GO_COMMANDS[@]}"; do
-        command -v "$cmd" &>/dev/null || return 1
-    done
-}
-
-check_installed() {
-    if ! nix_profile_has_entry "$NIX_GO_PROFILE_NAME"; then
-        return 1
-    fi
-
-    go_commands_available
-}
-
-get_installed_version() {
-    bootstrap_go_path
-
-    local parts=()
-
-    if command -v go &>/dev/null; then
-        parts+=("$(go version 2>/dev/null | awk '{print $3}')")
-    fi
-
-    if command -v gopls &>/dev/null; then
-        parts+=("gopls $(gopls version 2>/dev/null | awk '/golang.org\/x\/tools\/gopls/ {print $2; exit}')")
-    fi
-
-    if command -v gofumpt &>/dev/null; then
-        parts+=("gofumpt $(gofumpt -version 2>/dev/null | awk '{print $1; exit}')")
-    fi
-
-    if command -v goimports-reviser &>/dev/null; then
-        parts+=("goimports-reviser $(goimports-reviser -version 2>/dev/null | head -1 | awk '{print $NF}')")
-    fi
-
-    local joined=""
-    local part
-    for part in "${parts[@]}"; do
-        if [[ -n "$joined" ]]; then
-            joined+=", "
-        fi
-        joined+="$part"
-    done
-    echo "$joined"
-}
-
-install() {
-    nix_profile_sync_go
-}
-
-configure() {
-    # No config files; binaries come from the Nix profile.
-    :
-}
-
-update() {
-    nix_profile_sync_go
-}
+nix_package_tool go go gopls gofumpt goimports-reviser
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     install

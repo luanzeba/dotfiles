@@ -1,149 +1,47 @@
 #!/bin/bash
 #
-# Nix bootstrap and profile management helpers.
-#
-# Source this file (it will source lib/common.sh if not already loaded) and
-# call one of:
-#   ensure_nix                   - install Nix if missing (one-time, may sudo)
-#   nix_profile_sync_base        - install/upgrade dotfiles flake #base package
-#   nix_profile_sync_node        - install/upgrade dotfiles flake #node package
-#   nix_profile_sync_node_runtime- install/upgrade dotfiles flake #nodeRuntime package
-#   nix_profile_sync_go          - install/upgrade dotfiles flake #go package
-#   nix_profile_sync_rust        - install/upgrade dotfiles flake #rust package
-#   nix_profile_sync_ruby        - install/upgrade dotfiles flake #ruby package
-#   nix_profile_sync_nvim        - install/upgrade dotfiles flake #nvim package
-#   nix_profile_sync_helix       - install/upgrade dotfiles flake #helix package
-#   nix_profile_sync_jj          - install/upgrade dotfiles flake #jj package
-#   nix_profile_sync_gh          - install/upgrade dotfiles flake #gh package
-#   nix_profile_sync_glab        - install/upgrade dotfiles flake #glab package
-#   nix_profile_sync_aws         - install/upgrade dotfiles flake #aws package
-#   nix_profile_sync_git         - install/upgrade dotfiles flake #git package
-#   nix_profile_sync_chrome      - install/upgrade dotfiles flake #chrome package
-#   nix_profile_sync_onepassword - install/upgrade dotfiles flake #1password package
-#   nix_profile_sync_zig         - install/upgrade dotfiles flake #zig package
-#   nix_profile_sync_bat         - install/upgrade dotfiles flake #bat package
-#   nix_profile_sync_handy       - install/upgrade dotfiles flake #handy package
+# Nix helpers. Every Nix-managed tool is a package in nix/flake.nix, installed
+# into the user's Nix profile as an entry with the same name (e.g. `go`).
+# Versions are pinned by nix/flake.lock, so every machine gets the same ones.
 #
 
-# Locate dotfiles dir without requiring common.sh to be sourced first.
-_NIX_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-DOTFILES_ROOT="$(cd "$_NIX_LIB_DIR/.." && pwd)"
+# shellcheck disable=SC1091
+source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
 
-# Source common.sh for logging if available and not already loaded.
-if ! declare -F log_info >/dev/null 2>&1; then
-    # shellcheck disable=SC1091
-    [[ -f "$_NIX_LIB_DIR/common.sh" ]] && source "$_NIX_LIB_DIR/common.sh"
-fi
+NIX_FLAKE="path:$(cd "$(dirname "${BASH_SOURCE[0]}")/../nix" && pwd)"
 
-NIX_FLAKE_DIR="$DOTFILES_ROOT/nix"
-NIX_EXPERIMENTAL_FEATURES="nix-command flakes"
-NIX_NODE_NIXPKGS_URL="github:NixOS/nixpkgs/nixpkgs-unstable"
+_nix() {
+    nix --extra-experimental-features "nix-command flakes" "$@"
+}
 
-# Nix profile entry names used by dotfiles scripts.
-NIX_PROFILE_NAME="nix"
-NIX_BASE_PROFILE_NAME="base"
-NIX_NODE_PROFILE_NAME="node"
-NIX_NODE_RUNTIME_PROFILE_NAME="nodeRuntime"
-NIX_GO_PROFILE_NAME="go"
-NIX_RUST_PROFILE_NAME="rust"
-NIX_RUBY_PROFILE_NAME="ruby"
-NIX_NVIM_PROFILE_NAME="nvim"
-NIX_HELIX_PROFILE_NAME="helix"
-NIX_JJ_PROFILE_NAME="jj"
-NIX_GH_PROFILE_NAME="gh"
-NIX_GLAB_PROFILE_NAME="glab"
-NIX_AWS_PROFILE_NAME="aws"
-NIX_GIT_PROFILE_NAME="git"
-NIX_CHROME_PROFILE_NAME="chrome"
-NIX_ONEPASSWORD_PROFILE_NAME="1password"
-NIX_ZIG_PROFILE_NAME="zig"
-NIX_BAT_PROFILE_NAME="bat"
-NIX_HANDY_PROFILE_NAME="handy"
-
-# Installables exported by nix/flake.nix.
-NIX_PROFILE_BASE_INSTALLABLE="path:$NIX_FLAKE_DIR#base"
-NIX_PROFILE_NODE_INSTALLABLE="path:$NIX_FLAKE_DIR#node"
-NIX_PROFILE_NODE_RUNTIME_INSTALLABLE="path:$NIX_FLAKE_DIR#nodeRuntime"
-NIX_PROFILE_GO_INSTALLABLE="path:$NIX_FLAKE_DIR#go"
-NIX_PROFILE_RUST_INSTALLABLE="path:$NIX_FLAKE_DIR#rust"
-NIX_PROFILE_RUBY_INSTALLABLE="path:$NIX_FLAKE_DIR#ruby"
-NIX_PROFILE_NVIM_INSTALLABLE="path:$NIX_FLAKE_DIR#nvim"
-NIX_PROFILE_HELIX_INSTALLABLE="path:$NIX_FLAKE_DIR#helix"
-NIX_PROFILE_JJ_INSTALLABLE="path:$NIX_FLAKE_DIR#jj"
-NIX_PROFILE_GH_INSTALLABLE="path:$NIX_FLAKE_DIR#gh"
-NIX_PROFILE_GLAB_INSTALLABLE="path:$NIX_FLAKE_DIR#glab"
-NIX_PROFILE_AWS_INSTALLABLE="path:$NIX_FLAKE_DIR#aws"
-NIX_PROFILE_GIT_INSTALLABLE="path:$NIX_FLAKE_DIR#git"
-NIX_PROFILE_CHROME_INSTALLABLE="path:$NIX_FLAKE_DIR#chrome"
-NIX_PROFILE_ONEPASSWORD_INSTALLABLE="path:$NIX_FLAKE_DIR#1password"
-NIX_PROFILE_ZIG_INSTALLABLE="path:$NIX_FLAKE_DIR#zig"
-NIX_PROFILE_BAT_INSTALLABLE="path:$NIX_FLAKE_DIR#bat"
-NIX_PROFILE_HANDY_INSTALLABLE="path:$NIX_FLAKE_DIR#handy"
-
-# Source nix into PATH for the current shell, if installed.
+# Nix may not be on PATH in fresh non-login shells.
 _source_nix_env() {
-    if command -v nix &>/dev/null; then
-        return 0
-    fi
-
-    local candidates=(
-        "/nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh"
-        "$HOME/.nix-profile/etc/profile.d/nix.sh"
-    )
+    command -v nix &>/dev/null && return 0
     local f
-    for f in "${candidates[@]}"; do
+    for f in /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh \
+             "$HOME/.nix-profile/etc/profile.d/nix.sh"; do
         # shellcheck disable=SC1090
         [[ -f "$f" ]] && . "$f" && break
     done
-
-    # Determinate Nix can install the nix CLI into the system profile without
-    # making it visible to non-login shells.
-    if ! command -v nix &>/dev/null && [[ -x /nix/var/nix/profiles/default/bin/nix ]]; then
-        export PATH="/nix/var/nix/profiles/default/bin:$PATH"
-    fi
-
     command -v nix &>/dev/null
 }
 
-ensure_nix() {
-    if _source_nix_env && _nix_daemon_ready; then
-        return 0
-    fi
+_nix_daemon_ready() { _nix store ping >/dev/null 2>&1; }
 
-    if ! command -v nix &>/dev/null; then
+ensure_nix() {
+    if ! _source_nix_env; then
         log_info "Installing Nix via Determinate Systems installer (will request sudo)..."
         curl --proto '=https' --tlsv1.2 -sSf -L https://install.determinate.systems/nix \
             | sh -s -- install --determinate --no-confirm
-
         _source_nix_env || {
             log_error "Nix installed but not on PATH. Open a new shell and re-run."
             return 1
         }
     fi
+    _nix_daemon_ready && return 0
 
-    _ensure_nix_daemon_running
-}
-
-# Check whether the nix-daemon socket is responding.
-_nix_daemon_ready() {
-    nix --extra-experimental-features 'nix-command' store ping >/dev/null 2>&1
-}
-
-# Start the Determinate nix-daemon if it isn't already running.
-_ensure_nix_daemon_running() {
-    if _nix_daemon_ready; then
-        return 0
-    fi
-
-    if pgrep -f 'determinate-nixd daemon' >/dev/null 2>&1 \
-       || pgrep -x nix-daemon >/dev/null 2>&1; then
-        # Already started, just give it a moment.
-        sleep 1
-        _nix_daemon_ready && return 0
-    fi
-
-    log_info "Starting nix-daemon (no systemd; backgrounding via nohup)..."
-    local daemon_cmd=""
+    # On machines without a service manager, start the daemon as before.
+    local daemon_cmd
     if command -v determinate-nixd &>/dev/null; then
         daemon_cmd="determinate-nixd daemon"
     elif command -v nix-daemon &>/dev/null; then
@@ -152,152 +50,78 @@ _ensure_nix_daemon_running() {
         log_error "No nix-daemon binary found"
         return 1
     fi
-
-    # Redirect must happen inside sudo so /var/log is writable.
-    sudo sh -c "nohup $daemon_cmd >/var/log/nix-daemon.log 2>&1 </dev/null &"
-
-    # Wait up to 10s for the socket to come up.
+    if ! pgrep -f 'determinate-nixd daemon' >/dev/null 2>&1 \
+       && ! pgrep -x nix-daemon >/dev/null 2>&1; then
+        log_info "Starting nix-daemon..."
+        sudo sh -c "nohup $daemon_cmd >/var/log/nix-daemon.log 2>&1 </dev/null &"
+    fi
     local i
     for i in 1 2 3 4 5 6 7 8 9 10; do
         sleep 1
         _nix_daemon_ready && return 0
     done
-
     log_error "nix-daemon did not become ready in time"
     return 1
 }
 
-_nix_profile_list_plain() {
-    nix --extra-experimental-features "$NIX_EXPERIMENTAL_FEATURES" profile list 2>/dev/null \
-        | sed -E 's/\x1B\[[0-9;]*[mK]//g'
+# Usage: nix_installed <entry>
+nix_installed() {
+    _source_nix_env && _nix profile list --json 2>/dev/null | grep -q "\"$1\":{"
 }
 
-nix_profile_has_entry() {
-    local entry_name="$1"
-    _source_nix_env || return 1
-
-    _nix_profile_list_plain | awk -v entry="$entry_name" '
-        $1 == "Name:" && $2 == entry { found = 1 }
-        END { exit(found ? 0 : 1) }
-    '
-}
-
-_nix_profile_add_installable() {
-    local entry_name="$1"
-    local installable="$2"
-    shift 2
-
-    local add_priority=false
-    if [[ "$entry_name" != "$NIX_PROFILE_NAME" ]] && nix_profile_has_entry "$NIX_PROFILE_NAME"; then
-        # Allow per-tool entries to coexist with a legacy catch-all `nix` entry.
-        add_priority=true
-    fi
-
-    if [[ "$entry_name" == "$NIX_NODE_RUNTIME_PROFILE_NAME" ]]; then
-        # Runtime fallback for hunk should never shadow full node toolchains.
-        add_priority=true
-    fi
-
-    if [[ "$add_priority" == true ]]; then
-        nix --extra-experimental-features "$NIX_EXPERIMENTAL_FEATURES" \
-            profile add --priority 6 "$@" "$installable"
-    else
-        nix --extra-experimental-features "$NIX_EXPERIMENTAL_FEATURES" \
-            profile add "$@" "$installable"
-    fi
-}
-
-# Generic helper to sync a specific profile entry.
-# Usage: nix_profile_sync_installable <entry_name> <installable> [nix options...]
-nix_profile_sync_installable() {
-    local entry_name="$1"
-    local installable="$2"
-    shift 2
-
+# Install the flake package <entry>, or upgrade it to what flake.lock pins.
+# Node deliberately refreshes nixpkgs without changing the repository lock.
+# Usage: nix_sync <entry>
+nix_sync() {
+    local entry="$1" options=() priority=()
     ensure_nix || return 1
-
-    if nix_profile_has_entry "$entry_name"; then
-        log_info "Upgrading nix profile entry '$entry_name'..."
-        nix --extra-experimental-features "$NIX_EXPERIMENTAL_FEATURES" \
-            profile upgrade "$@" "$entry_name" 2>&1 || return 1
+    if [[ "$entry" == node || "$entry" == nodeRuntime ]]; then
+        options=(--refresh --override-input nixpkgs github:NixOS/nixpkgs/nixpkgs-unstable)
+    fi
+    if nix_installed "$entry"; then
+        log_info "Upgrading nix profile entry '$entry'..."
+        _nix profile upgrade "${options[@]}" "$entry"
     else
-        log_info "Installing nix profile entry '$entry_name' from $installable..."
-        _nix_profile_add_installable "$entry_name" "$installable" "$@" || return 1
+        # A legacy catch-all profile entry may already provide these binaries.
+        if [[ "$entry" == nodeRuntime ]] || nix_installed nix; then
+            priority=(--priority 6)
+        fi
+        log_info "Installing nix profile entry '$entry' from $NIX_FLAKE#$entry..."
+        _nix profile add "${priority[@]}" "${options[@]}" "$NIX_FLAKE#$entry"
     fi
 }
 
-nix_profile_sync_base() {
-    nix_profile_sync_installable "$NIX_BASE_PROFILE_NAME" "$NIX_PROFILE_BASE_INSTALLABLE"
+# Print "name version" for each command, read from its Nix store path.
+# Usage: nix_versions <command>...
+nix_versions() {
+    local cmd path
+    for cmd in "$@"; do
+        path="$(command -v "$cmd")" || continue
+        path="$(readlink -f "$path")"
+        [[ "$path" == /nix/store/* ]] || continue
+        path="${path#/nix/store/*-}"
+        echo "${path%%/*}"
+    done | sed -E 's/-wrapper//; s/-([0-9])/ \1/; s/-[a-z]+$//' | awk '!seen[$1]++' | paste -sd, - | sed 's/,/, /g'
 }
 
-# Node intentionally floats without changing the repository's flake.lock.
-# --override-input implies --no-write-lock-file.
-nix_profile_sync_node() {
-    nix_profile_sync_installable "$NIX_NODE_PROFILE_NAME" "$NIX_PROFILE_NODE_INSTALLABLE" \
-        --refresh --override-input nixpkgs "$NIX_NODE_NIXPKGS_URL"
-}
+# Define the standard dot hooks for a tool that is just a flake package.
+# Scripts may override any hook after calling this.
+# Usage: nix_package_tool <entry> <command>...
+nix_package_tool() {
+    NIX_ENTRY="$1"
+    shift
+    NIX_COMMANDS=("$@")
 
-nix_profile_sync_node_runtime() {
-    nix_profile_sync_installable "$NIX_NODE_RUNTIME_PROFILE_NAME" "$NIX_PROFILE_NODE_RUNTIME_INSTALLABLE" \
-        --refresh --override-input nixpkgs "$NIX_NODE_NIXPKGS_URL"
-}
-
-nix_profile_sync_go() {
-    nix_profile_sync_installable "$NIX_GO_PROFILE_NAME" "$NIX_PROFILE_GO_INSTALLABLE"
-}
-
-nix_profile_sync_rust() {
-    nix_profile_sync_installable "$NIX_RUST_PROFILE_NAME" "$NIX_PROFILE_RUST_INSTALLABLE"
-}
-
-nix_profile_sync_ruby() {
-    nix_profile_sync_installable "$NIX_RUBY_PROFILE_NAME" "$NIX_PROFILE_RUBY_INSTALLABLE"
-}
-
-nix_profile_sync_nvim() {
-    nix_profile_sync_installable "$NIX_NVIM_PROFILE_NAME" "$NIX_PROFILE_NVIM_INSTALLABLE"
-}
-
-nix_profile_sync_helix() {
-    nix_profile_sync_installable "$NIX_HELIX_PROFILE_NAME" "$NIX_PROFILE_HELIX_INSTALLABLE"
-}
-
-nix_profile_sync_jj() {
-    nix_profile_sync_installable "$NIX_JJ_PROFILE_NAME" "$NIX_PROFILE_JJ_INSTALLABLE"
-}
-
-nix_profile_sync_gh() {
-    nix_profile_sync_installable "$NIX_GH_PROFILE_NAME" "$NIX_PROFILE_GH_INSTALLABLE"
-}
-
-nix_profile_sync_glab() {
-    nix_profile_sync_installable "$NIX_GLAB_PROFILE_NAME" "$NIX_PROFILE_GLAB_INSTALLABLE"
-}
-
-nix_profile_sync_aws() {
-    nix_profile_sync_installable "$NIX_AWS_PROFILE_NAME" "$NIX_PROFILE_AWS_INSTALLABLE"
-}
-
-nix_profile_sync_git() {
-    nix_profile_sync_installable "$NIX_GIT_PROFILE_NAME" "$NIX_PROFILE_GIT_INSTALLABLE"
-}
-
-nix_profile_sync_chrome() {
-    nix_profile_sync_installable "$NIX_CHROME_PROFILE_NAME" "$NIX_PROFILE_CHROME_INSTALLABLE"
-}
-
-nix_profile_sync_onepassword() {
-    nix_profile_sync_installable "$NIX_ONEPASSWORD_PROFILE_NAME" "$NIX_PROFILE_ONEPASSWORD_INSTALLABLE"
-}
-
-nix_profile_sync_zig() {
-    nix_profile_sync_installable "$NIX_ZIG_PROFILE_NAME" "$NIX_PROFILE_ZIG_INSTALLABLE"
-}
-
-nix_profile_sync_bat() {
-    nix_profile_sync_installable "$NIX_BAT_PROFILE_NAME" "$NIX_PROFILE_BAT_INSTALLABLE"
-}
-
-nix_profile_sync_handy() {
-    nix_profile_sync_installable "$NIX_HANDY_PROFILE_NAME" "$NIX_PROFILE_HANDY_INSTALLABLE"
+    check_installed() {
+        nix_installed "$NIX_ENTRY" || return 1
+        local cmd
+        for cmd in "${NIX_COMMANDS[@]}"; do
+            command -v "$cmd" &>/dev/null || return 1
+        done
+    }
+    get_installed_version() { nix_versions "${NIX_COMMANDS[@]}"; }
+    install() { nix_sync "$NIX_ENTRY"; }
+    configure() { :; }
+    # Only upgrade tools this machine opted into.
+    update() { nix_installed "$NIX_ENTRY" || return 0; nix_sync "$NIX_ENTRY"; }
 }

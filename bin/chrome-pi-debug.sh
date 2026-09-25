@@ -88,7 +88,7 @@ activate_chrome_window() {
 APPLESCRIPT
 }
 
-if ! ensure_node; then
+if ! command -v node &>/dev/null; then
   echo "Could not find a Node.js binary (Raycast often runs with a minimal PATH)."
   echo "Install Node via dotfiles (dot install node)."
   exit 1

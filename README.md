@@ -39,8 +39,8 @@ git clone https://github.com/luanzeba/dotfiles.git ~/dotfiles
 
 The main `install` script sets up the machine for macOS or Arch Linux.
 
-`glab` and `aws` are intentionally opt-in and **not** included in default install phases.
-Use `dot install <tool>` when you want to set one up.
+`glab`, `aws`, `whisper`, and `blender` are intentionally opt-in and **not** included in default install phases.
+Use `dot install <tool>` when you want to set one up. Blender currently installs via Omarchy's package manager only; macOS support can be added later.
 
 `hunk` is included in default installs on macOS and Arch/Omarchy.
 It is configured with:
@@ -48,64 +48,39 @@ It is configured with:
 - Git aliases: `git hdiff` and `git hshow` (both use `hunk pager`)
 - The `hunk-review` agent skill via `skills/hunk-review/`
 
-## Nix adoption (Phase 1)
+## Nix
 
-Base utilities, Node, Go, Rust, Ruby, Neovim, Helix, jj, gh, glab, AWS CLI, Git, 1Password CLI, Zig, bat, and Handy are managed by the dotfiles Nix flake (`nix/flake.nix`) as separate installables. Google Chrome uses Nix on x86_64 Linux and Homebrew on macOS:
+Most CLI tools and language toolchains come from one flake, `nix/flake.nix`. `nix/flake.lock` pins nixpkgs for most tools; Node deliberately tracks current nixpkgs, and Whisper uses `uv` instead of Nix. Each package is installed as its own Nix profile entry, named after its tool directory, so `dot install go` installs only `path:~/dotfiles/nix#go`.
 
-- `base/install` → `path:~/dotfiles/nix#base`
-  - `fzf` (required by fzf-lua; installed through Nix because distro packages can lag behind)
-  - `fd`, `ffmpeg`, `jq`, `eza`, `ripgrep` (`rg`), `openssh` (`ssh`, `ssh-keygen`), `tmux`, `poppler-utils` (`pdftotext`), `uv`
-- `node/install` → `path:~/dotfiles/nix#node`
-  - `nodejs_latest`, Corepack-managed `pnpm`/`pnpx`, `typescript` (`tsc`), `typescript-language-server`, `prettier`, `tree-sitter`
-- `go/install` → `path:~/dotfiles/nix#go`
-  - `go`, `gopls`, `gofumpt`, `goimports-reviser`
-- `rust/install` → `path:~/dotfiles/nix#rust`
-  - `rustc`, `cargo`, `rustfmt`, `clippy`, `rust-analyzer`
-- `ruby/install` → `path:~/dotfiles/nix#ruby`
-  - `ruby_3_4` (`ruby`, `gem`, `bundle`)
-- `nvim/install` → `path:~/dotfiles/nix#nvim`
-  - `neovim`
-  - config symlink, Lazy plugin sync, and Mason tooling are still managed by `nvim/install`
-- `helix/install` → `path:~/dotfiles/nix#helix`
-  - `helix` (`hx`)
-  - config symlinks are still managed by `helix/install`
-- `jj/install` → `path:~/dotfiles/nix#jj`
-  - `jujutsu` (`jj`)
-- `gh/install` → `path:~/dotfiles/nix#gh`
-  - `gh`
-  - extensions, `gh-not` config, and launchd agent are still managed by `gh/install`
-- `glab/install` → `path:~/dotfiles/nix#glab`
-  - `glab`
-  - opt-in; excluded from platform installers and the default Nix bundle
-- `aws/install` → `path:~/dotfiles/nix#aws`
-  - AWS CLI v2 (`aws`)
-  - opt-in; links a private IAM Identity Center config when available
-  - SSO tokens remain machine-local under `~/.aws/sso/cache`
-- `git/install` → `path:~/dotfiles/nix#git`
-  - `git`
-  - `~/.gitconfig`, `~/.gitignore_global`, and `~/.git_template` are still managed by `git/install`
-- `chrome/install`
-  - x86_64 Linux: `path:~/dotfiles/nix#chrome` (`google-chrome`; unfree package allowed explicitly), with native Wayland enabled when available
-  - macOS: Homebrew `google-chrome` cask
-  - on Linux, links the Nix desktop entry into `~/.local/share/applications` for launchers
-- `1password/install` → `path:~/dotfiles/nix#1password`
-  - `1password-cli` (`op`; unfree package allowed explicitly for this package)
-  - sign in interactively with `op signin`
-- `zig/install` → `path:~/dotfiles/nix#zig`
-  - `zig` (from `mitchellh/zig-overlay` `master`, for Ziglings/dev builds), `zls`
-- `bat/install` → `path:~/dotfiles/nix#bat`
-  - `bat` (used by fzf-lua previews)
-- `handy/install` → `path:~/dotfiles/nix#handy` (Arch + Hyprland only)
-  - Handy from its upstream flake, wrapped with NixGL and `wtype` for direct Wayland text input
-  - an autostart user service and Omarchy's existing dictation bindings; initial model selection is manual
+| Package | Contents |
+|---------|----------|
+| `base` | `fzf`, `fd`, `ffmpeg`, `jq`, `eza`, `rg`, `ssh`, `tmux`, `pdftotext`, `uv` |
+| `node` | `nodejs_latest`, Corepack, `tsc`, `typescript-language-server`, `prettier`, `tree-sitter` |
+| `nodeRuntime` | Minimal Node/npm fallback for Hunk (lower profile priority) |
+| `go` | `go`, `gopls`, `gofumpt`, `goimports-reviser` |
+| `rust` | `rustc`, `cargo`, `rustfmt`, `clippy`, `rust-analyzer` |
+| `zig` | zig `master` (zig-overlay) + `zls` |
+| `ruby`, `nvim`, `helix`, `jj`, `gh`, `git`, `bat`, `1password` | the single package |
+| `glab`, `aws` | opt-in Nix packages; not part of `./install` |
+| `chrome` | x86_64 Linux only (macOS uses the Homebrew cask) |
+| `handy` | Linux only; wrapped with NixGL + `wtype` |
 
-Base utilities are exposed through `dot install base` and are also installed by the platform installers. Tool-specific install scripts stay scoped to that tool while still using one flake source; for example, `tmux/install` ensures the Nix base profile exists and then manages `~/.tmux.conf`.
+A Nix-backed tool script is mostly one line:
 
-Node intentionally uses `nodejs_latest`. `dot update node` refreshes only Node's `nixpkgs` evaluation and leaves `nix/flake.lock` unchanged; the other Nix toolchains remain pinned.
+```bash
+source "$(dirname "${BASH_SOURCE[0]}")/../lib/nix.sh"
+nix_package_tool go go gopls gofumpt goimports-reviser   # <entry> <commands to check>
+```
 
-`hunk` still installs via `npm install -g hunkdiff` because `hunkdiff` is not in nixpkgs.
-For `dot install hunk`, if the full `node` toolchain is not installed, dotfiles syncs a minimal `nodeRuntime` Nix package (node+npm only) first.
-npm globals are pinned to `~/.local` (binaries in `~/.local/bin`).
+That line defines `check_installed`, `get_installed_version`, `install`, and `update`. Scripts override `configure`/`check_configured` for config symlinks. `update` only upgrades entries that are already installed, so opt-in tools stay opt-in.
+
+To bump pinned versions on every machine: `nix flake update --flake ~/dotfiles/nix`, commit the lock, then `dot pull && dot update` elsewhere. Node deliberately tracks the latest nixpkgs independently of the lock when synced.
+
+Whisper is an opt-in exception: `whisper/install` installs pinned `mlx-whisper` with `uv` on Apple Silicon. `dot update whisper` upgrades existing installations to the pinned version and removes the old Nix profile entry.
+
+npm-only tools (`hunk`, `pi`, `qmd`) install as npm globals into `~/.local`; Hunk can install a minimal `nodeRuntime` profile entry when npm is missing.
+
+Run `bash tests/installers-smoke.sh` for offline checks of the profile helper and targeted update CLI.
 
 ## dotfiles CLI
 
@@ -119,7 +94,7 @@ After installation, use the `dotfiles` (or `dot`) command:
 | `dot install <tool>` | Install specific tool(s), e.g. `dot install base` |
 | `dot install aws` | Install AWS CLI v2 and link private SSO profiles |
 | `dot install -f <tool>` | Force reinstall (skip install check) |
-| `dot update [tool...]` | Update all tools, or only named tool(s) |
+| `dot update [tool...]` | Update all installed tools (and brew on macOS), or only named tools |
 | `dot logs` | View recent errors |
 | `dot edit` | Open in editor |
 

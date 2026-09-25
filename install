@@ -9,24 +9,14 @@ exec 2>&1
 
 FAILED_STEPS=()
 
-# Run a step while streaming its output, retaining failures for error logging.
+# Run a step while streaming its output; failures are logged and skipped.
 run_step() {
     local name="$1"
     shift
-    local output output_file exit_code
-
-    output_file=$(mktemp)
-    "$@" 2>&1 | tee "$output_file"
-    exit_code=${PIPESTATUS[0]}
-
-    if [[ $exit_code -ne 0 ]]; then
-        output=$(<"$output_file")
+    if ! run_logged "install" "$name" "$@"; then
         FAILED_STEPS+=("$name")
-        log_error_persistent "install" "$name" "$exit_code" "$output"
         echo "⚠️  $name failed, continuing..."
     fi
-
-    rm -f "$output_file"
 }
 
 # Bootstrap Homebrew on macOS (only when needed for brew-dependent tools)
@@ -97,7 +87,7 @@ run_step "caps2ctrl/install" bash "$SCRIPT_DIR/caps2ctrl/install"
 
 # Phase 4: Shell setup (after everything else)
 log_info "Phase 4: Setting up shell"
-run_step "zsh/install.zsh" bash "$SCRIPT_DIR/zsh/install.zsh"
+run_step "zsh/install" bash "$SCRIPT_DIR/zsh/install"
 
 # Report any failures
 if [[ ${#FAILED_STEPS[@]} -gt 0 ]]; then
