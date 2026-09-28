@@ -19,7 +19,15 @@
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
-import { type ExtensionAPI, type ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
+import {
+	DynamicBorder,
+	type ExtensionAPI,
+	type ExtensionCommandContext,
+	getSelectListTheme,
+	keyHint,
+	rawKeyHint,
+} from "@earendil-works/pi-coding-agent";
+import { Container, SelectList, Spacer, Text } from "@earendil-works/pi-tui";
 import { parentReviewContext, REVIEW_HANDOFF_PREFIX } from "./context";
 import { ReviewModelError, resolveReviewModel, setupCandidates, writeReviewModel } from "./model";
 import { runReviewers } from "./runner";
@@ -111,7 +119,45 @@ async function runSetup(ctx: ExtensionCommandContext): Promise<void> {
 		return;
 	}
 
-	const choice = await ctx.ui.select("Which model should review your code?", candidates);
+	const title = "Which model should review your code?";
+	// Pi's built-in select renders every option without a viewport, so a long catalog pushes the
+	// cursor off screen. SelectList keeps the cursor centered in a bounded window instead.
+	const choice = ctx.mode === "tui"
+		? await ctx.ui.custom<string | undefined>((tui, theme, _keybindings, done) => {
+			const list = new SelectList(
+				candidates.map((spec) => ({ value: spec, label: spec })),
+				Math.min(candidates.length, 10),
+				getSelectListTheme(),
+			);
+			list.onSelect = (item) => done(item.value);
+			list.onCancel = () => done(undefined);
+
+			const container = new Container();
+			container.addChild(new DynamicBorder());
+			container.addChild(new Spacer(1));
+			container.addChild(new Text(theme.fg("accent", theme.bold(title)), 1, 0));
+			container.addChild(new Spacer(1));
+			container.addChild(list);
+			container.addChild(new Spacer(1));
+			container.addChild(new Text(
+				`${rawKeyHint("↑↓", "navigate")}  ${keyHint("tui.select.confirm", "select")}  ${keyHint("tui.select.cancel", "cancel")}`,
+				1,
+				0,
+			));
+			container.addChild(new Spacer(1));
+			container.addChild(new DynamicBorder());
+
+			return {
+				render: (width: number) => container.render(width),
+				invalidate: () => container.invalidate(),
+				handleMouse: (event) => container.handleMouse(event),
+				handleInput: (data: string) => {
+					list.handleInput(data);
+					tui.requestRender();
+				},
+			};
+		})
+		: await ctx.ui.select(title, candidates);
 	if (!choice) return;
 
 	await writeReviewModel(choice);
