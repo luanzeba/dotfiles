@@ -12,7 +12,7 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 
-const VERSION = "0.4.1";
+const VERSION = "0.5.0";
 const CDP_PORT = Number(process.env.LINEAR_CHROME_CDP_PORT || 9222);
 const CDP_URL = `http://127.0.0.1:${CDP_PORT}`;
 const LINEAR_URL = "https://linear.app";
@@ -56,7 +56,9 @@ Commands:
   auth                                   Check browser authentication
   issue get <issue-or-url>               Get an issue
   issue export <issue-or-url>            Export issue content and metadata
-  issue list [--team <key>] [--limit N]  List recent issues
+  issue list [--team <key>] [--cycle-id ID] [--assignee-id ID] [--all]
+                                          List filtered issues (all pages with --all)
+  cycle upcoming --team <key>             Get the next scheduled cycle
   issue create --team <key> --title T    Create an issue
   issue update <issue> [options]         Update an issue
   issue delete <issue> --yes             Move an issue to Linear's trash
@@ -529,18 +531,59 @@ async function issueExportCommand(args) {
 
 async function issueListCommand(args) {
   const limit = integerOption(args, "--limit", { min: 1, max: 100 }) ?? 20;
+  const all = args.includes("--all");
+  if (all && option(args, "--limit")) fail("Use --all or --limit, not both.");
   await withLinear(async (cdp, sessionId) => {
     const teamRef = option(args, "--team");
     const team = teamRef ? await resolveTeam(cdp, sessionId, teamRef) : undefined;
-    const data = await browserGraphql(cdp, sessionId, `query LinearCliIssues($first: Int!, $filter: IssueFilter) {
-      issues(first: $first, filter: $filter) {
-        nodes { ${ISSUE_FIELDS} }
-      }
-    }`, {
-      first: limit,
-      filter: team ? { team: { id: { eq: team.id } } } : undefined,
-    });
-    console.log(JSON.stringify(data.issues.nodes, null, 2));
+    const filter = {
+      ...(team ? { team: { id: { eq: team.id } } } : {}),
+      ...(option(args, "--cycle-id") ? { cycle: { id: { eq: option(args, "--cycle-id") } } } : {}),
+      ...(option(args, "--assignee-id") ? { assignee: { id: { eq: option(args, "--assignee-id") } } } : {}),
+    };
+    const issues = [];
+    let after;
+    do {
+      const data = await browserGraphql(cdp, sessionId, `query LinearCliIssues($first: Int!, $after: String, $filter: IssueFilter) {
+        issues(first: $first, after: $after, filter: $filter) {
+          nodes { ${ISSUE_FIELDS} }
+          pageInfo { hasNextPage endCursor }
+        }
+      }`, { first: all ? 100 : limit, after, filter });
+      issues.push(...data.issues.nodes);
+      if (!all || !data.issues.pageInfo.hasNextPage) break;
+      after = data.issues.pageInfo.endCursor;
+      if (!after || issues.length >= 2000) fail("Issue listing exceeded the supported scope; refusing a partial result.");
+    } while (true);
+    console.log(JSON.stringify(issues, null, 2));
+  });
+}
+
+async function upcomingCycleCommand(args) {
+  const teamRef = requiredOption(args, "--team");
+  await withLinear(async (cdp, sessionId) => {
+    const team = await resolveTeam(cdp, sessionId, teamRef);
+    const cycles = [];
+    let after;
+    do {
+      const data = await browserGraphql(cdp, sessionId, `query LinearCliCycles($id: String!, $after: String) {
+        team(id: $id) { cycles(first: 100, after: $after) {
+          nodes { id number name startsAt endsAt }
+          pageInfo { hasNextPage endCursor }
+        } }
+      }`, { id: team.id, after });
+      if (!data.team) fail("Team is no longer available.");
+      cycles.push(...data.team.cycles.nodes);
+      if (!data.team.cycles.pageInfo.hasNextPage) break;
+      after = data.team.cycles.pageInfo.endCursor;
+      if (!after || cycles.length >= 2000) fail("Cycle listing exceeded the supported scope; refusing a partial result.");
+    } while (true);
+    if (cycles.some((item) => !Number.isFinite(Date.parse(item.startsAt)) || !Number.isFinite(Date.parse(item.endsAt)))) {
+      fail("Linear returned a cycle without valid dates.");
+    }
+    const cycle = cycles.filter((item) => Date.parse(item.startsAt) > Date.now())
+      .sort((a, b) => Date.parse(a.startsAt) - Date.parse(b.startsAt))[0] || null;
+    console.log(JSON.stringify({ team, cycle }, null, 2));
   });
 }
 
@@ -724,6 +767,7 @@ async function main() {
   if (command === "auth") return authCommand();
   if (command === "teams") return teamsCommand();
   if (command === "states") return statesCommand(args);
+  if (command === "cycle" && args[0] === "upcoming") return upcomingCycleCommand(args.slice(1));
   if (command === "issue") return issueCommand(args);
 
   // Short aliases for common agent calls.
