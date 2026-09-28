@@ -13,7 +13,6 @@ Verify the concern first, then explain it in language the author can act on. Evi
 2. Verify each technical claim with code, documentation, a focused experiment, or test output.
 3. Draft one comment per main concern.
 4. Run a clarity pass: remove unexplained jargon, state the current problem first, and include the expected code shape when asking for a change.
-5. When `review_comment_check` is available, check the final inline candidate before creating or updating it on the review platform. Pass only the exact visible diff hunk and comment, never research notes or an evidence summary.
 
 ## Writing an actionable review comment
 
@@ -47,8 +46,6 @@ Say when a sample is approximate. Do not present pseudocode as a drop-in replace
 - Avoid drive-by comments such as “this is wrong,” “nit,” or “could be cleaner” without explaining why and what better looks like.
 - If uncertain, ask a focused question rather than turning an assumption into a finding.
 - Do not narrate the investigation (for example, “I dug into…”). Keep the needed causal link in the comment itself, and use a direct source link when it helps the author evaluate that link.
-
-`review_comment_check` is a cold-reader check, not technical verification. It may follow Markdown links already in the comment, but it must receive no context the author cannot see. Revise or discard a comment when it returns `clear: false`.
 
 See [references/review-comment-examples.md](references/review-comment-examples.md) for before-and-after examples.
 
