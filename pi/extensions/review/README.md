@@ -1,6 +1,6 @@
 # /review
 
-Have a different model review a change twice, with independent contexts:
+Have a reviewer model review a change twice, with independent contexts:
 
 1. **Simplification and redesign** — assume the AI-written implementation may be unnecessary or
    drastically overbuilt. Find every worthwhile deletion, collapse, reuse, or better overall design.
@@ -107,7 +107,6 @@ the reports produced by that fresh round.
 | `--focus <text>` | Explicitly treat the rest as review guidance, even when its first word is a directory |
 | `--fresh` | Forget both reviewers' prior final reports for this change |
 | `--model <spec>` | Override the configured reviewer model for one run |
-| `--force` | Allow the reviewer model to equal the active model |
 | `--setup` | Pick and save the reviewer model |
 
 ## Local and remote never mix
@@ -139,7 +138,7 @@ This writes the gitignored per-machine setting in `~/.pi/agent/settings.json`:
 ```
 
 If nothing is configured, `/review` refuses instead of guessing. Before starting, it verifies that the
-model exists, its provider authenticates, and it differs from the model that implemented the change.
+model exists and its provider authenticates. The reviewer may be the same model as the active session.
 
 ## Files
 

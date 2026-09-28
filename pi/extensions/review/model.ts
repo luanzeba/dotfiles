@@ -2,7 +2,7 @@
  * Which model reviews.
  *
  * This is a per-machine setting, not a per-invocation question, because the same intent
- * ("Terra implements, Opus reviews") needs different text on different machines:
+ * (for example "Opus reviews") needs different text on different machines:
  *
  *   work machine (BETA proxy)  reviewer = the proxy's Bedrock-style Claude id
  *   personal machine           reviewer = anthropic/claude-opus-5
@@ -10,9 +10,9 @@
  * It lives in pi's settings.json, which on this setup is a gitignored per-machine file, so
  * the work and personal machines keep their own answer.
  *
- * When nothing is configured we refuse rather than guess. Guessing "some model that is not
- * the active one" is exactly how you end up naming a model whose provider reports itself
- * ready but cannot serve it, and getting a 401 halfway through a review.
+ * When nothing is configured we refuse rather than guess. Guessing a model is exactly how
+ * you end up naming one whose provider reports itself ready but cannot serve it, and getting
+ * a 401 halfway through a review.
  */
 
 import * as fs from "node:fs/promises";
@@ -121,11 +121,10 @@ export class ReviewModelError extends Error {}
  *   1. configured at all
  *   2. present in this machine's catalog
  *   3. its provider authenticates
- *   4. different from the model doing the implementing
  */
 export async function resolveReviewModel(
 	ctx: ExtensionContext,
-	options: { override?: string; force?: boolean } = {},
+	options: { override?: string } = {},
 ): Promise<ResolvedReviewModel> {
 	const config = await readReviewConfig();
 	const spec = options.override?.trim() || config.model?.trim();
@@ -135,8 +134,7 @@ export async function resolveReviewModel(
 			[
 				"No reviewer model configured.",
 				"",
-				"The reviewer must be a different model from the one writing the code, and the",
-				"right name differs per machine, so this is set once and remembered.",
+				"The right name differs per machine, so this is set once and remembered.",
 				"",
 				"Run:  /review --setup",
 				`Or add to ${settingsPath()}:`,
@@ -179,23 +177,8 @@ export async function resolveReviewModel(
 		);
 	}
 
-	const active = ctx.model ? `${ctx.model.provider}/${ctx.model.id}` : undefined;
-	const resolved = formatModel(match);
-	if (active && active === resolved && !options.force) {
-		throw new ReviewModelError(
-			[
-				`Reviewer model is the same as the active model (${resolved}).`,
-				"",
-				"A model reviewing its own work does not find its own over-engineering, which is",
-				"the entire point of this command.",
-				"",
-				"Pick another with /review --setup, or pass --force to proceed anyway.",
-			].join("\n"),
-		);
-	}
-
 	return {
-		spec: resolved,
+		spec: formatModel(match),
 		provider: match.provider,
 		id: match.id,
 		...(config.thinking ? { thinking: config.thinking } : {}),
@@ -204,13 +187,10 @@ export async function resolveReviewModel(
 
 /**
  * Models worth offering in --setup: the session's scoped models first (the same set Ctrl+P
- * cycles), then the rest of the catalog. The active model goes last because it is the least
- * useful choice for a reviewer.
+ * cycles), then the rest of the catalog.
  */
 export function setupCandidates(ctx: ExtensionContext): string[] {
 	const scoped = (ctx.scopedModels ?? []).map((entry: { model: CatalogModel }) => formatModel(entry.model));
 	const catalog = availableModels(ctx).map(formatModel);
-	const pool = [...new Set([...scoped, ...catalog])];
-	const active = ctx.model ? formatModel(ctx.model) : undefined;
-	return [...pool.filter((m) => m !== active), ...(active && pool.includes(active) ? [active] : [])];
+	return [...new Set([...scoped, ...catalog])];
 }

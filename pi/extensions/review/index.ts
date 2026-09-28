@@ -1,5 +1,5 @@
 /**
- * /review — have a different model independently check simplification and correctness.
+ * /review — have a reviewer model independently check simplification and correctness.
  *
  * Two jobs that never mix:
  *
@@ -32,7 +32,6 @@ interface ParsedArgs {
 	directory?: string;
 	branch: boolean;
 	fresh: boolean;
-	force: boolean;
 	setup: boolean;
 	model?: string;
 	focus?: string;
@@ -57,14 +56,13 @@ async function directoryArgument(value: string, cwd: string): Promise<string | u
 
 async function parseArgs(raw: string, cwd: string): Promise<ParsedArgs> {
 	const tokens = raw.trim().split(/\s+/).filter(Boolean);
-	const parsed: ParsedArgs = { target: "", branch: false, fresh: false, force: false, setup: false };
+	const parsed: ParsedArgs = { target: "", branch: false, fresh: false, setup: false };
 	const rest: string[] = [];
 
 	for (let index = 0; index < tokens.length; index += 1) {
 		const token = tokens[index]!;
 		if (token === "--branch") parsed.branch = true;
 		else if (token === "--fresh") parsed.fresh = true;
-		else if (token === "--force") parsed.force = true;
 		else if (token === "--setup") parsed.setup = true;
 		else if (token === "--focus") {
 			const focus = tokens.slice(index + 1).join(" ");
@@ -113,14 +111,7 @@ async function runSetup(ctx: ExtensionCommandContext): Promise<void> {
 		return;
 	}
 
-	const active = ctx.model ? `${ctx.model.provider}/${ctx.model.id}` : undefined;
-	// ui.select works on plain strings, so annotate the active model inline and map back.
-	const labels = candidates.map((spec) =>
-		spec === active ? `${spec}  (same as current — not recommended)` : spec,
-	);
-	const chosenLabel = await ctx.ui.select("Which model should review your code?", labels);
-	if (!chosenLabel) return;
-	const choice = candidates[labels.indexOf(chosenLabel)];
+	const choice = await ctx.ui.select("Which model should review your code?", candidates);
 	if (!choice) return;
 
 	await writeReviewModel(choice);
@@ -143,7 +134,7 @@ export default function reviewExtension(pi: ExtensionAPI) {
 	});
 
 	pi.registerCommand("review", {
-		description: "Run independent simplification and correctness reviews with a different model",
+		description: "Run independent simplification and correctness reviews with a reviewer model",
 		handler: async (raw, ctx) => {
 			const args = await parseArgs(raw, ctx.cwd);
 
@@ -158,10 +149,7 @@ export default function reviewExtension(pi: ExtensionAPI) {
 
 			let model: Awaited<ReturnType<typeof resolveReviewModel>>;
 			try {
-				model = await resolveReviewModel(ctx, {
-					...(args.model ? { override: args.model } : {}),
-					force: args.force,
-				});
+				model = await resolveReviewModel(ctx, args.model ? { override: args.model } : {});
 			} catch (error) {
 				// Configuration problems are for the user, not the LLM, and they are
 				// actionable as written. Show them and stop before spawning anything.
