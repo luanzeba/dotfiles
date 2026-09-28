@@ -102,12 +102,6 @@ async function parseArgs(raw: string, cwd: string): Promise<ParsedArgs> {
 	return parsed;
 }
 
-function summarize(change: ChangeSet): string {
-	const parts = [`${change.label} · ${change.changedFiles.length} files`];
-	if (change.priorComments?.length) parts.push(`${change.priorComments.length} existing comments`);
-	return parts.join(" · ");
-}
-
 async function runSetup(ctx: ExtensionCommandContext): Promise<void> {
 	const candidates = setupCandidates(ctx);
 	if (candidates.length === 0) {
@@ -180,9 +174,24 @@ export default function reviewExtension(pi: ExtensionAPI) {
 
 			const controller = new AbortController();
 			activeReview = controller;
+			const startedAt = Date.now();
+			const stages = { simplification: "waiting", correctness: "waiting" };
+			let collecting = true;
+			const showProgress = () => {
+				if (abandonedReviews.has(controller)) return;
+				const seconds = Math.floor((Date.now() - startedAt) / 1_000);
+				const elapsed = seconds < 60
+					? `${seconds}s`
+					: `${Math.floor(seconds / 60)}m${String(seconds % 60).padStart(2, "0")}s`;
+				const phase = collecting
+					? "collecting change"
+					: `simplify: ${stages.simplification} | correct: ${stages.correctness}`;
+				ctx.ui.setStatus("review", `Review ${elapsed} | ${phase} | Ctrl+Shift+R cancel`);
+			};
+			const timer = ctx.mode === "tui" ? setInterval(showProgress, 30_000) : undefined;
 			let change: ChangeSet | undefined;
 			try {
-				ctx.ui.setStatus("review", "Collecting the change...");
+				showProgress();
 				// URLs and MR numbers are remote; a directory selects local work somewhere
 				// other than the parent session's cwd.
 				const source = args.target ? gitlabSource : gitSource;
@@ -196,10 +205,8 @@ export default function reviewExtension(pi: ExtensionAPI) {
 					return;
 				}
 
-				ctx.ui.setStatus(
-					"review",
-					`Reviewing ${summarize(change)} with ${model.id} (Ctrl+Shift+R cancels the review)...`,
-				);
+				collecting = false;
+				showProgress();
 				const parentContext = parentReviewContext(ctx, change);
 				let findings: string;
 				try {
@@ -211,6 +218,10 @@ export default function reviewExtension(pi: ExtensionAPI) {
 						...(args.focus ? { focus: args.focus } : {}),
 						fresh: args.fresh,
 						signal: controller.signal,
+						onProgress: (kind, stage) => {
+							stages[kind] = stage;
+							showProgress();
+						},
 						exec,
 					});
 				} catch (error) {
@@ -242,6 +253,7 @@ export default function reviewExtension(pi: ExtensionAPI) {
 				if (ctx.isIdle()) pi.sendUserMessage(message);
 				else pi.sendUserMessage(message, { deliverAs: "followUp" });
 			} finally {
+				if (timer) clearInterval(timer);
 				if (activeReview === controller) activeReview = undefined;
 				ctx.ui.setStatus("review", undefined);
 				await change?.cleanup?.();

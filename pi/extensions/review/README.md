@@ -10,7 +10,11 @@ Have a different model review a change twice, with independent contexts:
 Both reviews run in parallel. There is no findings quota and no review-wide time cutoff. Zero findings
 is a successful result, especially after earlier rounds have been addressed; neither reviewer should
 invent replacement nits merely to return something. The parent editor stays usable; Escape still
-interrupts the parent, while Ctrl+Shift+R cancels the review.
+interrupts the parent, while Ctrl+Shift+R cancels the review. The footer shows elapsed time and
+both reviewers' current phases (`simplify` and `correct`): waiting, planning, reviewing, done,
+failed, or cancelled. The timer updates every 30 seconds even while a reviewer
+is waiting on a model response. There is no percentage or ETA because investigation and inference
+times cannot be counted reliably in advance.
 
 ## Use
 

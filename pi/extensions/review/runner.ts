@@ -24,6 +24,7 @@ const REVIEWERS = {
 } as const;
 
 type ReviewKind = keyof typeof REVIEWERS;
+type ReviewStage = "planning" | "reviewing" | "done" | "failed" | "cancelled";
 
 export interface RunnerOptions {
 	change: ChangeSet;
@@ -36,6 +37,7 @@ export interface RunnerOptions {
 	/** Forget the final reports from earlier rounds of this change. */
 	fresh?: boolean;
 	signal?: AbortSignal;
+	onProgress?: (kind: ReviewKind, stage: ReviewStage) => void;
 	exec: ExecFn;
 }
 
@@ -214,11 +216,17 @@ async function runPass(options: RunnerOptions, kind: ReviewKind): Promise<string
 	]);
 
 	try {
+		options.onProgress?.(kind, "planning");
 		await invokeReviewer(options, kind, sessionId, `@${briefFile}`, false);
+		options.onProgress?.(kind, "reviewing");
 		const findings = await invokeReviewer(options, kind, sessionId, STEP_TWO_PROMPT, true);
 		await fs.mkdir(path.dirname(history), { recursive: true });
 		await fs.writeFile(history, findings, { mode: 0o600 });
+		options.onProgress?.(kind, "done");
 		return findings;
+	} catch (error) {
+		options.onProgress?.(kind, options.signal?.aborted ? "cancelled" : "failed");
+		throw error;
 	} finally {
 		await fs.rm(promptDir, { recursive: true, force: true });
 	}
