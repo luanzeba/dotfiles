@@ -22,13 +22,16 @@ fn decode_part(part: &str) -> Result<Value, ()> {
     serde_json::from_slice(&bytes).map_err(|_| ())
 }
 
-fn decode(token: &str) -> Result<Value, ()> {
+fn jwt_value(token: &str) -> &str {
     let token = token.trim();
-    let token = match token.split_once(' ') {
+    match token.split_once(' ') {
         Some((scheme, value)) if scheme.eq_ignore_ascii_case("bearer") => value.trim(),
         _ => token,
-    };
-    let mut parts = token.split('.');
+    }
+}
+
+fn decode(token: &str) -> Result<Value, ()> {
+    let mut parts = jwt_value(token).split('.');
     let (Some(header), Some(payload), Some(_signature), None) =
         (parts.next(), parts.next(), parts.next(), parts.next())
     else {
@@ -61,10 +64,12 @@ fn fail(message: &str) -> ! {
 fn main() {
     let args: Vec<_> = env::args().skip(1).collect();
     if args.len() == 1 && args[0] == "--self-test" {
+        let token = "Bearer eyJhbGciOiJub25lIn0.eyJzdWIiOiIxMjMifQ.";
         assert_eq!(
-            decode("Bearer eyJhbGciOiJub25lIn0.eyJzdWIiOiIxMjMifQ.").unwrap(),
+            decode(token).unwrap(),
             json!({ "header": { "alg": "none" }, "payload": { "sub": "123" } })
         );
+        assert_eq!(jwt_value(token).len(), 39);
         println!("ok");
         return;
     }
@@ -78,4 +83,5 @@ fn main() {
     let decoded = decode(&token).unwrap_or_else(|_| fail("Invalid JWT"));
     eprintln!("Warning: signature not verified.");
     println!("{}", serde_json::to_string_pretty(&decoded).unwrap());
+    eprintln!("JWT size: {} bytes", jwt_value(&token).len());
 }
