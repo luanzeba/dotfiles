@@ -68,6 +68,8 @@ Commands:
   issue relation add <issue> [options]   Add an issue relation
   teams                                  List accessible teams
   states --team <key>                    List a team's workflow states
+  api --query <graphql> [--variables J]  Run raw GraphQL (projects, milestones, etc.)
+         (or --query-file / --variables-file <path|->)
   version                                Show version
 
 Create options:
@@ -756,6 +758,15 @@ async function issueRelationCommand(args) {
   fail("Usage: linear issue relation <list|add> ...");
 }
 
+async function apiCommand(args) {
+  const query = readInput(args, "--query", "--query-file");
+  if (!query) fail("Usage: linear api (--query <graphql> | --query-file <path|->) [--variables <json> | --variables-file <path|->]");
+  const variables = JSON.parse(readInput(args, "--variables", "--variables-file") || "{}");
+  await withLinear(async (cdp, sessionId) => {
+    console.log(JSON.stringify(await browserGraphql(cdp, sessionId, query, variables), null, 2));
+  });
+}
+
 async function issueCommand(args) {
   const [subcommand, ...rest] = args;
   if (subcommand === "get") return issueGetCommand(rest);
@@ -778,6 +789,7 @@ async function main() {
   if (command === "teams") return teamsCommand();
   if (command === "states") return statesCommand(args);
   if (command === "cycle" && args[0] === "upcoming") return upcomingCycleCommand(args.slice(1));
+  if (command === "api") return apiCommand(args);
   if (command === "issue") return issueCommand(args);
 
   // Short aliases for common agent calls.
