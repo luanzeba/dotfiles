@@ -36,6 +36,7 @@ private struct RouterConfig: Codable {
             Rule(host: "aws.amazon.com", pathPrefix: nil, profile: "Work"),
             Rule(host: "", pathPrefix: nil, urlContains: "betaairllc", profile: "Work"),
             Rule(host: "youtube.com", pathPrefix: nil, profile: "Home"),
+            Rule(host: "youtu.be", pathPrefix: nil, profile: "Home"),
             Rule(host: "x.com", pathPrefix: nil, profile: "Home"),
             Rule(host: "traveljoy.com", pathPrefix: nil, profile: "Home"),
         ]
@@ -641,6 +642,7 @@ private func runCLI(_ arguments: [String]) -> Int32 {
             ("AWS", testRouter.matchingRule(for: URL(string: "https://console.aws.amazon.com/console/home")!)?.profile == "Work"),
             ("URL substring", testRouter.matchingRule(for: URL(string: "https://x.com/?tenant=BETAAIRLLC")!)?.profile == "Work"),
             ("YouTube", testRouter.matchingRule(for: URL(string: "https://www.youtube.com/watch?v=test")!)?.profile == "Home"),
+            ("YouTube short link", testRouter.matchingRule(for: URL(string: "https://youtu.be/test?t=30")!)?.profile == "Home"),
             ("Home subdomain", testRouter.matchingRule(for: URL(string: "https://www.traveljoy.com/test")!)?.profile == "Home"),
             ("unmatched URL", testRouter.matchingRule(for: URL(string: "https://example.com")!) == nil),
             ("invalid URL", parseURL("not a URL") == nil),
