@@ -29,8 +29,9 @@ times cannot be counted reliably in advance.
 /review --focus git handling is too clever   force text that starts with an existing directory name
 ```
 
-Findings return as two sections in the current session. For a GitLab merge request, the current
-session validates each actionable finding and leaves valid, positioned comments as pending drafts.
+Findings come back to the current session in two sections. For a GitLab merge request, the
+current session validates each actionable finding and leaves the valid, positioned comments as
+pending drafts. When `write_for_publication` is available, it uses the tool to word those comments.
 It never submits, publishes, approves, or resolves a review. Local reviews only return findings for
 the parent session to verify and address. If one reviewer fails or is cancelled, a completed report still returns and the other section
 says what happened; a later round can retry it.

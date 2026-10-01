@@ -46,7 +46,10 @@ Write PR descriptions that explain **why the change matters** and **what behavio
    - For behavior changes, prefer a real before/after request, command, or output.
    - Do not present pre-existing behavior or a test run as the feature demo. If no real consumer is enabled, say that plainly and demonstrate the activation boundary instead.
 
-6. **Open with the matching CLI**
+6. **Write for the reader**
+   - Before you open the PR/MR, run the drafted title and body through `write_for_publication` when that tool is available. If it is not available, revise them yourself. Verify every claim and every template section.
+
+7. **Open with the matching CLI**
    - Write the final body to a file.
    - GitHub: `gh pr create --title "..." --body-file /path/to/body.md`
    - GitLab: `glab mr create --title "..." --description "$(cat /path/to/body.md)"`

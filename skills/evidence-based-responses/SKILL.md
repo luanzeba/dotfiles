@@ -12,7 +12,7 @@ Verify the concern first, then explain it in language the author can act on. Evi
 1. Understand the code and the behavior being changed. Read the full implementation, relevant callers, and tests rather than reviewing the patch in isolation.
 2. Verify each technical claim with code, documentation, a focused experiment, or test output.
 3. Draft one comment per main concern.
-4. Run a clarity pass: remove unexplained jargon, state the current problem first, and include the expected code shape when asking for a change.
+4. Before you create or update a comment, run the verified draft through `write_for_publication` when that tool is available. If it is not available, do a clarity pass yourself: remove unexplained jargon, state the current problem first, and include the expected code shape when you ask for a change.
 
 ## Writing an actionable review comment
 
