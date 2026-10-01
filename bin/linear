@@ -41,6 +41,7 @@ const ISSUE_FIELDS = `
   creator { id name email }
   team { id key name }
   project { id name }
+  projectMilestone { id name }
   cycle { id name number }
   labels { nodes { id name color } }
   parent { id identifier title }
@@ -80,6 +81,9 @@ Create options:
   --assignee-id <id>                     Assignee user ID
   --estimate <points>                    Story-point estimate
   --label-id <id[,id]>                   Issue label ID (repeatable)
+  --project-id <id>                      Project ID
+  --project-milestone-id <id>            Project milestone ID
+  --cycle-id <id>                        Cycle ID
   --parent <issue-or-url>                Parent issue
 
 Update options:
@@ -94,6 +98,7 @@ Update options:
   --estimate <points>                    Story-point estimate
   --label-id <id[,id]>                   Issue label ID (repeatable)
   --project-id <id|none>
+  --project-milestone-id <id|none>
   --cycle-id <id|none>
   --parent <issue-or-url|none>
 
@@ -605,13 +610,18 @@ function issueInput(args, { create = false } = {}) {
   if (stateId !== undefined) input.stateId = stateId;
   if (assigneeId !== undefined) input.assigneeId = assigneeId === "none" ? null : assigneeId;
 
+  for (const [flag, field] of [
+    ["--project-id", "projectId"],
+    ["--project-milestone-id", "projectMilestoneId"],
+    ["--cycle-id", "cycleId"],
+  ]) {
+    const value = option(args, flag);
+    if (value !== undefined) input[field] = value === "none" ? null : value;
+  }
+
   if (!create) {
     const dueDate = option(args, "--due-date");
-    const projectId = option(args, "--project-id");
-    const cycleId = option(args, "--cycle-id");
     if (dueDate !== undefined) input.dueDate = dueDate === "none" ? null : dueDate;
-    if (projectId !== undefined) input.projectId = projectId === "none" ? null : projectId;
-    if (cycleId !== undefined) input.cycleId = cycleId === "none" ? null : cycleId;
   }
   return input;
 }
