@@ -666,7 +666,6 @@ private func runCLI(_ arguments: [String]) -> Int32 {
 }
 
 private final class AppDelegate: NSObject, NSApplicationDelegate {
-    private let router = Router()
     private var lastHyperClick = Date.distantPast
     private var clickMonitor: Any?
 
@@ -695,7 +694,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
         guard let value = event.paramDescriptor(forKeyword: AEKeyword(keyDirectObject))?.stringValue,
               let url = parseURL(value) else { return }
         let followedHyperClick = Date().timeIntervalSince(lastHyperClick) < 1.5
-        router.route(url, prompt: followedHyperClick || hyperIsPressed())
+        Router().route(url, prompt: followedHyperClick || hyperIsPressed())
     }
 }
 
