@@ -275,6 +275,7 @@ export default function reviewExtension(pi: ExtensionAPI) {
 							"This is someone else's merge request, reviewed from an isolated copy. It is unrelated to any local work in this session.",
 							`Merge request URL: ${change.reviewUrl ?? change.label}`,
 							"Do not change any local files. Verify each actionable finding against the current merge request, then use write_for_publication when available to write each valid, positionable comment before leaving it as a pending GitLab draft without asking first.",
+							"Call write_for_publication once per comment, with one idea per comment. Say whether it is a bug or a simplification, and pass blob URLs pinned to the head SHA for any code the comment mentions outside its own hunk. Post its text as returned; if it splits the text on `=====` lines, post each part as its own comment.",
 							"Use the GitLab draft-note workflow and re-fetch the head before every mutation. Do not submit, publish, approve, resolve, or modify existing notes. Skip anything stale, duplicated, unverified, or not safely positionable.",
 						].join(" ")
 						: `The reviewed working tree is ${change.folder}. Verify and address findings there, and push back with evidence where either reviewer is wrong. Do not accept a finding you can disprove.`,
