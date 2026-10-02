@@ -23,7 +23,7 @@ Use `glab` for GitLab repository and merge request data. Use browser automation 
 3. Fetch MR metadata, `diff_refs`, changed files, discussions, existing draft notes, and pipeline status.
 4. Read repository instructions, the complete changed files, relevant callers, and tests. Do not review from the patch alone.
 5. Check whether the same behavior appears in alternate components or code paths.
-6. Draft comments using `../evidence-based-responses/SKILL.md` and `../voice-and-tone/SKILL.md`. When `write_for_publication` is available, use it to polish each verified comment. If it is not available, revise each comment yourself.
+6. Verify each finding with `../evidence-based-responses/SKILL.md`, then word each comment with `write_for_publication` (one idea per comment, pinned blob links for code outside the hunk). Without that tool, follow `../voice-and-tone/SKILL.md`.
 7. Re-fetch the MR head and current diff after drafting. If the hunk changed, remap the comment before posting it.
 8. Record the current head SHA and the current user's published-note count before mutating anything.
 9. For each new inline draft, capture the target line's rendered GitLab diff anchor and add it with `scripts/draft-notes.py`. Update only drafts whose stored range passes verification.

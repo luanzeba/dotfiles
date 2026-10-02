@@ -30,29 +30,6 @@ EOF
 
 Do not post, submit, or publish review content when the user asked only for a draft.
 
-## Review comment code
-
-Use an exact suggestion fence only when the replacement is directly applicable at that location:
-
-````markdown
-```suggestion
-const corrected = code;
-```
-````
-
-Use a normal language-tagged fence when the example is shortened, approximate, spans files, or needs author input:
-
-````markdown
-Roughly:
-
-```ts
-const expectedShape = buildValue(input);
-// ...
-```
-````
-
-Never put approximate code in a suggestion fence. It may be applied as if it were complete.
-
 ## Code blocks
 
 Always specify a language hint such as `ts`, `tsx`, `ruby`, `sql`, `json`, or `bash`.
