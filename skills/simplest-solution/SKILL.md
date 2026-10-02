@@ -1,9 +1,9 @@
 ---
-name: ponytail
-description: Pick the simplest solution that actually works. Use when writing, fixing, refactoring, or designing code, or choosing dependencies, and whenever the user says "ponytail", "be lazy", "simplest solution", "yagni", or "do less", or complains about over-engineering, bloat, or boilerplate. Not for non-coding requests.
+name: simplest-solution
+description: Pick the simplest solution that actually works. Use when writing, fixing, refactoring, or designing code, or choosing dependencies, and whenever the user says "simplest solution", "ponytail", "be lazy", "yagni", or "do less", or complains about over-engineering, bloat, or boilerplate. Not for non-coding requests.
 ---
 
-# Ponytail
+# Simplest Solution
 
 The best code is the code never written. Lazy means efficient, not careless.
 

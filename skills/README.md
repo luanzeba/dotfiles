@@ -9,7 +9,7 @@ skills/
 ├── install              # Downloads external skills, symlinks all to global locations
 ├── skill-creator/       # Guide for creating new skills (forked from anthropics/skills)
 ├── dotfiles/            # Custom skill for managing this dotfiles repo
-├── ponytail/            # Condensed take on Ponytail's simplest-solution skill
+├── simplest-solution/   # Pick the simplest working solution (adapted from Ponytail)
 ├── github-prs/          # Draft/open concise PRs with template + demo guidance
 │   ├── SKILL.md
 │   └── references/
@@ -38,7 +38,7 @@ The `install` script:
 
 Note: `skill-creator` was originally from [anthropics/skills](https://github.com/anthropics/skills) but is now maintained locally with dotfiles-specific additions.
 
-The `ponytail` skill is a condensed local rewrite of [DietrichGebert/ponytail](https://github.com/DietrichGebert/ponytail) (MIT), kept to the parts that steer agents.
+The `simplest-solution` skill is a condensed local rewrite of [DietrichGebert/ponytail](https://github.com/DietrichGebert/ponytail) (MIT), kept to the parts that steer agents.
 
 ## Adding a New Skill
 
