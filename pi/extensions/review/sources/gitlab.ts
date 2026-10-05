@@ -65,7 +65,9 @@ function api(target: MrTarget, endpoint: string, paginate = false): string[] {
 		"--hostname",
 		target.host,
 		`projects/${project}/${endpoint}`,
-		...(paginate ? ["--paginate"] : []),
+		// glab's default `--paginate` output emits one JSON array per page (`[...][...]`), so
+		// request NDJSON (one element per line) and reassemble the array in glabJson.
+		...(paginate ? ["--paginate", "--output", "ndjson"] : []),
 	];
 }
 
@@ -77,7 +79,12 @@ async function glabJson<T>(target: MrTarget, endpoint: string, exec: ExecFn, pag
 	}
 	let parsed: unknown;
 	try {
-		parsed = JSON.parse(result.stdout);
+		parsed = paginate
+			? result.stdout
+					.split("\n")
+					.filter((line) => line.trim())
+					.map((line) => JSON.parse(line))
+			: JSON.parse(result.stdout);
 	} catch {
 		throw new Error(`glab returned non-JSON for ${endpoint}`);
 	}
