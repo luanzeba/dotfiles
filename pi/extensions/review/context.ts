@@ -1,4 +1,4 @@
-import type { ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
+import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type { ChangeSet } from "./sources/types";
 
 export const REVIEW_HANDOFF_PREFIX = "Independent simplification and correctness reviews of ";
@@ -24,7 +24,7 @@ function shorten(text: string, maxChars: number): string {
 	return `${text.slice(0, maxChars - tailLength)}\n\n[earlier message shortened]\n\n${text.slice(-tailLength)}`;
 }
 
-function conversationEntries(ctx: ExtensionCommandContext): ContextEntry[] {
+function conversationEntries(ctx: ExtensionContext): ContextEntry[] {
 	return ctx.sessionManager.buildSessionProjection().messages.flatMap(
 		(message, index): ContextEntry[] => {
 			if (message.role === "compactionSummary") {
@@ -86,7 +86,7 @@ function relevantEntries(
 
 /** Pass recent intent, implementation decisions, and completed checks to the reviewers. */
 export function parentReviewContext(
-	ctx: ExtensionCommandContext,
+	ctx: ExtensionContext,
 	change: Pick<ChangeSet, "kind" | "label" | "reviewUrl" | "references">,
 ): string | undefined {
 	const conversation = relevantEntries(conversationEntries(ctx), change);

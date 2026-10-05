@@ -45,10 +45,15 @@ export interface ChangeSet {
 
 export interface ResolveOptions {
 	cwd: string;
-	/** Compare the whole branch against its merge base instead of just uncommitted work. */
-	branch?: boolean;
+	/**
+	 * Local diff scope. `uncommitted` (default) is working-tree changes against HEAD, `branch` is
+	 * commits since the merge base, and `all` is both: the merge base against the working tree.
+	 */
+	scope?: GitScope;
 	exec: ExecFn;
 }
+
+export type GitScope = "uncommitted" | "branch" | "all";
 
 export interface ChangeSource {
 	kind: ChangeSourceKind;

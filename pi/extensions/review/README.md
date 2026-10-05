@@ -1,4 +1,4 @@
-# /review
+# /review and the `review` tool
 
 Have a reviewer model review a change twice, with independent contexts:
 
@@ -10,7 +10,8 @@ Have a reviewer model review a change twice, with independent contexts:
 Both reviews run in parallel. There is no findings quota and no review-wide time cutoff. Zero findings
 is a successful result, especially after earlier rounds have been addressed; neither reviewer should
 invent replacement nits merely to return something. The parent editor stays usable; Escape still
-interrupts the parent, while Ctrl+Shift+R cancels the review. The footer shows elapsed time and
+interrupts the parent, while Ctrl+Shift+R cancels every running review. Each review shows its own
+footer status with elapsed time and
 both reviewers' current phases (`simplify` and `correct`): waiting, planning, reviewing, done,
 failed, or cancelled. The timer updates every 30 seconds even while a reviewer
 is waiting on a model response. There is no percentage or ETA because investigation and inference
@@ -35,6 +36,37 @@ pending drafts. When `write_for_publication` is available, it uses the tool to w
 It never submits, publishes, approves, or resolves a review. Local reviews only return findings for
 the parent session to verify and address. If one reviewer fails or is cancelled, a completed report still returns and the other section
 says what happened; a later round can retry it.
+
+Reviews run independently, so you can review several worktrees at once.
+
+## Agent tool
+
+The same reviews are available to the agent as the `review` tool, so you can ask it to implement a
+change, review it, and work through the findings before you look:
+
+```
+Implement X in ~/beta/maintenance/.worktrees/task, then review it until it's clean.
+```
+
+The tool reviews local git trees only, never merge requests; MR reviews stay a command you run.
+It returns both reports as its result instead of a new user message. Its parameters:
+
+| Parameter | Effect |
+|---|---|
+| `path` | Working tree to review; defaults to the session's directory |
+| `scope` | `all` (default): everything since the branch point, committed or not. `uncommitted` or `branch` match `/review` and `/review --branch` |
+| `context` | What changed, checks run, and how earlier findings were handled. Replaces the context `/review` derives from the session |
+| `focus` | Extra steering for both reviewers |
+| `fresh` | Forget earlier rounds' reports |
+
+The `all` scope keeps one diff and one round history for the branch, so commits between rounds
+don't reset what the reviewers remember. Escape cancels the tool call; Ctrl+Shift+R also works.
+
+How the agent acts on findings is plain text in the tool's prompt guidelines (`index.ts`): verify
+each finding, fix what's real, push back with evidence, pass rebuttals into the next round's
+`context`, and stop when both reviewers report nothing further, only rejected findings remain, or
+three rounds have run, then hand off what was fixed, rejected, and still open. Edit that text as
+models change. The tool runs only when asked; add a line to `AGENTS.md` if you want it every time.
 
 ## What each reviewer receives
 
@@ -149,12 +181,12 @@ extensions/review/
   prompts/simplifier.md             simplification and redesign mandate
   prompts/correctness-reviewer.md   correctness and regression mandate
   context.ts                        recent parent-session context
-  index.ts                          command routing and parent handoff
+  index.ts                          command, agent tool, and parent handoff
   model.ts                          reviewer model configuration and checks
   runner.ts                         parallel two-step reviewers and compact round history
   sources/
     types.ts                        shared change shape
-    git.ts                          local working tree or branch
+    git.ts                          local working tree, branch, or both
     gitlab.ts                       GitLab MR metadata, diff, comments, commits, and snapshot
     linear.ts                       linked-ticket context
     materialize.ts                  remote snapshot cache
