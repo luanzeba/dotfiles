@@ -23,6 +23,13 @@ else
 	)
 fi
 
+# Without Xcode, SourceKit-based tools (SwiftLint) can't find sourcekitdInProc.
+# Command Line Tools ships it; TOOLCHAIN_DIR tells SourceKitten where to look.
+# Needed for ~/beta/config-service iOS development
+if [[ -z $TOOLCHAIN_DIR && $(xcode-select -p 2>/dev/null) == /Library/Developer/CommandLineTools ]]; then
+	export TOOLCHAIN_DIR=/Library/Developer/CommandLineTools
+fi
+
 x86() { arch -arch x86_64 -e "PATH=$ORIGINAL_PATH" zsh }
 arm() { arch -arch arm64  -e "PATH=$ORIGINAL_PATH" zsh }
 
