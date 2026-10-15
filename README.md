@@ -50,11 +50,11 @@ It is configured with:
 
 ## Nix adoption (Phase 1)
 
-Base utilities, Node, Go, Rust, Ruby, Neovim, Helix, jj, gh, glab, AWS CLI, Git, 1Password CLI, Whisper, Zig, bat, Vicinae, and Handy are managed by the dotfiles Nix flake (`nix/flake.nix`) as separate installables. Google Chrome uses Nix on x86_64 Linux and Homebrew on macOS:
+Base utilities, Node, Go, Rust, Ruby, Neovim, Helix, jj, gh, glab, AWS CLI, Git, 1Password CLI, Zig, bat, Vicinae, and Handy are managed by the dotfiles Nix flake (`nix/flake.nix`) as separate installables. Google Chrome uses Nix on x86_64 Linux and Homebrew on macOS:
 
 - `base/install` → `path:~/dotfiles/nix#base`
   - `fzf` (required by fzf-lua; installed through Nix because distro packages can lag behind)
-  - `fd`, `ffmpeg`, `jq`, `eza`, `ripgrep` (`rg`), `openssh` (`ssh`, `ssh-keygen`), `tmux`, `poppler-utils` (`pdftotext`)
+  - `fd`, `ffmpeg`, `jq`, `eza`, `ripgrep` (`rg`), `openssh` (`ssh`, `ssh-keygen`), `tmux`, `poppler-utils` (`pdftotext`), `uv`
 - `node/install` → `path:~/dotfiles/nix#node`
   - `nodejs_latest`, Corepack-managed `pnpm`/`pnpx`, `typescript` (`tsc`), `typescript-language-server`, `prettier`, `tree-sitter`
 - `go/install` → `path:~/dotfiles/nix#go`
@@ -91,9 +91,6 @@ Base utilities, Node, Go, Rust, Ruby, Neovim, Helix, jj, gh, glab, AWS CLI, Git,
 - `1password/install` → `path:~/dotfiles/nix#1password`
   - `1password-cli` (`op`; unfree package allowed explicitly for this package)
   - sign in interactively with `op signin`
-- `whisper/install` → `path:~/dotfiles/nix#whisper`
-  - `openai-whisper` (`whisper`; ffmpeg runtime is patched by nixpkgs, and the `ffmpeg` CLI is available from `base`)
-  - opt-in; excluded from the default Nix bundle because of its large Python/ML closure
 - `zig/install` → `path:~/dotfiles/nix#zig`
   - `zig` (from `mitchellh/zig-overlay` `master`, for Ziglings/dev builds), `zls`
 - `bat/install` → `path:~/dotfiles/nix#bat`

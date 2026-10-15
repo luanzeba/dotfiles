@@ -1,20 +1,21 @@
 # Whisper
 
-Audio transcription using [OpenAI Whisper](https://github.com/openai/whisper).
+Local speech transcription with [MLX-Whisper](https://github.com/ml-explore/mlx-examples/tree/main/whisper) on Apple Silicon. Audio stays on the machine; no paid transcription API is used.
 
 ## Installation
 
 ```bash
-cd ~/dotfiles
 dot install whisper
 ```
 
-Whisper is installed from the dotfiles Nix flake (`path:~/dotfiles/nix#whisper`) and is intentionally opt-in because the Python/ML dependency closure is large.
+This installs a pinned `mlx-whisper` (see `MLX_WHISPER_VERSION` in `install`) as a `uv` tool, so `mlx_whisper` lives in `~/.local/bin`. `uv` and `ffmpeg` come from the Nix `base` profile.
+
+MLX-Whisper is deliberately not a Nix package: it is a fast-moving Python/ML package that depends on Apple's Metal libraries, which nixpkgs does not support well on macOS. To upgrade, bump the pin and run `dot update whisper`.
 
 ## Usage
 
 ```bash
-whisper audio.m4a --language pt --model large-v2
+~/dotfiles/whisper/transcribe path/to/meeting.m4a --language Portuguese --output-dir ~/Downloads/meeting-transcription
 ```
 
-See the [official documentation](https://github.com/openai/whisper) for more options.
+The wrapper uses the `mlx-community/whisper-large-v3-mlx` model, writes every output format (`txt`, `json`, `srt`, `vtt`, `tsv`), and disables conditioning on previous text, which prevents repetition loops on long, noisy recordings. The model downloads on first use and is cached afterward.

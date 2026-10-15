@@ -1,5 +1,5 @@
 {
-  description = "luan's dotfiles toolchain (nix profile: base + node + go + rust + ruby + nvim + helix + jj + gh + glab + aws + git + chrome + 1password + whisper + zig + bat + vicinae + handy tooling)";
+  description = "luan's dotfiles toolchain (nix profile: base + node + go + rust + ruby + nvim + helix + jj + gh + glab + aws + git + chrome + 1password + zig + bat + vicinae + handy tooling)";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
@@ -49,6 +49,7 @@
             openssh # ssh, ssh-keygen
             tmux
             poppler-utils # pdftotext
+            uv # Python tool installer (used by whisper/install)
           ];
         };
 
@@ -141,21 +142,6 @@
             ];
           };
 
-        whisperToolchain =
-          let
-            whisper = pkgs.openai-whisper.overridePythonAttrs (old: {
-              # The nixpkgs package's audio fixture test currently fails on
-              # local Darwin builds even though the CLI and patched ffmpeg
-              # runtime work.
-              disabledTests = (old.disabledTests or []) ++ [ "test_audio" ];
-            });
-          in pkgs.buildEnv {
-            name = "dotfiles-whisper-toolchain";
-            paths = [
-              whisper
-            ];
-          };
-
         zigToolchain = pkgs.buildEnv {
           name = "dotfiles-zig-toolchain";
           paths = [
@@ -222,13 +208,12 @@
           aws = pkgs.awscli2;
           git = gitToolchain;
           "1password" = onePasswordCli;
-          whisper = whisperToolchain;
           zig = zigToolchain;
           bat = pkgs.bat;
 
           # Optional core bundle for one-shot installs.
           # Install: nix profile install ~/dotfiles/nix
-          # Excludes opt-in tools such as AWS CLI, glab, and Whisper.
+          # Excludes opt-in tools such as AWS CLI and glab.
           default = pkgs.buildEnv {
             name = "dotfiles-toolchain";
             paths = [ baseTools nodeToolchain goToolchain rustToolchain rubyToolchain nvimToolchain helixToolchain jjToolchain ghToolchain gitToolchain onePasswordCli zigToolchain pkgs.bat ];

@@ -20,7 +20,6 @@
 #   nix_profile_sync_git         - install/upgrade dotfiles flake #git package
 #   nix_profile_sync_chrome      - install/upgrade dotfiles flake #chrome package
 #   nix_profile_sync_onepassword - install/upgrade dotfiles flake #1password package
-#   nix_profile_sync_whisper     - install/upgrade dotfiles flake #whisper package
 #   nix_profile_sync_zig         - install/upgrade dotfiles flake #zig package
 #   nix_profile_sync_bat         - install/upgrade dotfiles flake #bat package
 #   nix_profile_sync_vicinae     - install/upgrade dotfiles flake #vicinae package
@@ -58,7 +57,6 @@ NIX_AWS_PROFILE_NAME="aws"
 NIX_GIT_PROFILE_NAME="git"
 NIX_CHROME_PROFILE_NAME="chrome"
 NIX_ONEPASSWORD_PROFILE_NAME="1password"
-NIX_WHISPER_PROFILE_NAME="whisper"
 NIX_ZIG_PROFILE_NAME="zig"
 NIX_BAT_PROFILE_NAME="bat"
 NIX_VICINAE_PROFILE_NAME="vicinae"
@@ -80,7 +78,6 @@ NIX_PROFILE_AWS_INSTALLABLE="path:$NIX_FLAKE_DIR#aws"
 NIX_PROFILE_GIT_INSTALLABLE="path:$NIX_FLAKE_DIR#git"
 NIX_PROFILE_CHROME_INSTALLABLE="path:$NIX_FLAKE_DIR#chrome"
 NIX_PROFILE_ONEPASSWORD_INSTALLABLE="path:$NIX_FLAKE_DIR#1password"
-NIX_PROFILE_WHISPER_INSTALLABLE="path:$NIX_FLAKE_DIR#whisper"
 NIX_PROFILE_ZIG_INSTALLABLE="path:$NIX_FLAKE_DIR#zig"
 NIX_PROFILE_BAT_INSTALLABLE="path:$NIX_FLAKE_DIR#bat"
 NIX_PROFILE_VICINAE_INSTALLABLE="path:$NIX_FLAKE_DIR#vicinae"
@@ -294,10 +291,6 @@ nix_profile_sync_chrome() {
 
 nix_profile_sync_onepassword() {
     nix_profile_sync_installable "$NIX_ONEPASSWORD_PROFILE_NAME" "$NIX_PROFILE_ONEPASSWORD_INSTALLABLE"
-}
-
-nix_profile_sync_whisper() {
-    nix_profile_sync_installable "$NIX_WHISPER_PROFILE_NAME" "$NIX_PROFILE_WHISPER_INSTALLABLE"
 }
 
 nix_profile_sync_zig() {

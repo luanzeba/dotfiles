@@ -1,65 +1,65 @@
 #!/bin/bash
 set -e
 
-# Whisper - OpenAI's speech recognition model
-# https://github.com/openai/whisper
+# MLX-Whisper - local Whisper transcription on Apple Silicon
+# https://github.com/ml-explore/mlx-examples/tree/main/whisper
+#
+# Installed as a uv tool (not Nix): it is a fast-moving Python/ML package that
+# needs Apple's Metal libraries, which nixpkgs does not package well on macOS.
+# The version is pinned; bump it deliberately, then run `dot update whisper`.
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091
 source "$SCRIPT_DIR/../lib/nix.sh"
 
-WHISPER_COMMANDS=(whisper)
+MLX_WHISPER_VERSION="0.4.3"
+MLX_WHISPER_PYTHON="3.13"
 
 bootstrap_whisper_path() {
     _source_nix_env || true
-    if [[ -d "$HOME/.nix-profile/bin" ]]; then
-        export PATH="$HOME/.nix-profile/bin:$PATH"
-    fi
+    if [[ -d "$HOME/.nix-profile/bin" ]]; then export PATH="$HOME/.nix-profile/bin:$PATH"; fi
+    if [[ -d "$HOME/.local/bin" ]]; then export PATH="$HOME/.local/bin:$PATH"; fi
 }
 
-whisper_commands_available() {
-    bootstrap_whisper_path
-
-    local cmd
-    for cmd in "${WHISPER_COMMANDS[@]}"; do
-        command -v "$cmd" &>/dev/null || return 1
-    done
+is_apple_silicon() {
+    [[ "$(uname -s)" == "Darwin" && "$(uname -m)" == "arm64" ]]
 }
 
 check_installed() {
-    if ! nix_profile_has_entry "$NIX_WHISPER_PROFILE_NAME"; then
-        return 1
-    fi
-
-    whisper_commands_available
+    bootstrap_whisper_path
+    command -v mlx_whisper &>/dev/null
 }
 
 get_installed_version() {
     bootstrap_whisper_path
+    command -v uv &>/dev/null || return 0
+    uv tool list 2>/dev/null | awk '$1 == "mlx-whisper" { print "mlx-whisper " $2; exit }'
+}
 
-    local parts=()
-
-    if command -v whisper &>/dev/null; then
-        local whisper_version=""
-        whisper_version=$(grep -o 'python[0-9.]*-whisper-[^/]*' "$(command -v whisper)" 2>/dev/null \
-            | head -1 \
-            | sed 's/^python[0-9.]*-whisper-//')
-        parts+=("whisper ${whisper_version:-available}")
+# The previous setup installed openai-whisper as a Nix profile entry.
+remove_legacy_nix_whisper() {
+    if nix_profile_has_entry "whisper"; then
+        log_info "Removing legacy Nix profile entry 'whisper'..."
+        nix --extra-experimental-features "$NIX_EXPERIMENTAL_FEATURES" profile remove whisper
     fi
-
-    local joined=""
-    local part
-    for part in "${parts[@]}"; do
-        if [[ -n "$joined" ]]; then
-            joined+=", "
-        fi
-        joined+="$part"
-    done
-    echo "$joined"
 }
 
 install() {
-    nix_profile_sync_whisper
+    if ! is_apple_silicon; then
+        log_error "whisper requires Apple Silicon macOS (MLX)."
+        return 1
+    fi
+
+    bootstrap_whisper_path
+    # uv and ffmpeg come from the Nix base profile.
+    if ! command -v uv &>/dev/null || ! command -v ffmpeg &>/dev/null; then
+        nix_profile_sync_base
+        bootstrap_whisper_path
+    fi
+
+    # A no-op when the pinned version is already installed; switches when it changes.
+    uv tool install --python "$MLX_WHISPER_PYTHON" "mlx-whisper==$MLX_WHISPER_VERSION"
+    remove_legacy_nix_whisper
 }
 
 configure() {
@@ -67,8 +67,20 @@ configure() {
     :
 }
 
+# whisper is opt-in: `dot pull` (apply) and `dot update` run every tool, so
+# only re-sync machines that already have it (or the legacy Nix entry).
+sync_if_installed() {
+    is_apple_silicon || return 0
+    check_installed || nix_profile_has_entry "whisper" || return 0
+    install
+}
+
+apply() {
+    sync_if_installed
+}
+
 update() {
-    nix_profile_sync_whisper
+    sync_if_installed
 }
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then

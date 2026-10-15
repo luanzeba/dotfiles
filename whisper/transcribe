@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+    echo "Usage: $(basename "$0") AUDIO [mlx_whisper options...]" >&2
+    echo "Example: $(basename "$0") meeting.m4a --language Portuguese --output-dir ./transcript" >&2
+}
+
+if [[ $# -lt 1 || "$1" == "-h" || "$1" == "--help" ]]; then
+    usage
+    [[ $# -ge 1 ]] && exit 0 || exit 2
+fi
+
+audio="$1"
+shift
+if [[ ! -f "$audio" ]]; then
+    echo "Audio file not found: $audio" >&2
+    exit 1
+fi
+
+export PATH="$HOME/.local/bin:$HOME/.nix-profile/bin:$PATH"
+if ! command -v mlx_whisper &>/dev/null; then
+    echo "mlx_whisper not found. Run: dot install whisper" >&2
+    exit 1
+fi
+
+# --condition-on-previous-text False stops the repetition loops we saw on
+# long, noisy recordings. Later options override these defaults.
+exec mlx_whisper "$audio" \
+    --model mlx-community/whisper-large-v3-mlx \
+    --condition-on-previous-text False \
+    --output-format all \
+    "$@"
