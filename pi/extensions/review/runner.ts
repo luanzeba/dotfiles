@@ -1,4 +1,4 @@
-/** Run independent simplification and correctness reviews in fresh Pi sessions. */
+/** Run independent simplification, correctness, and design reviews in fresh Pi sessions. */
 
 import { randomUUID } from "node:crypto";
 import * as fs from "node:fs/promises";
@@ -12,19 +12,27 @@ const promptFile = (name: string) => fileURLToPath(new URL(`./prompts/${name}.md
 const COMMON_INSTRUCTIONS = promptFile("reviewer");
 const REVIEWERS = {
 	simplification: {
+		label: "simplify",
 		name: "simplification and redesign",
 		heading: "Simplification and redesign",
 		instructions: promptFile("simplifier"),
 	},
 	correctness: {
+		label: "correct",
 		name: "correctness and regression",
 		heading: "Correctness and regressions",
 		instructions: promptFile("correctness-reviewer"),
 	},
+	design: {
+		label: "design",
+		name: "API, data, and boundary design",
+		heading: "API, data, and boundary design",
+		instructions: promptFile("design"),
+	},
 } as const;
 
 type ReviewKind = keyof typeof REVIEWERS;
-type ReviewStage = "planning" | "reviewing" | "done" | "failed" | "cancelled";
+type ReviewStage = "waiting" | "planning" | "reviewing" | "done" | "failed" | "cancelled";
 
 export interface RunnerOptions {
 	change: ChangeSet;
@@ -36,14 +44,38 @@ export interface RunnerOptions {
 	focus?: string;
 	/** Forget the final reports from earlier rounds of this change. */
 	fresh?: boolean;
+	/** Run the design reviewer even when no changed file looks like a design surface. */
+	design?: boolean;
 	signal?: AbortSignal;
-	onProgress?: (kind: ReviewKind, stage: ReviewStage) => void;
+	onProgress?: (label: string, stage: ReviewStage) => void;
 	exec: ExecFn;
 }
 
 const MAX_DIFF_CHARS = 400_000;
 const STEP_TWO_PROMPT = "Step 2: perform the complete review now.";
-const REVIEW_KINDS = Object.keys(REVIEWERS) as ReviewKind[];
+const ALL_KINDS = Object.keys(REVIEWERS) as ReviewKind[];
+
+// Files whose changes are decisions other code or stored data builds on: schemas and
+// migrations, API contracts and routes, and API description files. Tests and fixtures are skipped.
+const DESIGN_SURFACES = [
+	/(^|\/)(migrations?|drizzle)\//,
+	/(^|[/.])(schemas?|contracts?|routes?|routers?)[/.]/,
+	/(^|\/)sql_assets\//,
+	/(^|[/.])(openapi|swagger)[/.]/,
+	/\.(proto|graphql)$/,
+];
+const NOT_A_SURFACE = /\.(test|spec)\.|(^|\/)(tests?|__tests__|fixtures?)\//;
+
+function touchesDesignSurface(changedFiles: string[]): boolean {
+	return changedFiles.some(
+		(file) => !NOT_A_SURFACE.test(file) && DESIGN_SURFACES.some((pattern) => pattern.test(file)),
+	);
+}
+
+function reviewKinds(options: RunnerOptions): ReviewKind[] {
+	const runDesign = options.design || touchesDesignSurface(options.change.changedFiles);
+	return runDesign ? ALL_KINDS : ALL_KINDS.filter((kind) => kind !== "design");
+}
 
 function sessionDir(): string {
 	return path.join(cacheRoot(), "sessions");
@@ -56,7 +88,7 @@ function historyFile(change: ChangeSet, kind: ReviewKind): string {
 async function ensureInstructionFiles(): Promise<void> {
 	const files = [
 		COMMON_INSTRUCTIONS,
-		...REVIEW_KINDS.map((kind) => REVIEWERS[kind].instructions),
+		...ALL_KINDS.map((kind) => REVIEWERS[kind].instructions),
 	];
 	await Promise.all(
 		files.map(async (file) => {
@@ -203,7 +235,6 @@ async function invokeReviewer(
 
 async function runPass(options: RunnerOptions, kind: ReviewKind): Promise<string> {
 	const history = historyFile(options.change, kind);
-	if (options.fresh) await fs.rm(history, { force: true });
 	const previous = await fs.readFile(history, "utf8").catch(() => undefined);
 	const sessionId = `pi-review-${options.change.reviewKey}-${kind}-${randomUUID()}`;
 	const promptDir = await fs.mkdtemp(path.join(os.tmpdir(), `pi-review-${kind}-`));
@@ -215,17 +246,18 @@ async function runPass(options: RunnerOptions, kind: ReviewKind): Promise<string
 		...(fullDiffFile ? [fs.writeFile(fullDiffFile, options.change.diff, { mode: 0o600 })] : []),
 	]);
 
+	const { label } = REVIEWERS[kind];
 	try {
-		options.onProgress?.(kind, "planning");
+		options.onProgress?.(label, "planning");
 		await invokeReviewer(options, kind, sessionId, `@${briefFile}`, false);
-		options.onProgress?.(kind, "reviewing");
+		options.onProgress?.(label, "reviewing");
 		const findings = await invokeReviewer(options, kind, sessionId, STEP_TWO_PROMPT, true);
 		await fs.mkdir(path.dirname(history), { recursive: true });
 		await fs.writeFile(history, findings, { mode: 0o600 });
-		options.onProgress?.(kind, "done");
+		options.onProgress?.(label, "done");
 		return findings;
 	} catch (error) {
-		options.onProgress?.(kind, options.signal?.aborted ? "cancelled" : "failed");
+		options.onProgress?.(label, options.signal?.aborted ? "cancelled" : "failed");
 		throw error;
 	} finally {
 		await fs.rm(promptDir, { recursive: true, force: true });
@@ -234,13 +266,19 @@ async function runPass(options: RunnerOptions, kind: ReviewKind): Promise<string
 
 export async function runReviewers(options: RunnerOptions): Promise<string> {
 	await ensureInstructionFiles();
-	const results = await Promise.allSettled(REVIEW_KINDS.map((kind) => runPass(options, kind)));
+	// Forget every reviewer's history, including one that sits this round out.
+	if (options.fresh) {
+		await Promise.all(ALL_KINDS.map((kind) => fs.rm(historyFile(options.change, kind), { force: true })));
+	}
+	const kinds = reviewKinds(options);
+	for (const kind of kinds) options.onProgress?.(REVIEWERS[kind].label, "waiting");
+	const results = await Promise.allSettled(kinds.map((kind) => runPass(options, kind)));
 	if (options.signal?.aborted && results.every((result) => result.status === "rejected")) {
 		throw new Error("review was cancelled");
 	}
 
 	const sections = results.map((result, index) => {
-		const reviewer = REVIEWERS[REVIEW_KINDS[index]!];
+		const reviewer = REVIEWERS[kinds[index]!];
 		const report =
 			result.status === "fulfilled"
 				? result.value
@@ -250,7 +288,7 @@ export async function runReviewers(options: RunnerOptions): Promise<string> {
 		return `## ${reviewer.heading}\n${report}`;
 	});
 	if (results.every((result) => result.status === "rejected")) {
-		throw new Error(`both reviewers failed:\n\n${sections.join("\n\n")}`);
+		throw new Error(`every reviewer failed:\n\n${sections.join("\n\n")}`);
 	}
 	return sections.join("\n\n");
 }

@@ -1,7 +1,10 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type { ChangeSet } from "./sources/types";
 
-export const REVIEW_HANDOFF_PREFIX = "Independent simplification and correctness reviews of ";
+export const REVIEW_HANDOFF_PREFIX = "Independent reviews of ";
+// Handoffs written before the design reviewer existed still sit in older sessions.
+const HANDOFF_PREFIXES = [REVIEW_HANDOFF_PREFIX, "Independent simplification and correctness reviews of "];
+const isReviewHandoff = (text: string) => HANDOFF_PREFIXES.some((prefix) => text.startsWith(prefix));
 
 const MAX_MESSAGES_PER_ROLE = 2;
 const ROLE_INFO = {
@@ -52,7 +55,7 @@ function relevantEntries(
 ): ContextEntry[] {
 	if (change.kind === "git") {
 		return entries.filter(
-			(entry) => entry.role !== "user" || !entry.text.startsWith(REVIEW_HANDOFF_PREFIX),
+			(entry) => entry.role !== "user" || !isReviewHandoff(entry.text),
 		);
 	}
 
@@ -76,7 +79,7 @@ function relevantEntries(
 		}
 		if (entry.role === "user") {
 			followsRelevantUser = mentionsChange(entry.text);
-			if (followsRelevantUser && !entry.text.startsWith(REVIEW_HANDOFF_PREFIX)) relevant.push(entry);
+			if (followsRelevantUser && !isReviewHandoff(entry.text)) relevant.push(entry);
 		} else if (followsRelevantUser || mentionsChange(entry.text)) {
 			relevant.push(entry);
 		}

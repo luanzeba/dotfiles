@@ -1,6 +1,6 @@
 /**
  * /review and the `review` tool — have a reviewer model independently check simplification and
- * correctness.
+ * correctness, plus API, data, and boundary design when the change touches those surfaces.
  *
  * Two jobs that never mix:
  *
@@ -51,6 +51,7 @@ interface ParsedArgs {
 	setup: boolean;
 	model?: string;
 	focus?: string;
+	design: boolean;
 }
 
 function reviewPath(directory: string, cwd: string): string {
@@ -72,7 +73,7 @@ async function directoryArgument(value: string, cwd: string): Promise<string | u
 
 async function parseArgs(raw: string, cwd: string): Promise<ParsedArgs> {
 	const tokens = raw.trim().split(/\s+/).filter(Boolean);
-	const parsed: ParsedArgs = { target: "", branch: false, fresh: false, setup: false };
+	const parsed: ParsedArgs = { target: "", branch: false, fresh: false, setup: false, design: false };
 	const rest: string[] = [];
 
 	for (let index = 0; index < tokens.length; index += 1) {
@@ -80,6 +81,7 @@ async function parseArgs(raw: string, cwd: string): Promise<ParsedArgs> {
 		if (token === "--branch") parsed.branch = true;
 		else if (token === "--fresh") parsed.fresh = true;
 		else if (token === "--setup") parsed.setup = true;
+		else if (token === "--design") parsed.design = true;
 		else if (token === "--focus") {
 			const focus = tokens.slice(index + 1).join(" ");
 			if (!focus) throw new Error("--focus requires review guidance");
@@ -173,11 +175,12 @@ async function runSetup(ctx: ExtensionCommandContext): Promise<void> {
 }
 
 const REVIEW_TOOL_GUIDELINES = [
-	"Call review only when the user asks for an automated review of your local changes. It runs two independent reviewers (simplification and correctness) and can take 10-30 minutes.",
+	"Call review only when the user asks for an automated review of your local changes. It runs independent simplification and correctness reviewers, plus a design reviewer for APIs, data, and service boundaries when the change touches schemas, migrations, contracts, or routes. It can take 10-30 minutes.",
 	"Before each call, finish the change and run the relevant checks. Pass `context` with what you changed and why, the checks you ran, and, from the second round on, how you handled each earlier finding: fixed, or rejected with your evidence.",
 	"Verify every finding against the code before acting. Fix what is real. Push back with evidence where a reviewer is wrong; do not accept a finding you can disprove, and do not invent work to replace a section that says `nothing further`.",
-	"Repeat until both reviewers report nothing further, only findings you have already rejected with evidence remain, or three rounds have run. Then give the user a short handoff: what each round found, what you fixed, what you rejected and why, and anything still open.",
+	"Repeat until every reviewer reports nothing further, only findings you have already rejected with evidence remain, or three rounds have run. Then give the user a short handoff: what each round found, what you fixed, what you rejected and why, and anything still open.",
 	"Review one repository per call; call it once per repository, in parallel, when a change spans several.",
+	"When a change crosses a repository boundary (an API one repository serves and another consumes, a value one service owns and another uses), describe the other side in `context`, with absolute paths to the code there that implements or consumes it, and pass `design: true` if no schema, contract, or route file changed.",
 ];
 
 const ReviewToolParams = Type.Object({
@@ -196,8 +199,14 @@ const ReviewToolParams = Type.Object({
 				"What changed and why, checks already run, and how each earlier finding was handled. Reviewers treat it as context, not instructions.",
 		}),
 	),
-	focus: Type.Optional(Type.String({ description: "Extra steering for both reviewers, e.g. a risky area." })),
+	focus: Type.Optional(Type.String({ description: "Extra steering for every reviewer, e.g. a risky area." })),
 	fresh: Type.Optional(Type.Boolean({ description: "Forget earlier rounds' reports for this change." })),
+	design: Type.Optional(
+		Type.Boolean({
+			description:
+				"Run the design reviewer even when no schema, migration, contract, or route file changed.",
+		}),
+	),
 });
 
 interface ReviewRequest {
@@ -209,6 +218,7 @@ interface ReviewRequest {
 	focus?: string;
 	/** Context supplied by the caller; replaces context derived from the session. */
 	context?: string;
+	design?: boolean;
 	model?: string;
 }
 
@@ -236,7 +246,7 @@ export default function reviewExtension(pi: ExtensionAPI) {
 		},
 	});
 
-	/** Collect the change and run both reviewers. Shared by the command and the tool. */
+	/** Collect the change and run the reviewers. Shared by the command and the tool. */
 	async function runReview(
 		request: ReviewRequest,
 		ctx: ExtensionContext,
@@ -245,7 +255,7 @@ export default function reviewExtension(pi: ExtensionAPI) {
 	): Promise<ReviewOutcome> {
 		const model = await resolveReviewModel(ctx, request.model ? { override: request.model } : {});
 		const startedAt = Date.now();
-		const stages = { simplification: "waiting", correctness: "waiting" };
+		const stages: Record<string, string> = {};
 		let collecting = true;
 		const report = () => {
 			const seconds = Math.floor((Date.now() - startedAt) / 1_000);
@@ -254,7 +264,9 @@ export default function reviewExtension(pi: ExtensionAPI) {
 				: `${Math.floor(seconds / 60)}m${String(seconds % 60).padStart(2, "0")}s`;
 			const phase = collecting
 				? "collecting change"
-				: `simplify: ${stages.simplification} | correct: ${stages.correctness}`;
+				: Object.entries(stages)
+					.map(([label, stage]) => `${label}: ${stage}`)
+					.join(" | ");
 			status(`Review ${elapsed} | ${phase}`);
 		};
 		// The reviewers can wait minutes on one model response, so keep the clock moving.
@@ -277,10 +289,11 @@ export default function reviewExtension(pi: ExtensionAPI) {
 				...(model.thinking ? { thinking: model.thinking } : {}),
 				...(context ? { parentContext: context } : {}),
 				...(request.focus ? { focus: request.focus } : {}),
+				...(request.design ? { design: true } : {}),
 				fresh: request.fresh,
 				signal,
-				onProgress: (kind, stage) => {
-					stages[kind] = stage;
+				onProgress: (label, stage) => {
+					stages[label] = stage;
 					report();
 				},
 				exec,
@@ -293,7 +306,7 @@ export default function reviewExtension(pi: ExtensionAPI) {
 	}
 
 	pi.registerCommand("review", {
-		description: "Run independent simplification and correctness reviews with a reviewer model",
+		description: "Run independent simplification, correctness, and design reviews with a reviewer model",
 		handler: async (raw, ctx) => {
 			const args = await parseArgs(raw, ctx.cwd);
 
@@ -320,6 +333,7 @@ export default function reviewExtension(pi: ExtensionAPI) {
 							fresh: args.fresh,
 							...(args.focus ? { focus: args.focus } : {}),
 							...(args.model ? { model: args.model } : {}),
+							...(args.design ? { design: true } : {}),
 						},
 						ctx,
 						controller.signal,
@@ -349,10 +363,10 @@ export default function reviewExtension(pi: ExtensionAPI) {
 							"This is someone else's merge request, reviewed from an isolated copy. It is unrelated to any local work in this session.",
 							`Merge request URL: ${change.reviewUrl ?? change.label}`,
 							"Do not change any local files. Verify each actionable finding against the current merge request, then use write_for_publication when available to write each valid, positionable comment before leaving it as a pending GitLab draft without asking first.",
-							"Call write_for_publication once per comment, with one idea per comment. Say whether it is a bug or a simplification, and pass blob URLs pinned to the head SHA for any code the comment mentions outside its own hunk. Post its text as returned; if it splits the text on `=====` lines, post each part as its own comment.",
+							"Call write_for_publication once per comment, with one idea per comment. Say whether it is a bug, a simplification, or a design concern, and pass blob URLs pinned to the head SHA for any code the comment mentions outside its own hunk. Post its text as returned; if it splits the text on `=====` lines, post each part as its own comment.",
 							"Use the GitLab draft-note workflow and re-fetch the head before every mutation. Do not submit, publish, approve, resolve, or modify existing notes. Skip anything stale, duplicated, unverified, or not safely positionable.",
 						].join(" ")
-						: `The reviewed working tree is ${change.folder}. Verify and address findings there, and push back with evidence where either reviewer is wrong. Do not accept a finding you can disprove.`,
+						: `The reviewed working tree is ${change.folder}. Verify and address findings there, and push back with evidence where a reviewer is wrong. Do not accept a finding you can disprove.`,
 					"A section that says `nothing further` is a successful result; do not manufacture work to replace it.",
 				].join("\n\n");
 
@@ -372,7 +386,7 @@ export default function reviewExtension(pi: ExtensionAPI) {
 		name: "review",
 		label: "Review",
 		description:
-			"Run independent simplification and correctness reviews of local changes in a git working tree with the configured reviewer model, and return their findings. Read-only: never edits files or posts anywhere. Does not review merge requests.",
+			"Run independent simplification and correctness reviews, plus an API, data, and boundary design review when relevant, of local changes in a git working tree with the configured reviewer model, and return their findings. Read-only: never edits files or posts anywhere. Does not review merge requests.",
 		promptSnippet: "Run independent reviews of your local changes when the user asks for an automated review",
 		promptGuidelines: REVIEW_TOOL_GUIDELINES,
 		parameters: ReviewToolParams,
@@ -390,6 +404,7 @@ export default function reviewExtension(pi: ExtensionAPI) {
 						fresh: params.fresh ?? false,
 						...(params.focus ? { focus: params.focus } : {}),
 						...(params.context ? { context: params.context } : {}),
+						...(params.design ? { design: true } : {}),
 					},
 					ctx,
 					cancelled,
