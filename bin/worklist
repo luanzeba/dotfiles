@@ -1,0 +1,9 @@
+#!/bin/bash
+# Worklist (~/projects/worklist): the terminal home with no arguments, or a CLI command.
+# The project lives outside dotfiles; this wrapper only puts it on the PATH.
+root="${WORKLIST_ROOT:-$HOME/projects/worklist}"
+if [[ ! -x "$root/bin/worklist.mjs" ]]; then
+  echo "worklist: $root/bin/worklist.mjs not found (set WORKLIST_ROOT or clone the project there)" >&2
+  exit 127
+fi
+exec "$root/bin/worklist.mjs" "$@"
