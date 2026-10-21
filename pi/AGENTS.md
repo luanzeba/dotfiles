@@ -49,9 +49,11 @@ When using browser automation / CDP tools:
 
 ### Persistent servers (across multiple tool calls)
 
-Background processes (`&`, `nohup`, `disown`) are killed when the bash tool call ends. To keep a server alive across calls:
+Background processes (`&`, `nohup`, `disown`) die when the bash call ends. Run them in a background Rex window in your session (see the `rex` skill):
 
-- **If in tmux** (`$TMUX` is set): `tmux new-window -d -n "name" "cd /path && exec command"`
-- **Otherwise via Ghostty**: `ghostty -e "cd /path && command"` (Linux), `open -na Ghostty.app --args -e "cd /path && command"` (macOS)
+```
+rex window new -s "$REX_SESSION" "dev:name" -c /path --focus=false --json -- sh -c 'command 2>&1 | tee /tmp/name.log'
+```
 
-Clean up with `tmux kill-window -t name` or `pkill -f "pattern"` when done.
+- Save the returned `window_id`; poll the log or endpoint for readiness instead of fixed `sleep`s (`rex capture` shows only the screen).
+- When done, close your windows with `rex window close -s "$REX_SESSION" <window_id>` unless the user asks to keep them.

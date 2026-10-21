@@ -94,35 +94,13 @@ Never use force flags for creation.
 
 ## 5) Launch a separate pi session in that worktree
 
-Prefer automatic launch in a new terminal tab/window.
-
-### If in tmux
+Open it in a new Rex window in the current session and focus it:
 
 ```bash
-tmux new-window -n "pi:<feature_slug>" "cd <worktree_path> && exec pi"
+rex window new -s "$REX_SESSION" "pi:<feature_slug>" -c <worktree_path> -- pi
 ```
 
-### If in cmux
-
-```bash
-SURFACE=$(cmux new-surface --type terminal | awk '{print $2}')
-sleep 0.4
-cmux send --surface "$SURFACE" "cd <worktree_path> && pi\n"
-```
-
-### If on macOS with Ghostty available
-
-```bash
-open -na Ghostty.app --args -e "cd <worktree_path> && pi"
-```
-
-### Fallback
-
-If no launcher is available, print the exact command for the user:
-
-```bash
-cd <worktree_path> && pi
-```
+If `$REX_SESSION` is unset, print `cd <worktree_path> && pi` for the user instead.
 
 ## 6) Report outcome clearly
 
@@ -133,7 +111,7 @@ Always summarize:
 - branch
 - base ref
 - whether worktree was created or reused
-- how `pi` was launched (tmux/cmux/ghostty/manual)
+- how `pi` was launched (Rex window/manual)
 
 ## Safety constraints
 
