@@ -96,9 +96,5 @@ PLIST
 launchctl bootout "gui/$(id -u)" "$LAUNCH_AGENT" >/dev/null 2>&1 || true
 launchctl bootstrap "gui/$(id -u)" "$LAUNCH_AGENT"
 
-if [[ -L "$HOME/.finicky.js" && "$(readlink "$HOME/.finicky.js")" == */dotfiles/finicky/config.js ]]; then
-  rm -f "$HOME/.finicky.js"
-fi
-
 echo "Installed: $APP"
 echo "CLI: $LOCAL_BIN/chrome-router"

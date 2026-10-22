@@ -1,11 +1,13 @@
 import AppKit
 import CoreServices
 import Foundation
+import UniformTypeIdentifiers
 
 private let bundleIdentifier = "com.luanzeba.chrome-router"
 private let chromePath = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 private let defaultUserDataDir = NSString(string: "~/.cache/pi-chrome-profile").expandingTildeInPath
 private let debugPort = 9222
+private let documentContentTypes = ["public.html", "public.xhtml"]
 
 private struct Rule: Codable, Equatable {
     var host: String
@@ -69,7 +71,8 @@ private final class Router {
     }
 
     func route(_ url: URL, prompt: Bool = false) {
-        if prompt {
+        // Never remember a hostless URL (files, malformed links): its rule would match every file.
+        if prompt, !normalizedHost(url.host ?? "").isEmpty {
             guard let profile = chooseProfile(for: url) else { return }
             remember(url, profile: profile)
             open(url, profile: profile)
@@ -504,25 +507,23 @@ private func hyperIsPressed(_ flags: NSEvent.ModifierFlags? = nil) -> Bool {
 }
 
 private func setAsDefaultBrowser() -> Bool {
-    let http = LSSetDefaultHandlerForURLScheme("http" as CFString, bundleIdentifier as CFString)
-    let https = LSSetDefaultHandlerForURLScheme("https" as CFString, bundleIdentifier as CFString)
-    if http == noErr, https == noErr {
-        print("Chrome Router is now the default URL handler.")
+    let results = ["http", "https"].map { ($0, LSSetDefaultHandlerForURLScheme($0 as CFString, bundleIdentifier as CFString)) }
+        + documentContentTypes.map { ($0, LSSetDefaultRoleHandlerForContentType($0 as CFString, .all, bundleIdentifier as CFString)) }
+    if results.allSatisfy({ $0.1 == noErr }) {
+        print("Chrome Router is now the default URL and HTML file handler.")
         return true
     }
-    fputs("chrome-router: Could not set the default handler (http=\(http), https=\(https)).\n", stderr)
+    let status = results.map { "\($0.0)=\($0.1)" }.joined(separator: ", ")
+    fputs("chrome-router: Could not set the default handler (\(status)).\n", stderr)
     return false
 }
 
 private func isDefaultBrowser() -> Bool {
-    for scheme in ["http", "https"] {
-        guard let url = URL(string: "\(scheme)://example.invalid"),
-              let appURL = NSWorkspace.shared.urlForApplication(toOpen: url),
-              Bundle(url: appURL)?.bundleIdentifier == bundleIdentifier else {
-            return false
-        }
+    let schemeHandlers = ["http", "https"].map { URL(string: "\($0)://example.invalid").flatMap(NSWorkspace.shared.urlForApplication(toOpen:)) }
+    let documentHandlers = documentContentTypes.map { UTType($0).flatMap(NSWorkspace.shared.urlForApplication(toOpen:)) }
+    return (schemeHandlers + documentHandlers).allSatisfy { appURL in
+        appURL.flatMap { Bundle(url: $0)?.bundleIdentifier } == bundleIdentifier
     }
-    return true
 }
 
 private func requestDefaultBrowserChange() -> Bool {
@@ -554,7 +555,7 @@ private func usage() {
       profiles                      Show profile resolution
       profile <name> <directory>     Map a name to a Chrome profile directory
       config                        Print the config path
-      default                       Make Chrome Router the macOS URL handler
+      default                       Make Chrome Router the macOS URL and HTML file handler
       status                        Show default-handler and profile status
       self-test                     Run routing checks
     """)
@@ -617,7 +618,7 @@ private func runCLI(_ arguments: [String]) -> Int32 {
     case "is-default":
         return isDefaultBrowser() ? 0 : 1
     case "status":
-        print("Default URL handler: \(isDefaultBrowser() ? "yes" : "no")")
+        print("Default URL and HTML handler: \(isDefaultBrowser() ? "yes" : "no")")
         print("Config: \(router.configURL.path)")
         for profile in router.profileNames() {
             let directory = router.resolveProfileDirectory(profile)
@@ -645,6 +646,7 @@ private func runCLI(_ arguments: [String]) -> Int32 {
             ("YouTube short link", testRouter.matchingRule(for: URL(string: "https://youtu.be/test?t=30")!)?.profile == "Home"),
             ("Home subdomain", testRouter.matchingRule(for: URL(string: "https://www.traveljoy.com/test")!)?.profile == "Home"),
             ("unmatched URL", testRouter.matchingRule(for: URL(string: "https://example.com")!) == nil),
+            ("local HTML file", testRouter.matchingRule(for: URL(fileURLWithPath: "/tmp/prototype.html")) == nil),
             ("invalid URL", parseURL("not a URL") == nil),
         ]
         if let failed = checks.first(where: { !$0.1 }) {
@@ -669,15 +671,6 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
     private var lastHyperClick = Date.distantPast
     private var clickMonitor: Any?
 
-    func applicationWillFinishLaunching(_ notification: Notification) {
-        NSAppleEventManager.shared().setEventHandler(
-            self,
-            andSelector: #selector(handleURL(_:reply:)),
-            forEventClass: AEEventClass(kInternetEventClass),
-            andEventID: AEEventID(kAEGetURL)
-        )
-    }
-
     func applicationDidFinishLaunching(_ notification: Notification) {
         clickMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] event in
             if hyperIsPressed(event.modifierFlags) {
@@ -686,15 +679,16 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    func applicationWillTerminate(_ notification: Notification) {
-        if let clickMonitor { NSEvent.removeMonitor(clickMonitor) }
+    func application(_ application: NSApplication, open urls: [URL]) {
+        let router = Router()
+        let prompt = Date().timeIntervalSince(lastHyperClick) < 1.5 || hyperIsPressed()
+        for url in urls {
+            router.route(url, prompt: prompt)
+        }
     }
 
-    @objc private func handleURL(_ event: NSAppleEventDescriptor, reply: NSAppleEventDescriptor) {
-        guard let value = event.paramDescriptor(forKeyword: AEKeyword(keyDirectObject))?.stringValue,
-              let url = parseURL(value) else { return }
-        let followedHyperClick = Date().timeIntervalSince(lastHyperClick) < 1.5
-        Router().route(url, prompt: followedHyperClick || hyperIsPressed())
+    func applicationWillTerminate(_ notification: Notification) {
+        if let clickMonitor { NSEvent.removeMonitor(clickMonitor) }
     }
 }
 
