@@ -94,11 +94,26 @@ Never use force flags for creation.
 
 ## 5) Launch a separate pi session in that worktree
 
-Open it in a new Rex window in the current session and focus it:
+Keep related work in one Rex session. Check what the current session is for:
 
 ```bash
-rex window new -s "$REX_SESSION" "pi:<feature_slug>" -c <worktree_path> -- pi
+rex session inspect "$REX_SESSION" --json | jq -r '.label'
 ```
+
+- **The current session is already working on this feature** (its label names the feature, or this conversation is about it): open a tab in it.
+
+  ```bash
+  rex window new -s "$REX_SESSION" "pi:<feature_slug>" -c <worktree_path> -- pi
+  ```
+
+- **Otherwise**, open a new Rex session labeled for the feature and switch the app to it. This keeps the new agent from renaming the current session after a different task.
+
+  ```bash
+  created=$(rex new "<feature_slug>" -c <worktree_path> --json -- pi) &&
+    rex do session.select session_id="$(printf '%s' "$created" | jq -er '.session_id')"
+  ```
+
+  If `session.select` fails because several Rex apps are connected, tell the user the session's label.
 
 If `$REX_SESSION` is unset, print `cd <worktree_path> && pi` for the user instead.
 
@@ -111,7 +126,7 @@ Always summarize:
 - branch
 - base ref
 - whether worktree was created or reused
-- how `pi` was launched (Rex window/manual)
+- how `pi` was launched (Rex tab/Rex session/manual)
 
 ## Safety constraints
 
