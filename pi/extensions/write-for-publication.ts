@@ -9,11 +9,16 @@ const REVIEW_COMMENT_STYLE = `## Code review comments
 
 When the request is a code review comment, it should read like a quick, casual note from a teammate, not a report. These rules override the general advice above:
 
-- One idea per comment. If the draft holds several separate suggestions, say so and return them as separate comments separated by a line containing only \`=====\`.
+- One idea per comment. If the draft holds several separate suggestions, say so and return them as separate comments separated by a line containing only \`=====\`. Leave out alternatives and other cases with the same cause.
 - A bug or regression opens with "There might be a bug here." and then says what goes wrong, using a concrete example (inputs, steps, or what the user sees).
 - A simplification or cleanup goes straight into the content and ends with a final line: "Just an idea to simplify."
-- Plain prose in one to three short paragraphs. No headings, bold labels, tables, bullet lists, severity tags (P1/P2/P3), or "Repro:" sections.
-- Say why it matters in one concrete sentence ("we'd quietly fetch twice", "it shows as Open with a Reset button"). Leave out supporting facts the author doesn't need to act.
+- Match the comment to its weight, which the request names (infer it if not). The weight only steers the shape; never mention it in the comment.
+  - Light, a local fix that's obvious once seen: the point and the code in a few sentences, with no supporting proof.
+  - Medium, where the author has to follow one scenario: the point, one concrete example, and the fix.
+  - Heavy, a concept, redesign, or multi-step scenario: explain it plainly for someone new to the idea, with an example, small table, or before/after when that helps. It can be long when the idea needs explaining, not to add proof, and the first sentence still states the point.
+- Plain prose. No headings, bold labels, severity tags (P1/P2/P3), or "Repro:" sections. Only a heavy comment uses a table or list, and only when it makes the point easier to follow.
+- Say why it matters in one concrete sentence ("we'd quietly fetch twice", "it shows as Open with a Reset button"). Leave out supporting facts the author doesn't need to act, including how you verified it (repro steps, versions, counts, other places you checked). "I reproduced it" is enough.
+- The author wrote this code. Don't walk them through how it works; name only the part that goes wrong or could be simpler, and what you'd do instead.
 - Every suggested change gets a small code block showing the new code. Prefer that to describing the change in words.
 - Name things consistently. If you name a function in one sentence, name the parallel function too, rather than switching to an abstract label like "the fallbacks".
 - For code that isn't in the commented hunk, use a markdown link such as [\`fooBar\`](https://host/group/project/-/blob/<sha>/path/to/file.ts#L10), built from URLs in the context. Never write bare file:line references. If no URL is available, name the function only.
@@ -90,7 +95,7 @@ export default function writeForPublication(pi: ExtensionAPI) {
 		description: "Turn verified context and an optional draft into clear, reader-ready prose. Does not post or verify claims.",
 		promptSnippet: "Use the /review model to prepare clear human-facing text",
 		promptGuidelines: [
-			"Before posting a review comment, PR/MR description, issue text, Slack message, ADR, or other human-facing prose, give write_for_publication the draft, verified context, audience, and constraints. If it asks for more context or you need to change its wording, call it again. Verify any new claims, then use its returned text without re-condensing it yourself. The tool never posts anything.",
+			"Before posting a review comment, PR/MR description, issue text, Slack message, ADR, or other human-facing prose, give write_for_publication the draft, verified context, audience, and constraints. For a review comment, pass the point and the facts it needs, not your whole investigation. If it asks for more context or you need to change its wording, call it again. Verify any new claims, then use its returned text without re-condensing it yourself. The tool never posts anything.",
 		],
 		parameters: Params,
 		async execute(_toolCallId, params, signal, onUpdate, ctx) {

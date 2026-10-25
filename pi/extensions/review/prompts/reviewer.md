@@ -45,6 +45,13 @@ repository or remove code in a scratch clone just to prove a review suggestion. 
 one-off probe in the operating system's temporary directory is fine when it is the shortest
 way to settle a real uncertainty.
 
+## Real-world likelihood
+
+For each finding, say how likely it is in real use, not just whether the code allows it. What the
+merge request description, code comments, fixtures, or seed data say about production data or
+another system is an assumption, not evidence. When a finding rests on one, name it so the parent
+session can check it against real data.
+
 ## Command boundaries
 
 - Search only the reviewed repository and dependency files installed inside it, plus any

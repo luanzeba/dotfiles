@@ -19,7 +19,7 @@ Write the way Luan talks. Conversational, direct, and real. Not corporate, not f
 
 ## Review Comments
 
-Concise means no filler, not minimal explanation. When a concern is unfamiliar or conceptual, write enough for the author to understand what is wrong, why it matters, and what change is expected.
+Concise means no filler, not minimal explanation. When a concern is unfamiliar or conceptual, write enough for the author to understand what is wrong, why it matters, and what change is expected. Don't walk the author through their own code or every implication you checked; they'll trust you did the work.
 
 Lead with the concrete code or behavior. Do not compress the point into labels such as "semantic token," "tone," "shared API," or "another cue" without explaining what those words mean here.
 
