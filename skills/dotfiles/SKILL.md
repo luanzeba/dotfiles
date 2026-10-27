@@ -62,6 +62,14 @@ See [references/platform-detection.md](references/platform-detection.md) for det
 
 ## Important Constraints
 
+### Work in jj
+
+The repo is a colocated jj repo. Do all dotfiles work in jj unless Luan asks otherwise:
+
+- Put each piece of work in its own change (`jj new`, `jj describe -m "..."`). Don't create git branches, git commits, or git worktrees.
+- For parallel work, use `jj workspace add` instead of a git worktree.
+- `@` may hold Luan's in-progress work. Check `jj status` and `jj log` before starting, and leave his changes alone.
+
 ### Always Modify Dotfiles, Not Config Targets
 
 Never create or edit files directly in config target directories like `~/.config/` or `~/.local/bin/`. These locations contain symlinks to `~/dotfiles/`, so changes made there are either not version controlled or will be overwritten by install scripts.
