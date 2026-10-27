@@ -298,18 +298,77 @@ export class SessionIndex {
 export interface DevRoute {
 	host: string;
 	url: string;
-	/** Git root of the dev server process, to tie it to the session's checkout. */
+	/** Checkout root of the dev server process, to tie it to the session's checkout. */
 	root?: string;
 }
 
 const execFileAsync = promisify(execFile);
 
-/** The nearest ancestor holding `.git` (a directory in a clone, a file in a worktree). */
-export async function gitRoot(dir: string): Promise<string | undefined> {
+const exists = (file: string) => fs.stat(file).then(() => true, () => false);
+
+/**
+ * The nearest ancestor that is a checkout: it holds `.git` (a directory in a clone, a file in a git
+ * worktree) or `.jj` (a jj repo or workspace).
+ */
+export async function repoRoot(dir: string): Promise<string | undefined> {
 	for (let current = path.resolve(dir); ; current = path.dirname(current)) {
-		if (await fs.stat(path.join(current, ".git")).then(() => true, () => false)) return current;
+		if ((await exists(path.join(current, ".git"))) || (await exists(path.join(current, ".jj")))) return current;
 		if (path.dirname(current) === current) return undefined;
 	}
+}
+
+export interface Review {
+	/** Arguments for `hunk`. */
+	args: string[];
+	/** What they show, for a status message. */
+	what: string;
+}
+
+/** Long-lived branches; work on one is reviewed against its own remote copy. */
+const TRUNK_RE = /^(develop|main|master)$|^release\//;
+/** Branches work forks from. Personal and stacked branches are left out on purpose. */
+const BASE_RE = /^(develop|main|master)$|^(release|feature)\//;
+
+/**
+ * Pick what to review in a checkout:
+ * - jj: the working-copy change, or the previous change when `@` is empty.
+ * - git with uncommitted work: everything against HEAD. Plain `hunk diff` leaves out staged changes.
+ * - git with several commits since the nearest integration branch: those commits as one diff.
+ * - otherwise: the last commit.
+ */
+export async function reviewCommand(root: string): Promise<Review> {
+	const run = (command: string, args: string[]) =>
+		execFileAsync(command, args, { cwd: root, timeout: 5000 }).then(
+			({ stdout }) => stdout,
+			() => undefined,
+		);
+	if (await exists(path.join(root, ".jj"))) {
+		const state = await run("jj", ["log", "-r", "@", "--no-graph", "-T", 'if(empty, "empty", "changed")']);
+		return state?.trim() === "empty"
+			? { args: ["show", "@-"], what: "the previous jj change (@ is empty)" }
+			: { args: ["diff"], what: "the working-copy jj change" };
+	}
+	if ((await run("git", ["status", "--porcelain"]))?.trim()) return { args: ["diff", "HEAD"], what: "uncommitted changes" };
+	// One call for every remote branch: how many of HEAD's commits each one lacks. The nearest
+	// integration branch is the fork point; ties give the same diff, so prefer the shorter name.
+	const [branch, refs] = await Promise.all([
+		run("git", ["branch", "--show-current"]),
+		run("git", ["for-each-ref", "--format=%(refname) %(ahead-behind:HEAD)", "refs/remotes"]),
+	]);
+	const current = branch?.trim() ?? "";
+	let base: { ref: string; commits: number } | undefined;
+	for (const line of refs?.split("\n") ?? []) {
+		const [refname, , headOnly] = line.split(" ");
+		const name = refname?.replace(/^refs\/remotes\/[^/]+\//, "");
+		if (!name || !BASE_RE.test(name)) continue;
+		// A feature branch's own pushed copy would hide its unpushed commits; develop's is its base.
+		if (name === current && !TRUNK_RE.test(current)) continue;
+		const ref = refname.replace(/^refs\/remotes\//, "");
+		const commits = Number(headOnly);
+		if (!base || commits < base.commits || (commits === base.commits && ref.length < base.ref.length)) base = { ref, commits };
+	}
+	if (base && base.commits > 1) return { args: ["diff", `${base.ref}...HEAD`], what: `the branch's ${base.commits} commits since ${base.ref}` };
+	return { args: ["show"], what: "the last commit" };
 }
 
 async function processCwds(pids: number[]): Promise<Map<number, string>> {
@@ -361,7 +420,7 @@ export async function liveDevRoutes(): Promise<DevRoute[]> {
 	});
 	const cwds = await processCwds([...new Set(alive.map((route) => route.pid))]);
 	const roots = new Map<string, string | undefined>();
-	for (const cwd of new Set(cwds.values())) roots.set(cwd, await gitRoot(cwd));
+	for (const cwd of new Set(cwds.values())) roots.set(cwd, await repoRoot(cwd));
 	return alive.map((route) => {
 		const cwd = cwds.get(route.pid);
 		return {

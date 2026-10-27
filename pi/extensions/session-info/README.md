@@ -6,6 +6,8 @@ Two things for finding your way around sessions:
   summary of the session, its Linear tickets, merge requests, dev servers, Slack threads, and other
   links you shared. Links are clickable in terminals with OSC 8 support. The card doesn't take focus,
   so you can keep typing while it's open; press the shortcut again to close it.
+- **Ctrl+Shift+H** (or `/hunk [args]`) opens hunk on the session's worktree in a new Rex tab, so you
+  can review what the session changed without opening a pane and `cd`-ing there.
 - **`/resume-search [query]`** is `/resume` with search that understands links. It searches every
   session, not only the current directory's.
 
@@ -26,6 +28,39 @@ a 7, a 4, and a 3. Results are ranked by how tightly a session is tied to the ma
 4. the session runs in its worktree (`.worktrees/cus-1203`)
 5. the assistant mentioned it
 6. it only showed up in tool output
+
+## Reviewing the session's diff
+
+Ctrl+Shift+H opens a tab in the current Rex session, in the checkout this session worked in, with
+whatever there is to review there:
+
+| Checkout state | Runs |
+|---|---|
+| jj, `@` has changes | `hunk diff` |
+| jj, `@` is empty | `hunk show @-` |
+| git, uncommitted changes (staged, unstaged, or new files) | `hunk diff HEAD` |
+| git, several commits since the branch it forked from | `hunk diff origin/<base>...HEAD` |
+| git, otherwise | `hunk show` (the last commit) |
+
+The base is the nearest `develop`, `main`, `master`, `release/*`, or `feature/*` branch on the remote,
+so a branch cut from `feature/v8.0` is compared with that and not `main`. On `develop` or `main`
+itself, it's the branch's own remote copy, which shows unpushed commits. The status line says which
+one it opened.
+
+`/hunk <args>` runs what you ask instead: `/hunk show abc123` as given, and anything else as
+`hunk diff <args>`, like `/hunk origin/develop...`. When the session worked in several checkouts, it
+asks which one, busiest first. The tab closes when you quit hunk.
+
+Switching the app to the new tab is an app action, which Rex allows only with **Remote Control** on
+(Rex Settings > Rex Server). Without it the tab still opens, and the status line says why it didn't
+come to the front.
+
+"Worked in" means the session's cwd plus folders it `cd`'d into, ran `git -C` on, or edited files
+in, weighted by how often. A checkout with under a quarter of the busiest one's activity counts as a
+quick visit and is left out, here and on the card's Dev rows.
+
+Hunk registers the tab as a live session for that repo, so you can then ask the agent to read your
+review comments with `hunk session` commands.
 
 ## What shows up on the card
 

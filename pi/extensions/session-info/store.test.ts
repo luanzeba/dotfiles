@@ -3,7 +3,8 @@ import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
 import { test } from "node:test";
-import { scanSessionFile, SessionIndex, SUMMARY_TYPE } from "./store.ts";
+import { execFileSync } from "node:child_process";
+import { reviewCommand, scanSessionFile, SessionIndex, SUMMARY_TYPE } from "./store.ts";
 
 const line = (entry: object) => `${JSON.stringify(entry)}\n`;
 const header = line({ type: "session", version: 3, id: "s1", timestamp: "2026-10-01T00:00:00.000Z", cwd: "/repo/.worktrees/cus-9" });
@@ -67,4 +68,51 @@ test("the index rewrites only the shards whose sessions changed", async () => {
 	await fs.rm(old);
 	assert.deepEqual((await index.refresh()).map((record) => record.id), ["b"]);
 	assert.deepEqual(JSON.parse(await fs.readFile(septemberShard, "utf8")).sessions, []);
+});
+
+test("the review command follows the checkout's state", async (t) => {
+	// Keep the user's git and jj config (hooks, signing, aliases) out of the throwaway repos.
+	Object.assign(process.env, {
+		GIT_CONFIG_GLOBAL: "/dev/null",
+		GIT_AUTHOR_NAME: "t",
+		GIT_AUTHOR_EMAIL: "t@t",
+		GIT_COMMITTER_NAME: "t",
+		GIT_COMMITTER_EMAIL: "t@t",
+		JJ_CONFIG: "/dev/null",
+		JJ_USER: "t",
+		JJ_EMAIL: "t@t",
+	});
+	const sh = (cwd: string, command: string) => execFileSync("sh", ["-c", command], { cwd, stdio: "pipe" });
+	const origin = await tmpdir();
+	const repo = await tmpdir();
+	sh(origin, "git init -q --bare -b develop");
+	sh(repo, `git init -q -b develop && git remote add origin ${origin} && echo a > a && git add a && git commit -qm base && git push -q origin develop`);
+
+	sh(repo, "echo b >> a && git add a");
+	assert.deepEqual((await reviewCommand(repo)).args, ["diff", "HEAD"], "staged-only changes count as uncommitted");
+
+	sh(repo, "git commit -qm one && git checkout -qb feature-x");
+	sh(repo, "echo c > c && git add c && git commit -qm two && git push -q origin feature-x");
+	// Someone's branch stacked on ours, and our own pushed copy behind an unpushed commit.
+	sh(repo, "git push -q origin HEAD:refs/heads/lvieira/stacked && echo d > d && git add d && git commit -qm three");
+	assert.deepEqual((await reviewCommand(repo)).args, ["diff", "origin/develop...HEAD"]);
+
+	sh(repo, "git checkout -q develop && git reset -q --hard origin/develop && echo e > e && git add e && git commit -qm only");
+	assert.deepEqual((await reviewCommand(repo)).args, ["show"], "one commit past the base is just the last commit");
+
+	// On develop itself, the base is origin/develop, not an older main.
+	sh(repo, "git push -q origin develop && git push -q origin $(git rev-parse HEAD~1):refs/heads/main && echo f > f && git add f && git commit -qm unpushed1 && echo g > g && git add g && git commit -qm unpushed2");
+	assert.deepEqual((await reviewCommand(repo)).args, ["diff", "origin/develop...HEAD"]);
+
+	try {
+		execFileSync("jj", ["--version"], { stdio: "ignore" });
+	} catch {
+		t.skip("jj is not installed");
+		return;
+	}
+	const jj = await tmpdir();
+	sh(jj, "jj git init --colocate >/dev/null 2>&1 && echo a > a && jj describe -m one >/dev/null 2>&1 && jj new >/dev/null 2>&1");
+	assert.deepEqual((await reviewCommand(jj)).args, ["show", "@-"], "an empty @ shows the change before it");
+	sh(jj, "echo b > b");
+	assert.deepEqual((await reviewCommand(jj)).args, ["diff"]);
 });

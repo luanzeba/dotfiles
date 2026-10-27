@@ -11,10 +11,15 @@ import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
 import { notableRefs, rank, type Ref, RefCollector, type Teams, textOf, userText } from "./refs.ts";
-import { type DevRoute, gitRoot, liveDevRoutes, readTeams, SessionIndex, SUMMARY_TYPE, type SummaryData } from "./store.ts";
+import { type DevRoute, liveDevRoutes, readTeams, repoRoot, reviewCommand, SessionIndex, SUMMARY_TYPE, type SummaryData } from "./store.ts";
 import { type CardView, type DevRow, SessionCard, SessionFinder, shortPath } from "./ui.ts";
 
 const SHORTCUT = "ctrl+shift+i";
+// Not ctrl+shift+d: pi-tui reserves it for its debug log before extension shortcuts run.
+const DIFF_SHORTCUT = "ctrl+shift+h";
+const HUNK_COMMANDS = new Set(["diff", "show", "log", "stash", "patch"]);
+/** A checkout counts as the session's when it got at least this share of the busiest one's activity. */
+const VISIT_SHARE = 0.25;
 /**
  * Cheap model ids for summaries when settings.json has no `"session-info": { "model": "provider/id" }`.
  * They are looked up on the session's own provider, so session digests never go to another
@@ -258,23 +263,25 @@ export default function sessionInfo(pi: ExtensionAPI) {
 	}
 
 	/**
-	 * The cwd plus everywhere the session cd'd into, ran `git -C` on, or edited files, resolved to
-	 * git roots and weighted by how often, with the cwd's checkout first. Sessions often start in a
-	 * parent folder or the main checkout and do the work in a worktree.
+	 * The session's checkouts: the cwd plus everywhere it cd'd into, ran `git -C` on, or edited
+	 * files, resolved to git roots and weighted by how often. Sessions often start in a parent folder
+	 * or the main checkout and do the work in a worktree, so activity ranks them, not the cwd.
+	 * Checkouts with under a quarter of the busiest one's activity were quick visits and are left out.
 	 */
 	async function workedRoots(): Promise<Map<string, number>> {
-		const places: [string, number][] = [[cwd, Number.POSITIVE_INFINITY], ...(collector?.places ?? [])];
+		const places: [string, number][] = [[cwd, 1], ...(collector?.places ?? [])];
 		const weights = new Map<string, number>();
 		await Promise.all(
 			places.map(async ([place, count]) => {
 				const resolved = path.resolve(cwd, place.replace(/^~(?=\/|$)/, os.homedir()));
 				let lookup = rootOf.get(resolved);
-				if (!lookup) rootOf.set(resolved, (lookup = gitRoot(resolved)));
+				if (!lookup) rootOf.set(resolved, (lookup = repoRoot(resolved)));
 				const root = await lookup;
 				if (root) weights.set(root, (weights.get(root) ?? 0) + count);
 			}),
 		);
-		return weights;
+		const busiest = Math.max(0, ...weights.values());
+		return new Map([...weights].filter(([, weight]) => weight >= busiest * VISIT_SHARE));
 	}
 
 	/**
@@ -315,7 +322,7 @@ export default function sessionInfo(pi: ExtensionAPI) {
 			refs: notableRefs(refs, { ...knownTeams, ...collector?.teams }),
 			dev: devRows(refs),
 			location: [shortPath(cwd), branch].filter(Boolean).join("  on "),
-			hint: `${SHORTCUT} to close`,
+			hint: `${DIFF_SHORTCUT} hunk diff · ${SHORTCUT} close`,
 		};
 	}
 
@@ -359,6 +366,79 @@ export default function sessionInfo(pi: ExtensionAPI) {
 		void refreshLive(ctx);
 		if (!summary) void summarize(ctx);
 	}
+
+	/**
+	 * Open hunk in a new Rex tab of this session, in the checkout the session worked in, showing
+	 * whatever there is to review there (see reviewCommand). When it worked in several checkouts, ask,
+	 * busiest first. The tab closes when hunk quits.
+	 */
+	async function openDiff(ctx: ExtensionContext, args: string): Promise<void> {
+		syncRefs(ctx);
+		const roots = [...(await workedRoots())].sort((a, b) => b[1] - a[1]).map(([root]) => root);
+		if (roots.length === 0) {
+			ctx.ui.notify("This session hasn't worked in a git or jj checkout", "warning");
+			return;
+		}
+		const labels = roots.map(shortPath);
+		const picked = roots.length === 1 ? labels[0] : await ctx.ui.select("Diff which checkout?", labels);
+		const root = picked === undefined ? undefined : roots[labels.indexOf(picked)];
+		if (!root) return;
+		// `/hunk show abc123` runs as given; other arguments go to `hunk diff`.
+		const words = args.split(/\s+/).filter(Boolean);
+		const review =
+			words.length === 0
+				? await reviewCommand(root)
+				: { args: HUNK_COMMANDS.has(words[0]) ? words : ["diff", ...words], what: "what you asked for" };
+		const command = `hunk ${review.args.join(" ")}`;
+		const rexSession = process.env.REX_SESSION;
+		if (!rexSession) {
+			ctx.ui.notify(`Not in Rex. Run: cd ${root} && ${command}`, "info");
+			return;
+		}
+		// Through the login shell: tabs Rex starts directly get a bare PATH without ~/.local/bin.
+		const shell = process.env.SHELL || "/bin/zsh";
+		const label = `hunk ${path.basename(root)}`;
+		const result = await pi.exec(
+			"rex",
+			["window", "new", "-s", rexSession, label, "-c", root, "--shell", shell, "--json", "--", "hunk", ...review.args],
+			{ timeout: 10_000 },
+		);
+		if (result.code !== 0) {
+			ctx.ui.notify(`Couldn't open hunk: ${(result.stderr || result.stdout).trim()}`, "error");
+			return;
+		}
+		ctx.ui.notify(`${command}: ${review.what} in ${shortPath(root)}`, "info");
+		// The new tab becomes the session's active window on the server, but the app keeps showing
+		// the tab you're in until asked to switch, which Rex only allows with Remote Control on.
+		const windowId = (() => {
+			try {
+				return JSON.parse(result.stdout).window_id as string | undefined;
+			} catch {
+				return undefined;
+			}
+		})();
+		if (!windowId) return;
+		const shown = await pi.exec("rex", ["do", "session.select", `session_id=${rexSession}`, `window_id=${windowId}`], { timeout: 5_000 });
+		if (shown.code !== 0) {
+			const reason = (shown.stderr || shown.stdout).trim();
+			ctx.ui.notify(
+				/Remote Control/i.test(reason)
+					? "Opened the hunk tab, but Rex can't switch to it: turn on Remote Control in Rex Settings > Rex Server"
+					: `Opened the hunk tab, but couldn't switch to it: ${reason}`,
+				"warning",
+			);
+		}
+	}
+
+	pi.registerShortcut(DIFF_SHORTCUT, {
+		description: "Review this session's worktree in hunk, in a new Rex tab",
+		handler: (ctx) => openDiff(ctx, ""),
+	});
+
+	pi.registerCommand("hunk", {
+		description: `Review this session's worktree in hunk [hunk args] in a new Rex tab (${DIFF_SHORTCUT})`,
+		handler: async (args, ctx) => openDiff(ctx, args),
+	});
 
 	pi.registerShortcut(SHORTCUT, {
 		description: "Toggle the session info card",
