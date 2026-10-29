@@ -48,6 +48,7 @@ See [references/tool-template.md](references/tool-template.md) for the install s
 | gh | `gh/` | `~/.config/gh-not`, launchd agent | Yes (binary from Nix + extensions/config) |
 | glab | `glab/` | N/A | Yes (Nix flake: glab, opt-in) |
 | AWS CLI | `aws/` | `~/.aws/config` | Yes (Nix flake: awscli2, opt-in) |
+| Trino CLI | `trino/` | N/A | Yes (Nix wrapper + JRE, latest GitHub release jar in `~/.local/trino/`; macOS, opt-in) |
 | 1Password CLI | `1password/` | N/A | Yes (Nix flake: 1password-cli) |
 
 ## Platform Support

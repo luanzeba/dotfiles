@@ -55,6 +55,20 @@
           gh = pkgs.gh;
           glab = pkgs.glab;
           aws = pkgs.awscli2;
+          # Trino stopped publishing the CLI to Maven Central after 476, which
+          # strands nixpkgs' trino-cli there. trino/install downloads the latest
+          # GitHub release jar instead; this wrapper runs it on a Nix JRE so
+          # java stays off PATH. The flags match the release's launcher stub.
+          trino = pkgs.writeShellScriptBin "trino" ''
+            jar="$HOME/.local/trino/trino-cli.jar"
+            if [[ ! -f "$jar" ]]; then
+              echo "trino: $jar is missing; run 'dot install trino'" >&2
+              exit 1
+            fi
+            # Java 22+ is recommended for faster result decompression.
+            exec ${pkgs.temurin-jre-bin-25}/bin/java -Xmx1G --enable-native-access=ALL-UNNAMED \
+              -XX:+IgnoreUnrecognizedVMOptions -jar "$jar" "$@"
+          '';
           git = pkgs.git;
           bat = pkgs.bat;
           "1password" = pkgs._1password-cli;

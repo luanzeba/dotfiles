@@ -1,0 +1,116 @@
+#!/bin/bash
+set -e
+
+# Trino CLI (macOS only for now)
+# https://trino.io/docs/current/client/cli.html
+#
+# The Nix profile entry provides the `trino` wrapper and its JRE. The CLI jar
+# itself comes from the latest GitHub release: Trino no longer publishes it to
+# Maven Central, which is where nixpkgs' trino-cli is built from.
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck disable=SC1091
+source "$SCRIPT_DIR/../lib/nix.sh"
+
+# Must match the jar path in the flake's trino wrapper.
+TRINO_INSTALL_DIR="$HOME/.local/trino"
+TRINO_JAR="$TRINO_INSTALL_DIR/trino-cli.jar"
+TRINO_LATEST_RELEASE_API="https://api.github.com/repos/trinodb/trino/releases/latest"
+
+bootstrap_trino_path() {
+    _source_nix_env || true
+    if [[ -d "$HOME/.nix-profile/bin" ]]; then
+        export PATH="$HOME/.nix-profile/bin:$PATH"
+    fi
+}
+
+# The standard Nix hooks, overridden below where the jar matters. Server URLs
+# and credentials are machine-specific, so the default no-op configure() stays.
+nix_package_tool trino trino
+
+check_installed() {
+    nix_installed trino || return 1
+    [[ -f "$TRINO_JAR" ]] || return 1
+
+    bootstrap_trino_path
+    command -v trino &>/dev/null
+}
+
+get_installed_version() {
+    [[ -f "$TRINO_JAR" ]] || return 0
+    bootstrap_trino_path
+    # "Trino CLI 484" -> "484"
+    trino --version 2>/dev/null | awk '{print $NF}'
+}
+
+# Download the latest release jar unless it is already installed. The jar is
+# checked against the sha256 digest GitHub publishes for the release asset.
+sync_cli() {
+    bootstrap_trino_path
+
+    local release version
+    release="$(curl -fsSL "$TRINO_LATEST_RELEASE_API")" || {
+        log_error "Could not fetch the latest Trino release"
+        return 1
+    }
+    version="$(jq -r '.tag_name // empty' <<<"$release")"
+    [[ -n "$version" ]] || {
+        log_error "Latest Trino release has no tag"
+        return 1
+    }
+
+    if [[ "$(get_installed_version)" == "$version" ]]; then
+        log_info "Trino CLI $version is up to date"
+        return 0
+    fi
+
+    local url digest
+    read -r url digest < <(jq -r --arg name "trino-cli-$version" \
+        '.assets[] | select(.name == $name) | "\(.browser_download_url) \(.digest // "")"' \
+        <<<"$release")
+    if [[ -z "$url" || "$digest" != sha256:* ]]; then
+        log_error "Trino $version has no trino-cli asset with a sha256 digest"
+        return 1
+    fi
+
+    log_info "Downloading Trino CLI $version..."
+    mkdir -p "$TRINO_INSTALL_DIR"
+    local tmp
+    tmp="$(mktemp "$TRINO_INSTALL_DIR/.trino-cli.XXXXXX")"
+    if ! curl -fsSL "$url" -o "$tmp"; then
+        rm -f "$tmp"
+        log_error "Could not download $url"
+        return 1
+    fi
+    if ! echo "${digest#sha256:}  $tmp" | shasum -a 256 -c --status; then
+        rm -f "$tmp"
+        log_error "Trino CLI $version failed its sha256 check"
+        return 1
+    fi
+    mv -f "$tmp" "$TRINO_JAR"
+
+    log_success "Installed $(trino --version)"
+}
+
+install() {
+    if ! is_macos; then
+        log_error "trino/install supports macOS only for now"
+        return 1
+    fi
+
+    nix_sync trino
+    sync_cli
+}
+
+update() {
+    is_macos || return 0
+    nix_installed trino || return 0
+
+    nix_sync trino
+    sync_cli
+}
+
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    install
+    configure
+fi
