@@ -170,8 +170,8 @@ async function runSetup(ctx: ExtensionCommandContext): Promise<void> {
 		: await ctx.ui.select(title, candidates);
 	if (!choice) return;
 
-	await writeReviewModel(choice);
-	ctx.ui.notify(`Reviewer model set to ${choice}`, "info");
+	const profile = await writeReviewModel(choice);
+	ctx.ui.notify(`Reviewer model${profile ? ` for the ${profile} profile` : ""} set to ${choice}`, "info");
 }
 
 const REVIEW_TOOL_GUIDELINES = [

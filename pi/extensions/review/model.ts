@@ -8,7 +8,8 @@
  *   personal machine           reviewer = anthropic/claude-opus-5
  *
  * It lives in pi's settings.json, which on this setup is a gitignored per-machine file, so
- * the work and personal machines keep their own answer.
+ * the work and personal machines keep their own answer. A machine that switches accounts
+ * within one pi uses profiles (../profiles.ts): while one is active, its `review` key wins.
  *
  * When nothing is configured we refuse rather than guess. Guessing a model is exactly how
  * you end up naming one whose provider reports itself ready but cannot serve it, and getting
@@ -47,9 +48,18 @@ async function readSettings(): Promise<Record<string, unknown>> {
 	}
 }
 
+/** The active profile's settings, which the profiles extension names in PI_PROFILE. */
+function activeProfile(settings: Record<string, unknown>): { name: string; settings: Record<string, unknown> } | undefined {
+	const name = process.env.PI_PROFILE;
+	const profiles = settings.profiles;
+	if (!name || !profiles || typeof profiles !== "object") return undefined;
+	const profile = (profiles as Record<string, unknown>)[name];
+	return profile && typeof profile === "object" ? { name, settings: profile as Record<string, unknown> } : undefined;
+}
+
 export async function readReviewConfig(): Promise<{ model?: string; thinking?: string }> {
 	const settings = await readSettings();
-	const raw = settings[SETTINGS_KEY];
+	const raw = activeProfile(settings)?.settings[SETTINGS_KEY] ?? settings[SETTINGS_KEY];
 	if (!raw || typeof raw !== "object") return {};
 	const config = raw as Record<string, unknown>;
 	return {
@@ -61,13 +71,17 @@ export async function readReviewConfig(): Promise<{ model?: string; thinking?: s
 /**
  * Write only our key back, preserving everything else and the file's formatting style.
  * Writes through the symlink so the real per-machine file is updated in place.
+ * Returns the profile it was saved to, if one is active.
  */
-export async function writeReviewModel(spec: string): Promise<void> {
+export async function writeReviewModel(spec: string): Promise<string | undefined> {
 	const settings = await readSettings();
-	const existing = (settings[SETTINGS_KEY] as Record<string, unknown> | undefined) ?? {};
-	settings[SETTINGS_KEY] = { ...existing, model: spec };
+	const profile = activeProfile(settings);
+	const owner = profile?.settings ?? settings;
+	const existing = (owner[SETTINGS_KEY] ?? settings[SETTINGS_KEY]) as Record<string, unknown> | undefined;
+	owner[SETTINGS_KEY] = { ...existing, model: spec };
 	const target = await fs.realpath(settingsPath()).catch(() => settingsPath());
 	await fs.writeFile(target, `${JSON.stringify(settings, null, 2)}\n`, "utf8");
+	return profile?.name;
 }
 
 interface CatalogModel {

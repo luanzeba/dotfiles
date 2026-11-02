@@ -191,6 +191,16 @@ This writes the gitignored per-machine setting in `~/.pi/agent/settings.json`:
 If nothing is configured, `/review` refuses instead of guessing. Before starting, it verifies that the
 model exists and its provider authenticates. The reviewer may be the same model as the active session.
 
+With [profiles](../profiles.ts), the active profile's `review` key takes precedence and `--setup`
+writes there instead:
+
+```json
+{ "profiles": { "personal": { "review": { "model": "claude-code/claude-opus-5-5" } } } }
+```
+
+Reviewers inherit the profile's environment, so a reviewer that needs `ANTHROPIC_*` unset gets it
+unset.
+
 ## Files
 
 ```
