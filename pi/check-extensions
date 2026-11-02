@@ -1,0 +1,168 @@
+#!/bin/bash
+# Check that the extensions pi loads still fit the installed pi. /update runs this through an
+# agent after pi changes version; it also works by hand.
+#
+#   check-extensions                  type-check against the installed pi, then load every extension
+#   check-extensions --types DIR      type-check only, against declarations saved with --snapshot
+#   check-extensions --snapshot DIR   save the installed pi's declarations and docs to DIR
+#
+# Type-checking covers the extensions in ~/.pi/agent/extensions (installed packages are their
+# authors' business) and needs tsc. Loading covers everything pi loads, packages included.
+# Exits 1 when anything fails.
+set -euo pipefail
+
+EXTENSIONS_DIR="${PI_CODING_AGENT_DIR:-$HOME/.pi/agent}/extensions"
+
+# The installed pi package: PI_PACKAGE_DIR, or the package that owns the `pi` binary.
+pi_root() {
+    if [[ -n "${PI_PACKAGE_DIR:-}" ]]; then
+        echo "$PI_PACKAGE_DIR"
+        return
+    fi
+    local dir
+    dir="$(dirname "$(readlink -f "$(command -v pi)")")"
+    while [[ "$dir" != "/" ]]; do
+        if [[ -f "$dir/package.json" ]] && grep -q '"name": *"@earendil-works/pi-coding-agent"' "$dir/package.json"; then
+            echo "$dir"
+            return
+        fi
+        dir="$(dirname "$dir")"
+    done
+    echo "check-extensions: can't find the pi package; set PI_PACKAGE_DIR" >&2
+    exit 1
+}
+
+# A dependency of the pi package at root $1, wherever npm put it: nested or hoisted.
+package_dir() {
+    local dir="$1" name="$2"
+    while [[ "$dir" != "/" ]]; do
+        if [[ -d "$dir/node_modules/$name" ]]; then
+            echo "$dir/node_modules/$name"
+            return
+        fi
+        dir="$(dirname "$dir")"
+    done
+    echo "check-extensions: $name not found above $1" >&2
+    exit 1
+}
+
+# The dependencies extension imports resolve to, which --snapshot saves next to the package.
+DEPENDENCIES=(@earendil-works typebox @types)
+
+# Declarations and docs only: enough for --types to check against later. Dependencies go under
+# DIR/node_modules whether npm nested or hoisted them.
+snapshot() {
+    local root="$1" dest="$2" name
+    local declarations=(--prune-empty-dirs --include='*/' --include='*.d.ts' --include='*.d.mts' --include='package.json' --exclude='*')
+    mkdir -p "$dest/node_modules"
+    rsync -a --include='/package.json' --include='/CHANGELOG.md' --include='/docs/***' \
+        --exclude='/node_modules/' --exclude='/examples/' "${declarations[@]}" "$root/" "$dest/"
+    for name in "${DEPENDENCIES[@]}"; do
+        mkdir -p "$dest/node_modules/$name"
+        rsync -a "${declarations[@]}" "$(package_dir "$root" "$name")/" "$dest/node_modules/$name/"
+    done
+    echo "Saved pi $(sed -n 's/.*"version": *"\([^"]*\)".*/\1/p' "$root/package.json" | head -1) declarations to $dest"
+}
+
+# Each extension pi discovers: a .ts/.js file, or a directory with an index.ts/.js.
+extension_entries() {
+    local entry real
+    for entry in "$EXTENSIONS_DIR"/*; do
+        real="$(readlink -f "$entry")"
+        if [[ -f "$real" && "$real" == *.[tj]s ]]; then
+            echo "$real"
+        elif [[ -f "$real/index.ts" ]]; then
+            echo "$real/index.ts"
+        elif [[ -f "$real/index.js" ]]; then
+            echo "$real/index.js"
+        fi
+    done
+}
+
+type_check() {
+    local root="$1"
+    if ! command -v tsc >/dev/null; then
+        echo "Type check skipped: tsc not found (install node tools: dot install node)"
+        return 0
+    fi
+
+    local view scope typebox types files tmp
+    scope="$(package_dir "$root" @earendil-works)" || return 1
+    # Extensions get pi-ai's extension view (pi 1.5+) or its compat entry (earlier).
+    view="$root/dist/core/extensions/pi-ai-extension-view.d.ts"
+    [[ -f "$view" ]] || view="$scope/pi-ai/dist/compat.d.ts"
+    typebox="$(package_dir "$root" typebox)" || return 1
+    types="$(dirname "$(package_dir "$root" @types/node)")" || return 1
+    files="$(extension_entries | sed 's/.*/"&"/' | paste -sd, -)"
+    tmp="$(mktemp -d)"
+
+    # Mirror the aliases pi's extension loader gives these imports at runtime.
+    cat >"$tmp/tsconfig.json" <<EOF
+{
+  "compilerOptions": {
+    "target": "ESNext", "module": "Preserve", "moduleResolution": "Bundler",
+    "strict": true, "noEmit": true, "skipLibCheck": true, "allowImportingTsExtensions": true,
+    "types": ["node"], "typeRoots": ["$types"],
+    "paths": {
+      "@earendil-works/pi-coding-agent": ["$root/dist/index.d.ts"],
+      "@mariozechner/pi-coding-agent": ["$root/dist/index.d.ts"],
+      "@earendil-works/pi-ai": ["$view"],
+      "@mariozechner/pi-ai": ["$view"],
+      "@earendil-works/*": ["$scope/*"],
+      "@mariozechner/*": ["$scope/*"],
+      "typebox": ["$typebox"],
+      "@sinclair/typebox": ["$typebox"]
+    }
+  },
+  "files": [$files]
+}
+EOF
+    echo "== Type check against $root (paths relative to ~)"
+    local output status=0
+    output="$(cd "$HOME" && tsc -p "$tmp/tsconfig.json" --pretty false)" || status=$?
+    rm -rf "$tmp"
+    if [[ $status -eq 0 ]]; then
+        echo "No type errors."
+    else
+        echo "$output"
+        echo "$(grep -c 'error TS' <<<"$output") type errors."
+    fi
+    return $status
+}
+
+# Start pi without a prompt: every extension loads and session_start runs, with no model call.
+load_check() {
+    echo "== Load every extension"
+    local output tmp
+    tmp="$(mktemp -d)"
+    output="$(cd "$tmp" && pi --offline --no-session -p "" 2>&1)" || true
+    rm -rf "$tmp"
+    local failures
+    failures="$(grep -E 'Failed to load extension|^Extension error' <<<"$output" || true)"
+    if [[ -z "$failures" ]]; then
+        echo "All extensions loaded."
+        return 0
+    fi
+    echo "$failures"
+    return 1
+}
+
+case "${1:-}" in
+--snapshot)
+    snapshot "$(pi_root)" "${2:?usage: check-extensions --snapshot DIR}"
+    ;;
+--types)
+    type_check "$(cd "${2:?usage: check-extensions --types DIR}" && pwd)"
+    ;;
+"")
+    status=0
+    type_check "$(pi_root)" || status=1
+    echo
+    load_check || status=1
+    exit $status
+    ;;
+*)
+    sed -n '2,11s/^# \{0,1\}//p' "$0"
+    exit 2
+    ;;
+esac
