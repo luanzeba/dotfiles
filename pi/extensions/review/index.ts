@@ -175,7 +175,7 @@ async function runSetup(ctx: ExtensionCommandContext): Promise<void> {
 }
 
 const REVIEW_TOOL_GUIDELINES = [
-	"Call review only when the user asks for an automated review of your local changes. It runs independent simplification and correctness reviewers, plus a design reviewer for APIs, data, and service boundaries when the change touches schemas, migrations, contracts, or routes. It can take 10-30 minutes.",
+	"Call review once you finish a non-trivial code change and its checks pass, before handing off. Skip it for docs-only, config-only, or one-line changes, or when the user says not to. It runs independent simplification and correctness reviewers, plus a design reviewer for APIs, data, and service boundaries when the change touches schemas, migrations, contracts, or routes. It can take 10-30 minutes.",
 	"Before each call, finish the change and run the relevant checks. Pass `context` with what you changed and why, the checks you ran, and, from the second round on, how you handled each earlier finding: fixed, or rejected with your evidence.",
 	"Verify every finding against the code, and against real data or usage when it depends on them, before acting. Fix what is real. Push back with evidence where a reviewer is wrong; do not accept a finding you can disprove, and do not invent work to replace a section that says `nothing further`.",
 	"Repeat until every reviewer reports nothing further, only findings you have already rejected with evidence remain, or three rounds have run. Then give the user a short handoff: what each round found, what you fixed, what you rejected and why, and anything still open.",
@@ -387,7 +387,7 @@ export default function reviewExtension(pi: ExtensionAPI) {
 		label: "Review",
 		description:
 			"Run independent simplification and correctness reviews, plus an API, data, and boundary design review when relevant, of local changes in a git working tree with the configured reviewer model, and return their findings. Read-only: never edits files or posts anywhere. Does not review merge requests.",
-		promptSnippet: "Run independent reviews of your local changes when the user asks for an automated review",
+		promptSnippet: "Run independent reviews of your local changes after finishing a non-trivial code change",
 		promptGuidelines: REVIEW_TOOL_GUIDELINES,
 		parameters: ReviewToolParams,
 		async execute(_toolCallId, params, signal, onUpdate, ctx) {

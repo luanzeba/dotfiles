@@ -72,7 +72,8 @@ How the agent acts on findings is plain text in the tool's prompt guidelines (`i
 each finding, fix what's real, push back with evidence, pass rebuttals into the next round's
 `context`, and stop when every reviewer reports nothing further, only rejected findings remain, or
 three rounds have run, then hand off what was fixed, rejected, and still open. Edit that text as
-models change. The tool runs only when asked; add a line to `AGENTS.md` if you want it every time.
+models change. The agent runs it once after finishing a non-trivial code change whose checks pass,
+and skips docs-only, config-only, and one-line changes or when you say not to.
 
 ## What each reviewer receives
 
