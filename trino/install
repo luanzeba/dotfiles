@@ -17,13 +17,6 @@ TRINO_INSTALL_DIR="$HOME/.local/trino"
 TRINO_JAR="$TRINO_INSTALL_DIR/trino-cli.jar"
 TRINO_LATEST_RELEASE_API="https://api.github.com/repos/trinodb/trino/releases/latest"
 
-bootstrap_trino_path() {
-    _source_nix_env || true
-    if [[ -d "$HOME/.nix-profile/bin" ]]; then
-        export PATH="$HOME/.nix-profile/bin:$PATH"
-    fi
-}
-
 # The standard Nix hooks, overridden below where the jar matters. Server URLs
 # and credentials are machine-specific, so the default no-op configure() stays.
 nix_package_tool trino trino
@@ -31,23 +24,17 @@ nix_package_tool trino trino
 check_installed() {
     nix_installed trino || return 1
     [[ -f "$TRINO_JAR" ]] || return 1
-
-    bootstrap_trino_path
     command -v trino &>/dev/null
 }
 
 get_installed_version() {
-    [[ -f "$TRINO_JAR" ]] || return 0
-    bootstrap_trino_path
-    # "Trino CLI 484" -> "484"
+    # "Trino CLI 484" -> "484"; empty when the jar is missing.
     trino --version 2>/dev/null | awk '{print $NF}'
 }
 
 # Download the latest release jar unless it is already installed. The jar is
 # checked against the sha256 digest GitHub publishes for the release asset.
 sync_cli() {
-    bootstrap_trino_path
-
     local release version
     release="$(curl -fsSL "$TRINO_LATEST_RELEASE_API")" || {
         log_error "Could not fetch the latest Trino release"
@@ -67,7 +54,7 @@ sync_cli() {
     local url digest
     read -r url digest < <(jq -r --arg name "trino-cli-$version" \
         '.assets[] | select(.name == $name) | "\(.browser_download_url) \(.digest // "")"' \
-        <<<"$release")
+        <<<"$release") || true
     if [[ -z "$url" || "$digest" != sha256:* ]]; then
         log_error "Trino $version has no trino-cli asset with a sha256 digest"
         return 1
@@ -98,16 +85,14 @@ install() {
         return 1
     fi
 
-    nix_sync trino
+    # `dot update` runs this inside `if`, where set -e is off, so check each step.
+    nix_sync trino || return 1
     sync_cli
 }
 
 update() {
-    is_macos || return 0
     nix_installed trino || return 0
-
-    nix_sync trino
-    sync_cli
+    install
 }
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then

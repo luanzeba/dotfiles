@@ -79,7 +79,7 @@ To bump pinned versions on every machine: `nix flake update --flake ~/dotfiles/n
 
 Whisper is an opt-in exception: `whisper/install` installs pinned `mlx-whisper` with `uv` on Apple Silicon. `dot update whisper` upgrades existing installations to the pinned version and removes the old Nix profile entry.
 
-Trino is the other half-Nix tool: the `trino` package is only the wrapper, which keeps `java` off `PATH`. `trino/install` downloads the latest GitHub release jar to `~/.local/trino/trino-cli.jar` and checks its sha256 digest, and `dot update trino` fetches newer releases. nixpkgs' `trino-cli` is stuck at 476 because Trino stopped publishing the CLI to Maven Central.
+Trino is also an exception: the `trino` package is only the wrapper, which keeps `java` off `PATH`. `trino/install` downloads the latest GitHub release jar to `~/.local/trino/trino-cli.jar` and checks its sha256 digest, and `dot update trino` fetches newer releases. nixpkgs' `trino-cli` is stuck at 476 because Trino stopped publishing the CLI to Maven Central.
 
 npm-only tools (`hunk`, `pi`, `qmd`) install as npm globals into `~/.local`; Hunk can install a minimal `nodeRuntime` profile entry when npm is missing.
 
@@ -138,7 +138,7 @@ dot logs --clear      # Clear error log
 
 ## Utilities
 
-- `chrome-router`: native macOS HTTP/HTTPS handler that routes links to Chrome profiles while keeping the Pi CDP session available. Hold Hyper while clicking a link to choose Home or Work and remember that site. CLI examples: `chrome-router open Work`, `chrome-router open Home`, `chrome-router choose`, `chrome-router rules`, and `chrome-router status`. Raycast discovers the `Open Chrome — Work`, `Open Chrome — Home`, and `Choose Chrome Profile for URL` commands from `bin/` for direct keybinding assignment.
+- `chrome-router`: native macOS HTTP/HTTPS and HTML file handler that routes links to Chrome profiles while keeping the Pi CDP session available. Local HTML files open in Chrome with the last-used profile. Hold Hyper while clicking a link to choose Home or Work and remember that site. CLI examples: `chrome-router open Work`, `chrome-router open Home`, `chrome-router choose`, `chrome-router rules`, and `chrome-router status`. Raycast discovers the `Open Chrome — Work`, `Open Chrome — Home`, and `Choose Chrome Profile for URL` commands from `bin/` for direct keybinding assignment.
 - `oryx`: Oryx GraphQL wrapper for layout inspection, key updates, and compilation. `oryx auth login` uses an isolated visible Chromium profile; its session is stored outside the repository at `~/.local/state/oryx/session.json` with mode `0600`.
 - `zsa/install`: installs minimal Voyager-only udev rules and adds the user to `plugdev` for Oryx WebUSB flashing.
 - `tui-qa`: PTY-driven TUI smoke tests.
