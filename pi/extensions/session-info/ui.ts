@@ -12,8 +12,8 @@ import {
 	wrapTextWithAnsi,
 } from "@earendil-works/pi-tui";
 import * as os from "node:os";
-import { type Match, matchSession, notableRefs, parseQuery, type Ref, type RefKind, type Teams } from "./refs.ts";
-import type { SessionRecord } from "./store.ts";
+import { type Match, notableRefs, type Ref, type RefKind, type Teams } from "./refs.ts";
+import { searchRecords, type SessionRecord } from "./store.ts";
 
 const KIND_LABELS: Record<RefKind, string> = {
 	ticket: "Linear",
@@ -162,7 +162,6 @@ export class SessionCard implements Component {
 
 interface FinderItem {
 	record: SessionRecord;
-	haystack: string;
 	notable: Ref[];
 	primary: string;
 }
@@ -178,19 +177,6 @@ export interface FinderOptions {
 	query: string;
 	currentPath?: string;
 	done: (path: string | undefined) => void;
-}
-
-/** Lowercase search text per record. Records are replaced when rescanned, so identity is the cache key. */
-const haystacks = new WeakMap<SessionRecord, string>();
-
-function haystackOf(record: SessionRecord): string {
-	let haystack = haystacks.get(record);
-	if (haystack === undefined) {
-		const refText = record.refs.map((ref) => `${ref.label} ${ref.title ?? ""} ${ref.url ?? ""}`).join(" ");
-		haystack = [record.name, record.summary, record.cwd, record.userWords, refText].filter(Boolean).join("\n").toLowerCase();
-		haystacks.set(record, haystack);
-	}
-	return haystack;
 }
 
 /** Search box over every session, ranked by how strongly each one is tied to the query. */
@@ -232,7 +218,6 @@ export class SessionFinder implements Component, Focusable {
 				record,
 				notable: notableRefs(record.refs, teams),
 				primary: (record.name ?? record.summary ?? record.firstMessage).replace(/\s+/g, " "),
-				haystack: haystackOf(record),
 			}));
 		this.filter(selectedPath);
 	}
@@ -288,17 +273,8 @@ export class SessionFinder implements Component, Focusable {
 	}
 
 	private filter(keepPath?: string): void {
-		const tokens = parseQuery(this.input.getValue());
-		if (tokens.length === 0) {
-			this.rows = this.items.map((item) => ({ item })).sort((a, b) => b.item.record.modified - a.item.record.modified);
-		} else {
-			const rows: FinderRow[] = [];
-			for (const item of this.items) {
-				const match = matchSession(item.record.refs, item.haystack, tokens);
-				if (match) rows.push({ item, match });
-			}
-			this.rows = rows.sort((a, b) => a.match!.score - b.match!.score || b.item.record.modified - a.item.record.modified);
-		}
+		const items = new Map(this.items.map((item) => [item.record, item]));
+		this.rows = searchRecords([...items.keys()], this.input.getValue()).map(({ record, match }) => ({ item: items.get(record)!, match }));
 		const kept = keepPath ? this.rows.findIndex((row) => row.item.record.path === keepPath) : -1;
 		this.selected = Math.max(kept, 0);
 	}

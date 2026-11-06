@@ -1,7 +1,8 @@
 /**
  * Session info: a toggleable card with what the current session is about (one-sentence summary,
- * Linear tickets, merge requests, dev servers, and other links), and /resume-search to find a
- * session by MR, ticket, URL, or words. See README.md.
+ * Linear tickets, merge requests, dev servers, and other links), /resume-search to find a session
+ * by MR, ticket, URL, or words, and `@@` mentions, reading, and messaging of other sessions
+ * (links.ts). See README.md.
  */
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
@@ -10,6 +11,7 @@ import { createHash } from "node:crypto";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
+import sessionLinks from "./links.ts";
 import { notableRefs, rank, type Ref, RefCollector, type Teams, textOf, userText } from "./refs.ts";
 import { type DevRoute, liveDevRoutes, readTeams, repoRoot, reviewCommand, SessionIndex, SUMMARY_TYPE, type SummaryData } from "./store.ts";
 import { type CardView, type DevRow, SessionCard, SessionFinder, shortPath } from "./ui.ts";
@@ -90,6 +92,15 @@ export default function sessionInfo(pi: ExtensionAPI) {
 	let knownTeams: Teams = {};
 	let card: CardHandle | undefined;
 	let index: SessionIndex | undefined;
+
+	/** One index per session dir, shared by /resume-search and the `@@` dropdown and tools. */
+	function sessionIndex(ctx: ExtensionContext): SessionIndex {
+		const location = indexLocation(ctx);
+		index ??= new SessionIndex(location.dir, location.root);
+		return index;
+	}
+
+	sessionLinks(pi, sessionIndex);
 
 	function invalidateCard(): void {
 		card?.component.invalidate();
@@ -457,9 +468,7 @@ export default function sessionInfo(pi: ExtensionAPI) {
 				ctx.ui.notify("/resume-search needs the interactive TUI", "warning");
 				return;
 			}
-			const location = indexLocation(ctx);
-			index ??= new SessionIndex(location.dir, location.root);
-			const sessions = index;
+			const sessions = sessionIndex(ctx);
 			const records = await sessions.load();
 			const currentPath = ctx.sessionManager.getSessionFile();
 			const controller = new AbortController();

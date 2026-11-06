@@ -9,13 +9,14 @@
  *   user's messages, not the transcript.
  */
 import { execFile } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { createReadStream } from "node:fs";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
 import { createInterface } from "node:readline";
 import { promisify } from "node:util";
-import { classifyUrl, RefCollector, type Ref, type Teams, userText } from "./refs.ts";
+import { classifyUrl, type Match, matchSession, parseQuery, RefCollector, type Ref, type Teams, userText } from "./refs.ts";
 
 /** Custom entry type holding the generated one-sentence summary. */
 export const SUMMARY_TYPE = "session-info";
@@ -153,6 +154,62 @@ export async function scanSessionFile(file: string, stat: { mtimeMs: number; siz
 	};
 }
 
+/** Lowercase search text per record. Records are replaced when rescanned, so identity is the cache key. */
+const haystacks = new WeakMap<SessionRecord, string>();
+
+export function haystackOf(record: SessionRecord): string {
+	let haystack = haystacks.get(record);
+	if (haystack === undefined) {
+		const refText = record.refs.map((ref) => `${ref.label} ${ref.title ?? ""} ${ref.url ?? ""}`).join(" ");
+		haystack = [record.name, record.summary, record.cwd, record.userWords, refText].filter(Boolean).join("\n").toLowerCase();
+		haystacks.set(record, haystack);
+	}
+	return haystack;
+}
+
+/**
+ * One record per session id. A session can have two files, such as a `.pre-recovery.jsonl` copy;
+ * the one named `<timestamp>_<id>.jsonl` wins, then the most recently active.
+ */
+export function uniqueSessions(records: SessionRecord[]): SessionRecord[] {
+	const canonical = (record: SessionRecord) => record.path.endsWith(`_${record.id}.jsonl`);
+	const better = (a: SessionRecord, b: SessionRecord) => (canonical(a) !== canonical(b) ? canonical(a) : a.modified > b.modified);
+	const best = new Map<string, SessionRecord>();
+	for (const record of records) {
+		const seen = best.get(record.id);
+		if (!seen || better(record, seen)) best.set(record.id, record);
+	}
+	return [...best.values()];
+}
+
+export interface Hit {
+	record: SessionRecord;
+	/** The refs that matched, for highlighting; missing without a query or for an id match. */
+	match?: Match;
+}
+
+/**
+ * The ranking behind /resume-search, the `@@` dropdown, and session_list: sessions matching a
+ * query, most tightly tied first, then newest; all of them newest first without one. A query that
+ * starts a session id puts those sessions first.
+ */
+export function searchRecords(records: SessionRecord[], query: string): Hit[] {
+	const newest = (a: Hit, b: Hit) => b.record.modified - a.record.modified;
+	// parseQuery gets the query as typed: Slack thread URLs only classify with their uppercase channel.
+	const tokens = parseQuery(query);
+	if (tokens.length === 0) return records.map((record) => ({ record })).sort(newest);
+	const prefix = query.trim().toLowerCase();
+	const byId = prefix.length >= 4 && !/\s/.test(prefix) ? records.filter((record) => record.id.toLowerCase().startsWith(prefix)) : [];
+	const ids = new Set(byId);
+	const hits: Hit[] = [];
+	for (const record of records) {
+		const match = ids.has(record) ? undefined : matchSession(record.refs, haystackOf(record), tokens);
+		if (match) hits.push({ record, match });
+	}
+	hits.sort((a, b) => a.match!.score - b.match!.score || newest(a, b));
+	return [...byId.map((record) => ({ record })).sort(newest), ...hits];
+}
+
 interface FileStat {
 	path: string;
 	mtimeMs: number;
@@ -188,7 +245,8 @@ const SHARD_FILE_RE = /^index-(.+)\.json$/;
 const TEAMS_FILE = "teams.json";
 
 async function writeAtomic(file: string, text: string): Promise<void> {
-	const tmp = `${file}.${process.pid}.tmp`;
+	// Unique per write: the extensions in one pi can save the same shard at once.
+	const tmp = `${file}.${process.pid}.${randomUUID()}.tmp`;
 	await fs.writeFile(tmp, text);
 	await fs.rename(tmp, file);
 }

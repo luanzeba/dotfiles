@@ -4,7 +4,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { test } from "node:test";
 import { execFileSync } from "node:child_process";
-import { reviewCommand, scanSessionFile, SessionIndex, SUMMARY_TYPE } from "./store.ts";
+import { reviewCommand, scanSessionFile, searchRecords, SessionIndex, type SessionRecord, SUMMARY_TYPE, uniqueSessions } from "./store.ts";
 
 const line = (entry: object) => `${JSON.stringify(entry)}\n`;
 const header = line({ type: "session", version: 3, id: "s1", timestamp: "2026-10-01T00:00:00.000Z", cwd: "/repo/.worktrees/cus-9" });
@@ -68,6 +68,34 @@ test("the index rewrites only the shards whose sessions changed", async () => {
 	await fs.rm(old);
 	assert.deepEqual((await index.refresh()).map((record) => record.id), ["b"]);
 	assert.deepEqual(JSON.parse(await fs.readFile(septemberShard, "utf8")).sessions, []);
+});
+
+test("one record per session, found by id prefix, ticket, or words", () => {
+	const base = { mtimeMs: 0, size: 0, cwd: "/repo", firstMessage: "", userMessages: 1, refs: [], teams: {} };
+	const id = "01a0c5bd-2b77-779d-b8a5-978d57a02d9c";
+	const records: SessionRecord[] = [
+		{ ...base, id, path: `/s/2026-09-21T20-51-44-119Z_${id}.pre-recovery.jsonl`, modified: 9, userWords: "" },
+		{ ...base, id, path: `/s/2026-09-21T20-51-44-119Z_${id}.jsonl`, modified: 5, userWords: "" },
+		{ ...base, id: "02aa", path: "/s/b.jsonl", modified: 7, userWords: "charger 01a0c5bd", summary: "Charge caps" },
+	];
+	const unique = uniqueSessions(records);
+	assert.deepEqual(unique.map((record) => record.path), [`/s/2026-09-21T20-51-44-119Z_${id}.jsonl`, "/s/b.jsonl"], "the canonical file wins over a backup copy");
+	const ids = (query: string) => searchRecords(unique, query).map((hit) => hit.record.id);
+	assert.deepEqual(ids(""), ["02aa", id], "newest first");
+	assert.deepEqual(ids("01a0c5bd"), [id, "02aa"], "an id prefix comes before a text match");
+	assert.deepEqual(ids("charge"), ["02aa"]);
+
+	// A Slack thread URL ranks the session where you pasted it above one whose tool output printed it.
+	const thread = "https://acme.slack.com/archives/C0123ABC/p1700000000123456";
+	const slack = (source: "user" | "tool", modified: number): SessionRecord => ({
+		...base,
+		id: source,
+		path: `/s/${source}.jsonl`,
+		modified,
+		userWords: "",
+		refs: [{ kind: "slack", key: "acme.slack.com/C0123ABC/1700000000.123456", label: "thread", source }],
+	});
+	assert.deepEqual(searchRecords([slack("user", 1), slack("tool", 2)], thread).map((hit) => hit.record.id), ["user", "tool"]);
 });
 
 test("the review command follows the checkout's state", async (t) => {
