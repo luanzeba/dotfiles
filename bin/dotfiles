@@ -12,6 +12,7 @@
 #   install           Run main install script
 #   install <tools>   Install specific tool(s)
 #   update [tools]    Update all tools or specific tool(s)
+#   jobs              Scheduled jobs (jobs/README.md)
 #
 
 set -e
@@ -685,6 +686,7 @@ Commands:
   install <tools>   Install specific tool(s), e.g. 'dotfiles install jj node'
   update [tools]    Update all tools or specific tool(s)
   logs              View installation and operation error logs
+  jobs              Scheduled jobs: status, run, enable (see 'dot jobs help')
   help              Show this help message
 
 Options:
@@ -738,6 +740,10 @@ case "${1:-}" in
     logs)
         shift
         cmd_logs "$@"
+        ;;
+    jobs)
+        shift
+        exec "$(dotfiles_dir)/jobs/jobs" "$@"
         ;;
     help|--help|-h)
         show_help

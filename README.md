@@ -99,6 +99,7 @@ After installation, use the `dotfiles` (or `dot`) command:
 | `dot install -f <tool>` | Force reinstall (skip install check) |
 | `dot update [tool...]` | Update all installed tools (and brew on macOS), or only named tools |
 | `dot logs` | View recent errors |
+| `dot jobs` | Scheduled jobs: last run, health, next run ([jobs/README.md](jobs/README.md)) |
 | `dot edit` | Open in editor |
 
 All commands support `-h/--help` for usage information.

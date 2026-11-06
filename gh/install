@@ -10,16 +10,10 @@ source "$SCRIPT_DIR/../lib/nix.sh"
 
 nix_package_tool gh gh
 
+JOBS="$SCRIPT_DIR/../jobs/jobs"
+
 check_configured() {
-    if [[ ! -L "$HOME/.config/gh-not" ]]; then
-        return 1
-    fi
-
-    if [[ "$(uname -s)" == "Darwin" ]] && [[ ! -L "$HOME/Library/LaunchAgents/gh-not-sync.plist" ]]; then
-        return 1
-    fi
-
-    return 0
+    [[ -L "$HOME/.config/gh-not" ]]
 }
 
 configure() {
@@ -41,18 +35,18 @@ configure() {
     fi
     ln -sfn "$SCRIPT_DIR/.config/gh-not" "$gh_not_config"
 
-    if [[ "$(uname -s)" == "Darwin" ]]; then
-        mkdir -p "$HOME/Library/LaunchAgents"
-        local plist="$HOME/Library/LaunchAgents/gh-not-sync.plist"
-        ln -sf "$SCRIPT_DIR/launchd/gh-not-sync.plist" "$plist"
+    # Sync notifications hourly (jobs/jobs.json)
+    "$JOBS" enable gh-not-sync
+}
 
-        if command -v launchctl &>/dev/null; then
-            launchctl bootout "gui/$(id -u)" "$plist" 2>/dev/null || true
-            launchctl bootstrap "gui/$(id -u)" "$plist" 2>/dev/null || true
-            launchctl enable "gui/$(id -u)/luan.gh-not-sync.hourly" 2>/dev/null || true
-            launchctl kickstart -k "gui/$(id -u)/luan.gh-not-sync.hourly" 2>/dev/null || true
-        fi
-    fi
+# TODO: Remove after 2027-02-01, once every machine has pulled this.
+# Migration: the gh-not-sync job replaces the luan.gh-not-sync.hourly LaunchAgent.
+apply() {
+    local plist="$HOME/Library/LaunchAgents/gh-not-sync.plist"
+    [[ -L "$plist" ]] || return 0
+    "$JOBS" enable gh-not-sync || return 1 # keep the old agent until the job is in place
+    launchctl bootout "gui/$(id -u)/luan.gh-not-sync.hourly" 2>/dev/null || true
+    rm -f "$plist"
 }
 
 update() {

@@ -1,0 +1,38 @@
+#!/bin/bash
+set -e
+
+# Scheduled jobs from jobs.json, run by launchd (macOS) or systemd user timers (Linux). See README.md.
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck disable=SC1091
+source "$SCRIPT_DIR/../lib/common.sh"
+JOBS="$SCRIPT_DIR/jobs"
+
+check_installed() {
+    command -v node &>/dev/null
+}
+
+# Configured when jobs-check is enabled and every enabled job is healthy.
+check_configured() {
+    "$JOBS" >/dev/null 2>&1
+}
+
+# Nothing of its own to install: it runs on node (node/install).
+install() {
+    :
+}
+
+configure() {
+    "$JOBS" enable jobs-check
+    "$JOBS" sync
+}
+
+# Pick up jobs.json changes after `dot pull`.
+apply() {
+    "$JOBS" sync
+}
+
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    install
+    configure
+fi

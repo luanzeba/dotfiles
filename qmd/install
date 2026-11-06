@@ -8,12 +8,10 @@ source "$SCRIPT_DIR/../lib/common.sh"
 QMD_BIN="$NPM_CONFIG_PREFIX/bin/qmd"
 
 OBSIDIAN_VAULT="$HOME/Obsidian/Personal"
-LAUNCHAGENT_LABEL="luan.qmd-reindex"
-LAUNCHAGENT_PLIST="$HOME/Library/LaunchAgents/${LAUNCHAGENT_LABEL}.plist"
-QMD_REINDEX_SCRIPT="$HOME/.local/bin/qmd-reindex"
+JOBS="$SCRIPT_DIR/../jobs/jobs"
 
 check_installed() {
-    [ -x "$QMD_BIN" ]]
+    [[ -x "$QMD_BIN" ]]
 }
 
 check_configured() {
@@ -61,31 +59,21 @@ configure() {
     echo "Generating embeddings (this may take a while on first run)..."
     qmd embed
 
-    # Set up the reindex script and LaunchAgent (macOS only)
-    if is_macos; then
-        configure_launchagent
-    fi
+    # Reindex every 30 minutes (jobs/jobs.json)
+    "$JOBS" enable qmd-reindex
 }
 
-configure_launchagent() {
-    # Install the reindex wrapper script
-    mkdir -p "$(dirname "$QMD_REINDEX_SCRIPT")"
-    ln -sf "$SCRIPT_DIR/qmd-reindex" "$QMD_REINDEX_SCRIPT"
-    chmod +x "$SCRIPT_DIR/qmd-reindex"
-    echo "Linked: $QMD_REINDEX_SCRIPT"
-
-    # Install LaunchAgent plist
-    mkdir -p "$HOME/Library/LaunchAgents"
-
-    # Unload existing agent if loaded
-    launchctl bootout "gui/$(id -u)/$LAUNCHAGENT_LABEL" 2>/dev/null || true
-
-    ln -sf "$SCRIPT_DIR/$LAUNCHAGENT_LABEL.plist" "$LAUNCHAGENT_PLIST"
-    echo "Linked: $LAUNCHAGENT_PLIST"
-
-    # Load the agent
-    launchctl bootstrap "gui/$(id -u)" "$LAUNCHAGENT_PLIST"
-    echo "LaunchAgent loaded: $LAUNCHAGENT_LABEL (runs every 30 minutes)"
+# TODO: Remove after 2027-02-01, once every machine has pulled this.
+# Migration: the qmd-reindex job replaces the luan.qmd-reindex LaunchAgent and its wrapper script.
+apply() {
+    local plist="$HOME/Library/LaunchAgents/luan.qmd-reindex.plist"
+    [[ -L "$plist" ]] || return 0
+    "$JOBS" enable qmd-reindex || return 1 # keep the old agent until the job is in place
+    launchctl bootout "gui/$(id -u)/luan.qmd-reindex" 2>/dev/null || true
+    rm -f "$plist"
+    if [[ -L "$HOME/.local/bin/qmd-reindex" ]]; then
+        rm -f "$HOME/.local/bin/qmd-reindex"
+    fi
 }
 
 update() {

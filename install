@@ -59,6 +59,7 @@ run_step "jj/install" bash "$SCRIPT_DIR/jj/install"
 run_step "gh/install" bash "$SCRIPT_DIR/gh/install"
 run_step "draw-mermaids/install" bash "$SCRIPT_DIR/draw-mermaids/install"
 run_step "skills/install" bash "$SCRIPT_DIR/skills/install"
+run_step "jobs/install" bash "$SCRIPT_DIR/jobs/install"
 
 # Phase 2: Editors (Nix/direct downloads)
 log_info "Phase 2: Installing editors"

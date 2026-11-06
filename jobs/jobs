@@ -1,0 +1,19 @@
+#!/bin/bash
+# Entry point for `dot jobs` and for the launchd/systemd units, which start with a bare environment:
+# put Nix and ~/.local/bin on PATH, load this machine's alert settings, and run jobs.mjs.
+set -e
+dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck disable=SC1091
+source "$dir/../lib/common.sh"
+
+# JOBS_NTFY_URL and JOBS_HEARTBEAT_URL (see README.md); jobs.mjs keeps them from the jobs themselves.
+config="${XDG_CONFIG_HOME:-$HOME/.config}/jobs/env"
+if [[ -r "$config" ]]; then
+    set -a
+    # shellcheck disable=SC1090
+    source "$config"
+    set +a
+fi
+
+command -v node >/dev/null || { echo "jobs: node not found on PATH ($PATH)" >&2; exit 127; }
+exec node "$dir/jobs.mjs" "$@"

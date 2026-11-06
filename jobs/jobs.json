@@ -1,0 +1,20 @@
+{
+  "jobs-check": {
+    "description": "Alert when a job needs attention. Waits 2 minutes so runs catching up after a wake start first",
+    "schedule": "15,45 * * * *",
+    "command": "sleep 120 && \"$DOTFILES_DIR/jobs/jobs\" check",
+    "timeout": "5m"
+  },
+  "qmd-reindex": {
+    "description": "Re-index qmd collections and update embeddings",
+    "schedule": "*/30 * * * *",
+    "command": "qmd update && qmd embed",
+    "timeout": "30m"
+  },
+  "gh-not-sync": {
+    "description": "Sync GitHub notifications with the gh-not rules",
+    "schedule": "0 * * * *",
+    "command": "gh not sync --config=\"$HOME/.config/gh-not/config.yaml\" --verbosity=2",
+    "timeout": "10m"
+  }
+}

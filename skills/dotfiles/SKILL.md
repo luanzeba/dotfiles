@@ -46,7 +46,8 @@ See [references/tool-template.md](references/tool-template.md) for the install s
 | Bin | `bin/` | `~/.local/bin` | Yes (custom scripts) |
 | Rex | `rex/` | `~/.local/bin/rex-restart`, `~/.pi/agent/extensions/rex-restart.ts`, `~/.local/share/rex-restart/rex-restart.zsh` (sourced by `.zshrc`) | Yes (Rex scripts and their pi extension; Rex itself comes with the Rex app) |
 | jj | `jj/` | N/A | Yes (Nix flake: Jujutsu VCS) |
-| gh | `gh/` | `~/.config/gh-not`, launchd agent | Yes (binary from Nix + extensions/config) |
+| gh | `gh/` | `~/.config/gh-not`, `gh-not-sync` job | Yes (binary from Nix + extensions/config) |
+| Jobs | `jobs/` | launchd agents / systemd user timers generated from `jobs/jobs.json`; state in `~/.local/state/jobs` | Yes (`dot jobs`; see `jobs/README.md`) |
 | glab | `glab/` | N/A | Yes (Nix flake: glab, opt-in) |
 | AWS CLI | `aws/` | `~/.aws/config` | Yes (Nix flake: awscli2, opt-in) |
 | Trino CLI | `trino/` | N/A | Yes (Nix wrapper + JRE, latest GitHub release jar in `~/.local/trino/`; macOS, opt-in) |
