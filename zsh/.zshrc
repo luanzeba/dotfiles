@@ -57,3 +57,8 @@ fi
 if [[ -f "$HOME/.config/beta/proxy.env" ]]; then
   source "$HOME/.config/beta/proxy.env"
 fi
+
+# Rex: reopen what this pane ran before rex-restart restarted the server (rex/install links it)
+if [[ -r "$HOME/.local/share/rex-restart/rex-restart.zsh" ]]; then
+  source "$HOME/.local/share/rex-restart/rex-restart.zsh"
+fi

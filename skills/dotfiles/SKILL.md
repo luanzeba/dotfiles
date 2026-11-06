@@ -44,6 +44,7 @@ See [references/tool-template.md](references/tool-template.md) for the install s
 | Node | `node/` | N/A | Yes (Nix flake: node + TypeScript tools) |
 | Hunk | `hunk/` | `~/.config/hunk/config.toml`, git aliases (`hdiff`, `hshow`) | Yes |
 | Bin | `bin/` | `~/.local/bin` | Yes (custom scripts) |
+| Rex | `rex/` | `~/.local/bin/rex-restart`, `~/.pi/agent/extensions/rex-restart.ts`, `~/.local/share/rex-restart/rex-restart.zsh` (sourced by `.zshrc`) | Yes (Rex scripts and their pi extension; Rex itself comes with the Rex app) |
 | jj | `jj/` | N/A | Yes (Nix flake: Jujutsu VCS) |
 | gh | `gh/` | `~/.config/gh-not`, launchd agent | Yes (binary from Nix + extensions/config) |
 | glab | `glab/` | N/A | Yes (Nix flake: glab, opt-in) |

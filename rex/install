@@ -1,0 +1,76 @@
+#!/bin/bash
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+LOCAL_BIN="$HOME/.local/bin"
+PI_EXTENSIONS="$HOME/.pi/agent/extensions"
+# zsh/.zshrc sources this when it exists; it reopens panes after rex-restart.
+ZSH_HOOK="$HOME/.local/share/rex-restart/rex-restart.zsh"
+
+# Rex itself is not installed from here yet: it's in beta and comes with the Rex app on macOS.
+check_installed() {
+    command -v rex &>/dev/null
+}
+
+check_configured() {
+    [[ -L "$LOCAL_BIN/rex-restart" && -L "$ZSH_HOOK" ]] || return 1
+    [[ -d "$HOME/.pi/agent" ]] || return 0
+    [[ -L "$PI_EXTENSIONS/rex-restart.ts" ]]
+}
+
+install() {
+    if ! command -v rex &>/dev/null; then
+        echo "rex is not installed; the scripts in rex/bin need it (install the Rex app)"
+    fi
+}
+
+# Drop links into $1 that point below $2 at files that no longer exist.
+remove_stale_links() {
+    local link target
+    for link in "$1"/*; do
+        [[ -L "$link" ]] || continue
+        target="$(readlink "$link")"
+        if [[ "$target" == "$2/"* && ! -e "$target" ]]; then
+            rm -f "$link"
+            echo "Removed stale link: $link"
+        fi
+    done
+}
+
+configure() {
+    mkdir -p "$LOCAL_BIN"
+    remove_stale_links "$LOCAL_BIN" "$SCRIPT_DIR/bin"
+    local script
+    for script in "$SCRIPT_DIR"/bin/*; do
+        [[ -f "$script" ]] || continue
+        ln -sf "$script" "$LOCAL_BIN/$(basename "$script")"
+        echo "Linked: $LOCAL_BIN/$(basename "$script")"
+    done
+
+    mkdir -p "$(dirname "$ZSH_HOOK")"
+    ln -sf "$SCRIPT_DIR/zsh/rex-restart.zsh" "$ZSH_HOOK"
+    echo "Linked: $ZSH_HOOK"
+
+    # The pi extension records each pane's session for rex-restart. pi/install owns the
+    # directory; skip it on machines without pi.
+    if [[ -d "$HOME/.pi/agent" ]]; then
+        mkdir -p "$PI_EXTENSIONS"
+        remove_stale_links "$PI_EXTENSIONS" "$SCRIPT_DIR/pi"
+        local ext
+        for ext in "$SCRIPT_DIR"/pi/*.ts; do
+            [[ -f "$ext" ]] || continue
+            ln -sf "$ext" "$PI_EXTENSIONS/$(basename "$ext")"
+            echo "Linked extension: $PI_EXTENSIONS/$(basename "$ext")"
+        done
+    fi
+}
+
+apply() {
+    configure
+}
+
+# Main (only run when executed directly, not when sourced)
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    install
+    configure
+fi

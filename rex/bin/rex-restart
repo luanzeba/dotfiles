@@ -1,0 +1,462 @@
+#!/usr/bin/env bash
+# rex-restart: restart the Rex server and reopen what each pane was running.
+#
+# Rex brings back its own sessions, tabs, and panes (same IDs, same directories) when its server
+# starts again, but every pane comes back as a fresh shell with an empty screen. Before the
+# restart, rex-restart saves each pane and leaves a pending file for it. The restored shell claims
+# its pane's file at its first prompt (rex/zsh/rex-restart.zsh) and runs one line:
+#
+#   pi panes       ` clear; pi --session FILE`, from the record rex/pi/rex-restart.ts keeps
+#   shell panes    ` clear; cat SAVED-SCREEN`, so the earlier output is back on screen
+#   other programs the saved screen and the command that was running (it is not run again)
+#
+# The restart ends every process in Rex, including the pane that ran rex-restart, so the restart
+# runs in a background process in its own session that outlives the server.
+#
+# With --wait, rex-restart only saves the panes and leaves their pending files for two hours, for
+# a restart it doesn't trigger: the app's Update Server button, a reboot, or a macOS update.
+set -euo pipefail
+umask 077 # screens and command lines can hold secrets
+
+STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/rex-restart"
+PI_RECORDS="$STATE_DIR/pi"
+PENDING="$STATE_DIR/pending"
+SNAPSHOTS="$STATE_DIR/snapshots"
+RUNNER_PID="$STATE_DIR/runner.pid"
+SCROLLBACK_LINES=5000
+KEEP_SNAPSHOTS=5
+CLAIM_TIMEOUT=60    # seconds the restored shells get to claim their pending files
+RESTART_TIMEOUT=900 # seconds to wait for the new server; the app may ask to confirm first
+MAX_AGE=120         # minutes a saved pane stays ready to reopen; older ones are from a restart that never happened
+CLAIM_WINDOW=10     # minutes after a new server's first claim that its other panes may claim
+SELF="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")"
+
+usage() {
+    cat <<'EOF'
+Usage:
+  rex-restart [--yes] [--force]  save every pane, restart the Rex server, and reopen them
+  rex-restart --wait             save every pane to reopen after a restart you do yourself
+                                 (Update Server in the app, a reboot, a macOS update)
+  rex-restart cancel             forget the saved panes, so a later restart reopens nothing
+  rex-restart plan               show what each pane would reopen as, change nothing
+  rex-restart log                show the latest restart's log
+
+Options:
+  --yes    don't ask before restarting
+  --wait   don't restart; panes saved this way reopen after a restart within two hours
+  --force  restart even when a pi is busy or a pane is unreadable
+
+The restart uses the Rex app's Restart Server action when the app is connected to a local
+server, which starts the server the app ships. Otherwise it runs `rex server stop` and
+`rex server start`. Set REX_RESTART_COMMAND to restart some other way.
+EOF
+}
+
+die() {
+    printf 'rex-restart: %s\n' "$*" >&2
+    exit 1
+}
+log() { printf '%s %s\n' "$(date '+%H:%M:%S')" "$*"; }
+
+# Never let a call start a missing server: the CLI would start its own build, not the app's. Pin
+# REX_SERVER with -S too: when the server it names is unreachable (as during the restart), the CLI
+# quietly falls back to the default local server instead of failing.
+rexq() { rex --autostart=false ${REX_SERVER:+-S "$REX_SERVER"} "$@"; }
+call() { rexq block call -s "$1" -b "$2" "$3" 2>/dev/null; }
+instance_id() { rexq --timeout 3s whoami --json 2>/dev/null | jq -r '.instance_id // empty'; }
+
+notify() {
+    command -v osascript >/dev/null 2>&1 || return 0
+    osascript -e "display notification \"$1\" with title \"rex-restart\"" >/dev/null 2>&1 || true
+}
+
+# Run a command in its own session, logging to $1. The restart ends the pane that started it, and
+# a caller such as an agent's tool call may kill its whole process group; neither reaches a new
+# session. There's no setsid command on macOS, so perl forks (setsid needs a non-leader) and calls it.
+detach() { # LOG COMMAND...
+    local log=$1
+    shift
+    perl -MPOSIX -e 'exit if fork; POSIX::setsid() or die "setsid: $!"; exec @ARGV or die "exec: $!"' \
+        "$@" >>"$log" 2>&1 </dev/null
+}
+
+runner_alive() { [[ -f $RUNNER_PID ]] && kill -0 "$(cat "$RUNNER_PID")" 2>/dev/null; }
+
+# The recorded pi still runs on this pane's terminal, in front or suspended behind something
+# else. Checking the name and terminal keeps a recycled pid from passing.
+pi_on_tty() { # PI_PID FOREGROUND_PID
+    local tty
+    [[ -n $1 && -n $2 && "$(ps -o comm= -p "$1" 2>/dev/null)" == pi ]] || return 1
+    tty=$(ps -o tty= -p "$1" 2>/dev/null | tr -d ' ')
+    [[ -n $tty && $tty == "$(ps -o tty= -p "$2" 2>/dev/null | tr -d ' ')" ]]
+}
+
+# One line per terminal pane: session ID, block ID, session label (tab-separated, label last so
+# an odd label can't shift the IDs). Fails if any session can't be listed.
+list_panes() {
+    local sessions sid label
+    sessions=$(rexq ls --json | jq -r '.sessions[] | [.session_id, .label] | @tsv') || return 1
+    while IFS=$'\t' read -r sid label; do
+        [[ -n $sid ]] || continue
+        rexq block ls -s "$sid" --json | jq -r --arg s "$sid" --arg l "$label" \
+            '.blocks[] | select(.creator_name == "com.superlogical.terminal") | [$s, .block_id, $l] | @tsv' ||
+            return 1
+    done <<<"$sessions"
+}
+
+# A JSON object describing what a pane runs right now.
+describe_pane() {
+    local sid=$1 bid=$2 label=$3 proc pid="" argv0="" cwd="" owner kind command="" rpid="" pi=null state screen
+    rpid=$(jq -r '.pid // empty' "$PI_RECORDS/$bid.json" 2>/dev/null) || rpid=
+    if ! proc=$(call "$sid" "$bid" process); then
+        kind=unreadable
+    else
+        pid=$(jq -r '.foreground.pid // empty' <<<"$proc")
+        argv0=$(jq -r '.foreground.argv0 // empty' <<<"$proc")
+        cwd=$(jq -r '.foreground.cwd // empty' <<<"$proc")
+        if pi_on_tty "$rpid" "$pid"; then
+            kind=pi
+            pi=$(jq -c '.' "$PI_RECORDS/$bid.json")
+        elif [[ -z $pid ]]; then
+            kind=none
+        elif [[ $argv0 == -* ]]; then
+            kind=shell # a login shell, as Rex starts in each pane
+        elif [[ ${argv0##*/} == pi ]]; then
+            kind=pi-unregistered
+        else
+            kind=program
+            command=$(ps -o command= -p "$pid" 2>/dev/null) || command=
+        fi
+    fi
+    # Only a status the program itself reported counts: the recorded pi's, or the foreground's.
+    owner=$pid
+    if [[ $kind == pi ]]; then owner=$rpid; fi
+    state=$(call "$sid" "$bid" program_status |
+        jq -r --argjson pid "${owner:-0}" '[.records[]? | select(.owner.pid == $pid)] | last | .state // empty') ||
+        state=
+    screen=$(call "$sid" "$bid" modes | jq -r '.screen // empty') || screen=
+
+    jq -nc --arg session_id "$sid" --arg block_id "$bid" --arg session_label "$label" \
+        --arg kind "$kind" --arg pid "$pid" --arg cwd "$cwd" --arg state "$state" \
+        --arg screen "$screen" --arg command "$command" --argjson pi "$pi" \
+        '{$session_id, $block_id, $session_label, $kind, $pid, $cwd, $state, $screen, $command, $pi,
+          busy: ($state == "working" or $state == "blocked")}'
+}
+
+# One JSON line per pane. Command substitutions don't inherit errexit, so failures are explicit.
+collect() {
+    local panes sid bid label
+    panes=$(list_panes) || return 1
+    while IFS=$'\t' read -r sid bid label; do
+        [[ -n $bid ]] || continue
+        describe_pane "$sid" "$bid" "$label" || return 1
+    done <<<"$panes"
+}
+
+print_plan() { # PANES_JSONL on stdin
+    jq -r --arg origin "${REX_BLOCK:-}" '[
+        .session_label,
+        ({pi: "pi", "pi-unregistered": "pi (no record)", shell: "shell", program: "program",
+          unreadable: "?", none: "-"}[.kind]),
+        (if .kind == "pi" then "reopen " + (.pi.session_name // (.pi.session_file | split("/") | last))
+         elif .kind == "pi-unregistered" then "show saved screen; cannot reopen this pi (no record; /reload it first)"
+         elif .kind == "shell" then "show saved screen (" + .cwd + ")"
+         elif .kind == "program" then "show saved screen; was running: " + .command
+         elif .kind == "unreadable" then "could not read this pane"
+         else "nothing" end),
+        (if .block_id == $origin then "(this pane)"
+         elif (.kind == "pi" or .kind == "pi-unregistered") and .busy then "BUSY" else "" end)
+    ] | @tsv' | column -t -s $'\t'
+}
+
+# Whether to stop a restart: a pi that is working or waiting on a dialog (except the one running
+# rex-restart, which knows), or a pane rex-restart couldn't read.
+has_blockers() { # PANES_JSONL on stdin
+    jq -se --arg origin "${REX_BLOCK:-}" 'any(.[]; .kind == "unreadable"
+        or ((.kind == "pi" or .kind == "pi-unregistered") and .busy and .block_id != $origin))' >/dev/null
+}
+
+cmd_plan() {
+    local panes
+    panes=$(collect) || die "couldn't read the panes from the Rex server"
+    print_plan <<<"$panes"
+    if has_blockers <<<"$panes"; then
+        echo
+        echo "A plain rex-restart would stop here: a pi is busy or a pane is unreadable."
+    fi
+}
+
+# The saved screen plus a note, for a pane that comes back as a plain shell.
+write_replay() { # SNAPSHOT_DIR PANE_JSON
+    local dir=$1 pane=$2 sid bid kind command
+    sid=$(jq -r '.session_id' <<<"$pane")
+    bid=$(jq -r '.block_id' <<<"$pane")
+    kind=$(jq -r '.kind' <<<"$pane")
+    command=$(jq -r '.command' <<<"$pane")
+    {
+        # A full-screen program (alternate screen) has no scrollback, and its screen would only
+        # mislead once it's gone.
+        if [[ "$(jq -r '.screen' <<<"$pane")" == primary ]]; then
+            rexq capture -s "$sid" -b "$bid" --format=vt --trim 2>/dev/null | tail -n "$SCROLLBACK_LINES" || true
+        fi
+        printf '\r\n\033[2m-- saved by rex-restart, %s --\033[0m\r\n' "$(date '+%b %d %H:%M')"
+        if [[ -n $command ]]; then printf '\033[2mwas running: %s\033[0m\r\n' "$command"; fi
+        if [[ $kind == pi-unregistered ]]; then
+            printf '\033[2mpi was running here; find it with pi --resume\033[0m\r\n'
+        fi
+    } >"$dir/screens/$bid.replay"
+}
+
+cmd_restart() {
+    local yes=$1 force=$2 wait=$3 panes instance dir pane answer
+    command -v rex >/dev/null 2>&1 || die "rex is not on PATH"
+    command -v perl >/dev/null 2>&1 || die "perl is not on PATH"
+    if runner_alive; then
+        die "a restart is already running (pid $(cat "$RUNNER_PID")); see rex-restart log"
+    fi
+    panes=$(collect) || die "couldn't read the panes from the Rex server"
+    print_plan <<<"$panes"
+    echo
+
+    if [[ $wait == 1 ]]; then
+        # Nothing restarts now, so nothing needs confirming; a busy pi only matters at the restart.
+        if has_blockers <<<"$panes"; then
+            echo "Note: a pi is busy or a pane is unreadable; let it finish before you restart."
+        fi
+    elif has_blockers <<<"$panes" && [[ $force != 1 ]]; then
+        die "a pi is busy or a pane is unreadable. Wait, or pass --force."
+    elif [[ $yes != 1 ]]; then
+        [[ -t 0 ]] || die "not a terminal; pass --yes to restart without asking"
+        read -r -p "Restart the Rex server? Everything running in Rex ends and reopens as above. [y/N] " answer ||
+            answer=
+        if [[ $answer != [yY]* ]]; then
+            echo "Nothing restarted."
+            return 0
+        fi
+    fi
+    # A shell may only claim its pending file on a server other than this one.
+    instance=$(instance_id) || instance=
+    [[ -n $instance ]] || die "couldn't read the server's instance ID"
+    if runner_alive; then
+        die "another restart started while this one waited (pid $(cat "$RUNNER_PID")); see rex-restart log"
+    fi
+
+    dir="$SNAPSHOTS/$(date -u +%Y%m%dT%H%M%SZ)"
+    mkdir -p "$dir/screens" "$PENDING"
+    rm -f "$PENDING"/*.json # an earlier restart's leftovers no longer apply
+    while read -r pane; do
+        case "$(jq -r '.kind' <<<"$pane")" in
+        shell | program | pi-unregistered) write_replay "$dir" "$pane" ;;
+        esac
+    done <<<"$panes"
+    jq -s --arg instance_id "$instance" --arg origin_block "${REX_BLOCK:-}" \
+        --arg created_at "$(date -u +%FT%TZ)" '{$instance_id, $origin_block, $created_at, panes: .}' \
+        <<<"$panes" >"$dir/manifest.json"
+    # Pending files last: a shell can claim one as soon as it exists.
+    jq -c --arg dir "$dir" '.instance_id as $instance | .panes[]
+        | select(.kind != "none" and .kind != "unreadable")
+        | {snapshot: $dir, instance_id: $instance, block_id, session_label, kind,
+           replay: ($dir + "/screens/" + .block_id + ".replay")}' \
+        "$dir/manifest.json" | while read -r pane; do
+        printf '%s\n' "$pane" >"$PENDING/$(jq -r '.block_id' <<<"$pane").json"
+    done
+    ln -sfn "$dir" "$STATE_DIR/latest"
+    ls -1d "$SNAPSHOTS"/*/ | sort -r | tail -n +$((KEEP_SNAPSHOTS + 1)) | while read -r old; do
+        rm -rf "$old"
+    done
+
+    if [[ $wait == 1 ]]; then
+        echo "Saved. Restart Rex within two hours: Update Server in the app, a reboot, or a macOS"
+        echo "update. Each pane reopens when its shell starts on the new server. If you change your"
+        echo "panes before restarting, run rex-restart --wait again. Changed your mind? rex-restart cancel"
+        return 0
+    fi
+    detach "$dir/run.log" "$SELF" _run "$dir"
+    echo "Restarting. Confirm in the Rex app if it asks. Panes reopen once the server is back."
+    echo "Log: $dir/run.log (or rex-restart log)"
+}
+
+restart_server() { # fails only when the restart was refused, so nothing will happen
+    local app="" out
+    if [[ -n ${REX_RESTART_COMMAND:-} ]]; then
+        sh -c "$REX_RESTART_COMMAND" || log "REX_RESTART_COMMAND exited with $?"
+        return 0
+    fi
+    # The app's action restarts the app's local server, so it only fits a server on this machine.
+    if [[ "$(rexq whoami --json 2>/dev/null | jq -r '.endpoint // ""')" == unix://* ]]; then
+        app=$(rexq client ls --json | jq -r 'first(.clients[]
+            | select(.info.kind == "app" and .info.platform == "macos" and .connection_state == "connected")
+            | .client_id) // empty') || app=
+    fi
+    if [[ -n $app ]]; then
+        # The app restarts into the server it ships, which is how its updates take effect. The
+        # call can also fail as the server goes away under it; the wait for a new server is what
+        # counts then. The app greys the action out while it's busy, such as while it prepares a
+        # server, and says so at once.
+        if ! out=$(rexq -C "$app" do client.server.restart 2>&1); then
+            log "Restart Server: $out"
+            [[ $out != *"available here right now"* ]] || return 1
+        fi
+    else
+        rexq server stop || log "rex server stop returned $?"
+        rex ${REX_SERVER:+-S "$REX_SERVER"} server start || log "rex server start returned $?"
+    fi
+}
+
+wait_for_server() { # OLD_INSTANCE_ID
+    local id deadline=$((SECONDS + RESTART_TIMEOUT))
+    [[ -n $1 ]] || return 1
+    while ((SECONDS < deadline)); do
+        id=$(instance_id) || id=
+        [[ -n $id && $id != "$1" ]] && return 0
+        sleep 1
+    done
+    return 1
+}
+
+# This snapshot's pending files that no shell has claimed yet.
+unclaimed() { # SNAPSHOT_DIR
+    local file
+    for file in "$PENDING"/*.json; do
+        [[ -f $file && "$(jq -r '.snapshot' "$file" 2>/dev/null)" == "$1" ]] && printf '%s\n' "$file"
+    done
+    return 0
+}
+
+cmd_run() { # SNAPSHOT_DIR (internal: the background half of a restart)
+    local dir=$1 old file deadline reopened pis missed message
+    mkdir -p "$STATE_DIR"
+    echo $$ >"$RUNNER_PID"
+    trap 'rm -f "$RUNNER_PID"' EXIT
+    old=$(jq -r '.instance_id // empty' "$dir/manifest.json")
+    log "restarting the server (instance $old)"
+    if ! restart_server; then
+        log "the Rex app won't restart the server right now (is it stuck preparing a server?); nothing changed"
+        unclaimed "$dir" | while read -r file; do rm -f "$file"; done
+        notify "The Rex app won't restart the server right now; nothing changed."
+        return 1
+    fi
+    if ! wait_for_server "$old"; then
+        log "the server didn't come back within ${RESTART_TIMEOUT}s; nothing will be reopened"
+        unclaimed "$dir" | while read -r file; do rm -f "$file"; done
+        notify "The Rex server didn't come back within $((RESTART_TIMEOUT / 60)) minutes."
+        return 1
+    fi
+    log "the server is back (instance $(instance_id))"
+
+    deadline=$((SECONDS + CLAIM_TIMEOUT))
+    while [[ -n "$(unclaimed "$dir")" ]] && ((SECONDS < deadline)); do sleep 1; done
+    sleep 1 # a claim logs its outcome a moment after taking its file
+    while read -r file; do
+        [[ -n $file ]] || continue
+        log "not reopened: $(jq -r '.session_label + " (" + .block_id + ")"' "$file"); no shell claimed it"
+        rm -f "$file"
+    done <<<"$(unclaimed "$dir")"
+    # Each claim logs its own outcome to this log, so the log is the tally.
+    reopened=$(grep -c ') as ' "$dir/run.log") || reopened=0
+    pis=$(grep -c ') as pi$' "$dir/run.log") || pis=0
+    missed=$(grep -c ' not reopened: ' "$dir/run.log") || missed=0
+    message="Reopened $reopened panes ($pis pi sessions)"
+    [[ $missed == 0 ]] || message="$message; $missed not reopened (rex-restart log)"
+    log "done: $message"
+    notify "$message."
+}
+
+# Called by a restored shell's first prompt (rex/zsh/rex-restart.zsh): claim this pane's pending
+# file and print the line the shell should run, or nothing.
+cmd_claim() { # BLOCK_ID
+    local bid=$1 file pending dir current pin kind session_file line
+    file="$PENDING/$bid.json"
+    pending=$(cat "$file" 2>/dev/null) || return 0
+    # A restart that never happened (a cancelled one, or a killed runner) leaves pending files
+    # behind; they mustn't reopen old state at some later, unrelated restart.
+    if [[ -z "$(find "$file" -mmin "-$MAX_AGE")" ]]; then
+        rm -f "$file"
+        return 0
+    fi
+    # Only on a new server: the same pane's shell can start again without a restart (exec zsh).
+    current=$(instance_id) || current=
+    [[ -n $current && $current != "$(jq -r '.instance_id' <<<"$pending")" ]] || return 0
+    dir=$(jq -r '.snapshot' <<<"$pending")
+    # And only on the first new server, shortly after its first claim: a pane whose claim was
+    # skipped mustn't reopen hours later, at a second restart or an `exec zsh`.
+    pin="$dir/claimed-instance"
+    if [[ ! -f $pin ]]; then
+        # Written whole (rename), so a shell claiming at the same moment never reads it half-written.
+        printf '%s\n' "$current" >"$pin.$$" && mv -f "$pin.$$" "$pin"
+    elif [[ "$(cat "$pin")" != "$current" || -z "$(find "$pin" -mmin "-$CLAIM_WINDOW")" ]]; then
+        rm -f "$file"
+        return 0
+    fi
+    rm "$file" 2>/dev/null || return 0 # someone else claimed it
+
+    kind=$(jq -r '.kind' <<<"$pending")
+    if [[ $kind == pi ]]; then
+        # The record follows the pi through session switches, up to the restart.
+        session_file=$(jq -r '.session_file // empty' "$PI_RECORDS/$bid.json" 2>/dev/null) || session_file=
+        if [[ -z $session_file ]]; then
+            log "not reopened: $(jq -r '.session_label' <<<"$pending") ($bid) has no pi record" >>"$dir/run.log"
+            return 0
+        fi
+        # Two pis on one session file would both write to it; the first pane to claim it wins.
+        if ! mkdir "$dir/opened-$(printf '%s' "$session_file" | cksum | cut -d' ' -f1)" 2>/dev/null; then
+            log "not reopened: $(jq -r '.session_label' <<<"$pending") ($bid); its session is open in another pane" \
+                >>"$dir/run.log"
+            return 0
+        fi
+        line="clear; pi --session $(printf '%q' "$session_file")"
+    else
+        line="clear; cat $(printf '%q' "$(jq -r '.replay' <<<"$pending")")"
+    fi
+    log "reopened $(jq -r '.session_label' <<<"$pending") ($bid) as $kind" >>"$dir/run.log"
+    printf '%s\n' "$line"
+}
+
+cmd_cancel() {
+    local count
+    count=$(find "$PENDING" -name '*.json' 2>/dev/null | wc -l | tr -d ' ') || count=0
+    rm -f "$PENDING"/*.json
+    echo "Forgot $count saved panes; a restart now reopens nothing."
+    if runner_alive; then
+        echo "A restart is still waiting (pid $(cat "$RUNNER_PID")); it finds nothing to reopen."
+    fi
+}
+
+main() {
+    local yes=0 force=0 wait=0 cmd="" args=()
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+        -y | --yes) yes=1 ;;
+        -f | --force) force=1 ;;
+        -w | --wait) wait=1 ;;
+        -h | --help | help)
+            usage
+            return 0
+            ;;
+        -*) die "unknown option: $1 (see rex-restart --help)" ;;
+        *) if [[ -z $cmd ]]; then cmd=$1; else args+=("$1"); fi ;;
+        esac
+        shift
+    done
+    command -v jq >/dev/null 2>&1 || die "jq is not on PATH"
+
+    case $cmd in
+    "") cmd_restart "$yes" "$force" "$wait" ;;
+    plan) cmd_plan ;;
+    cancel) cmd_cancel ;;
+    log)
+        if [[ -f $STATE_DIR/latest/run.log ]]; then
+            cat "$STATE_DIR/latest/run.log"
+        elif [[ -d $STATE_DIR/latest ]]; then
+            echo "Panes were saved ($(basename "$(readlink "$STATE_DIR/latest")")), but nothing has reopened yet."
+        else
+            die "no restart has run yet"
+        fi
+        ;;
+    _run) cmd_run "${args[0]:?}" ;;
+    _claim) cmd_claim "${args[0]:?}" ;;
+    *) die "unknown command: $cmd (see rex-restart --help)" ;;
+    esac
+}
+
+main "$@"
