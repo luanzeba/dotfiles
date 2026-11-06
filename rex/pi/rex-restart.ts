@@ -16,8 +16,10 @@ const recordsDir = join(process.env.XDG_STATE_HOME || join(homedir(), ".local/st
 export default function (pi: ExtensionAPI) {
 	pi.on("session_start", (_event, ctx) => {
 		const block = process.env.REX_BLOCK;
-		// Print-mode and RPC children (reviewers, helpers) inherit REX_BLOCK but don't own the pane.
-		if (!block || ctx.mode !== "tui") return;
+		// Print-mode and RPC children (reviewers, helpers) inherit REX_BLOCK but don't own the pane. A
+		// subagent tab does, but `pi --session` alone would reopen it without what made it one (see
+		// pi/extensions/subagent), so its tab comes back as a saved screen instead.
+		if (!block || ctx.mode !== "tui" || process.env.PI_SUBAGENT_DIR) return;
 		const sessionFile = ctx.sessionManager.getSessionFile();
 		if (!sessionFile) return;
 

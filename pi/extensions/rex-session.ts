@@ -17,8 +17,9 @@ export default function (pi: ExtensionAPI) {
 
 	pi.on("session_start", async (_event, ctx) => {
 		// Child pi processes (reviewers, print-mode helpers) inherit REX_SESSION. Only the
-		// interactive agent should rename the user's Rex session.
-		if (ctx.mode !== "tui") return;
+		// interactive agent should rename the user's Rex session, and a subagent in a tab of that
+		// session (PI_SUBAGENT_DIR, see subagent/) isn't it.
+		if (ctx.mode !== "tui" || process.env.PI_SUBAGENT_DIR) return;
 		// exec resolves rather than rejects when rex is missing (code 1). A timeout kill can
 		// resolve with code 0, so check `killed` too.
 		const result = await pi.exec("rex", ["__internal", "session-start", "--agent", "pi"], {
