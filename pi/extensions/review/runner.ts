@@ -132,7 +132,9 @@ function buildBrief(
 		`Reviewed repository: ${change.folder}`,
 		change.kind === "git"
 			? "This is the author's working tree. Do not modify it."
-			: "This is an isolated snapshot of someone else's change with no git metadata. Use the supplied diff and files; do not modify it or mention unrelated local work.",
+			: change.kind === "jj"
+				? "This is the author's jj workspace. Do not modify it. Use jj, not git, for history, and pass --ignore-working-copy (for example `jj --ignore-working-copy log` or `jj --ignore-working-copy file annotate`) so reading it never snapshots the author's working copy."
+				: "This is an isolated snapshot of someone else's change with no git metadata. Use the supplied diff and files; do not modify it or mention unrelated local work.",
 		"## Changed files",
 		...change.changedFiles.map((file) => `- ${file}`),
 	];

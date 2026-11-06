@@ -33,6 +33,7 @@ times cannot be counted reliably in advance.
 /review focus on the caching                 add steering text to every review
 /review --focus git handling is too clever   force text that starts with an existing directory name
 /review --design                             run the design reviewer even without a design surface
+/review --revisions 'xyz::@'                 in jj, review exactly these changes
 ```
 
 Findings come back to the current session in one section per reviewer. For a GitLab merge request, the
@@ -64,6 +65,7 @@ It returns the reports as its result instead of a new user message. Its paramete
 | `focus` | Extra steering for every reviewer |
 | `fresh` | Forget earlier rounds' reports |
 | `design` | Run the design reviewer even when no schema, migration, contract, or route file changed |
+| `revisions` | jj only: a revset to review instead of `scope`, for work stacked on changes that aren't part of it |
 
 The `all` scope keeps one diff and one round history for the branch, so commits between rounds
 don't reset what the reviewers remember. Escape cancels the tool call; Ctrl+Shift+R also works.
@@ -159,6 +161,7 @@ the reports produced by that fresh round.
 | `--fresh` | Forget every reviewer's prior final reports for this change |
 | `--design` | Run the design reviewer even without a design surface |
 | `--model <spec>` | Override the configured reviewer model for one run |
+| `--revisions <revset>`, `-r` | In jj, review exactly these changes instead of the scope |
 | `--setup` | Pick and save the reviewer model |
 
 ## Local and remote never mix
@@ -170,6 +173,34 @@ The argument decides the source:
   paths work; `--path` is available when positional text would be ambiguous.
 - **A URL or `!number`** reviews that merge request from a downloaded snapshot of its head commit,
   cached by SHA under `~/.cache/pi-review/`.
+
+### jj
+
+A local tree is reviewed as jj when it's in a jj workspace: one without `.git` (`jj workspace add`),
+or the default workspace of a colocated repo, where git sees only a detached HEAD at `@-` and can't
+say which change is being worked on. git still reviews a git worktree inside a jj repo (the nearer
+root wins) and a colocated checkout with a branch checked out, where git is driving and a jj snapshot
+would add untracked files to its index.
+
+jj has nothing uncommitted: the working copy is the change `@`. So:
+
+| Scope | Reviews |
+|---|---|
+| `uncommitted` (`/review`) | The working-copy change, or `@-` when `@` is empty and `@-` isn't immutable (right after `jj new main` there is nothing to review) |
+| `branch` (`--branch`) | Every change since the fork point with `trunk()`, through `@-` |
+| `all` (the tool's default) | The same through `@` |
+| `revisions` (`--revisions`) | That revset, such as `xyz` or `xyz::@` |
+
+Without a trunk to fork from, `branch` and `all` review the working-copy change. The changes'
+descriptions go to the reviewers as the change's intent (an empty change counts when it has one, as
+in the squash workflow), and a review's history is keyed by its oldest
+change id, which survives rewrites, so rounds keep their memory through edits, `jj new`, and changes
+stacked on top. `branch` and `revisions` reviews keep separate histories from `all`, since they cover
+a different diff from the same change. The range since `trunk()` also covers unpushed changes the work sits on, such as a
+workspace started on someone else's change; name the work with `revisions` then. Reviewers are told
+to read history with `jj --ignore-working-copy` so it never snapshots your working copy.
+
+### Remote
 
 You are often mid-change on your own work when someone asks for an MR review, so a remote review never
 reads the current working tree or mentions local work. The snapshot has no git history; the reviewer
@@ -217,6 +248,7 @@ extensions/review/
   sources/
     types.ts                        shared change shape
     git.ts                          local working tree, branch, or both
+    jj.ts                           local jj change, its stack since trunk, or a revset
     gitlab.ts                       GitLab MR metadata, diff, comments, commits, and snapshot
     linear.ts                       linked-ticket context
     materialize.ts                  remote snapshot cache
@@ -227,3 +259,13 @@ The prompt files above are the source of truth for reviewer behavior. The child 
 publishing workflows, so the reviewers instead receive a curated brief and shared read-only mandate.
 Extension discovery remains enabled because the configured model provider may be registered by an
 extension.
+
+## Tests
+
+```
+node --test ~/dotfiles/pi/extensions/review/sources/
+```
+
+To try a copy of this extension, load its entry file: `pi -e <dir>/index.ts`. Given just the
+directory, pi treats it as a package because of `prompts/`, loads the prompts as templates, and
+never runs `index.ts`.

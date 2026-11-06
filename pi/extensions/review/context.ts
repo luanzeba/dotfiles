@@ -53,7 +53,7 @@ function relevantEntries(
 	entries: ContextEntry[],
 	change: Pick<ChangeSet, "kind" | "label" | "reviewUrl" | "references">,
 ): ContextEntry[] {
-	if (change.kind === "git") {
+	if (change.kind !== "gitlab") {
 		return entries.filter(
 			(entry) => entry.role !== "user" || !isReviewHandoff(entry.text),
 		);

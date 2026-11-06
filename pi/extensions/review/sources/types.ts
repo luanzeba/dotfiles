@@ -8,7 +8,8 @@ import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
  * adding one file next to this one, and changing nothing else.
  */
 
-export type ChangeSourceKind = "git" | "gitlab";
+/** `git` and `jj` are the author's own checkout; `gitlab` is an isolated copy of someone else's MR. */
+export type ChangeSourceKind = "git" | "jj" | "gitlab";
 
 export interface PriorComment {
 	author: string;
@@ -50,6 +51,8 @@ export interface ResolveOptions {
 	 * commits since the merge base, and `all` is both: the merge base against the working tree.
 	 */
 	scope?: GitScope;
+	/** jj only: a revset to review instead of a scope, for work stacked on changes that aren't part of it. */
+	revisions?: string;
 	exec: ExecFn;
 }
 

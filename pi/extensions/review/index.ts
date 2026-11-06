@@ -40,6 +40,7 @@ import { parentReviewContext, REVIEW_HANDOFF_PREFIX } from "./context";
 import { ReviewModelError, resolveReviewModel, setupCandidates, writeReviewModel } from "./model";
 import { runReviewers } from "./runner";
 import { gitSource } from "./sources/git";
+import { jjOwns, jjSource } from "./sources/jj";
 import { gitlabSource } from "./sources/gitlab";
 import type { ChangeSet, ExecFn, GitScope } from "./sources/types";
 
@@ -52,6 +53,7 @@ interface ParsedArgs {
 	model?: string;
 	focus?: string;
 	design: boolean;
+	revisions?: string;
 }
 
 function reviewPath(directory: string, cwd: string): string {
@@ -72,7 +74,8 @@ async function directoryArgument(value: string, cwd: string): Promise<string | u
 }
 
 async function parseArgs(raw: string, cwd: string): Promise<ParsedArgs> {
-	const tokens = raw.trim().split(/\s+/).filter(Boolean);
+	// A quoted span stays one token, so a revset like "xyz:: & mine()" survives.
+	const tokens = raw.match(/"[^"]*"|'[^']*'|\S+/g) ?? [];
 	const parsed: ParsedArgs = { target: "", branch: false, fresh: false, setup: false, design: false };
 	const rest: string[] = [];
 
@@ -96,6 +99,11 @@ async function parseArgs(raw: string, cwd: string): Promise<ParsedArgs> {
 		} else if (token === "--model") {
 			parsed.model = tokens[index + 1];
 			index += 1;
+		} else if (token === "--revisions" || token === "-r") {
+			const value = tokens[index + 1]?.replace(/^(["'])([\s\S]*)\1$/, "$2");
+			if (!value || value.startsWith("--")) throw new Error(`${token} requires a jj revset`);
+			parsed.revisions = value;
+			index += 1;
 		} else rest.push(token);
 	}
 
@@ -111,6 +119,7 @@ async function parseArgs(raw: string, cwd: string): Promise<ParsedArgs> {
 		}
 	}
 	if (parsed.target && parsed.directory) throw new Error("choose either a git directory or a merge request");
+	if (parsed.target && parsed.revisions) throw new Error("--revisions selects local jj changes, not a merge request");
 	if (rest.length > 0) {
 		if (parsed.focus) throw new Error("use either positional focus text or --focus, not both");
 		parsed.focus = rest.join(" ");
@@ -185,12 +194,12 @@ const REVIEW_TOOL_GUIDELINES = [
 
 const ReviewToolParams = Type.Object({
 	path: Type.Optional(
-		Type.String({ description: "Git working tree to review. Defaults to the session's working directory." }),
+		Type.String({ description: "Git or jj working tree to review. Defaults to the session's working directory." }),
 	),
 	scope: Type.Optional(
 		Type.Union([Type.Literal("all"), Type.Literal("uncommitted"), Type.Literal("branch")], {
 			description:
-				"all (default): everything since the branch point, committed or not. uncommitted: only changes since HEAD. branch: only commits since the branch point.",
+				"all (default): everything since the branch point, committed or not. uncommitted: only changes since HEAD. branch: only commits since the branch point. In jj, the branch point is the fork point with trunk(), and uncommitted is the working-copy change (@, or @- when @ is empty).",
 		}),
 	),
 	context: Type.Optional(
@@ -207,6 +216,12 @@ const ReviewToolParams = Type.Object({
 				"Run the design reviewer even when no schema, migration, contract, or route file changed.",
 		}),
 	),
+	revisions: Type.Optional(
+		Type.String({
+			description:
+				"jj only: a revset to review instead of scope, such as `abc` or `abc::@`. Use it when the work sits on top of changes that aren't part of it.",
+		}),
+	),
 });
 
 interface ReviewRequest {
@@ -220,6 +235,8 @@ interface ReviewRequest {
 	context?: string;
 	design?: boolean;
 	model?: string;
+	/** jj revset that replaces scope. */
+	revisions?: string;
 }
 
 interface ReviewOutcome {
@@ -275,9 +292,19 @@ export default function reviewExtension(pi: ExtensionAPI) {
 		try {
 			report();
 			// URLs and MR numbers are remote; a directory selects local work somewhere
-			// other than the parent session's cwd.
-			const source = request.target ? gitlabSource : gitSource;
-			change = await source.resolve(request.target, { cwd: request.cwd, scope: request.scope, exec });
+			// other than the parent session's cwd. A jj workspace is reviewed as jj, colocated or not,
+			// unless git drives it (see jjOwns); revisions always mean jj.
+			const source = request.target
+				? gitlabSource
+				: request.revisions || (await jjOwns(request.cwd, exec))
+					? jjSource
+					: gitSource;
+			change = await source.resolve(request.target, {
+				cwd: request.cwd,
+				scope: request.scope,
+				...(request.revisions ? { revisions: request.revisions } : {}),
+				exec,
+			});
 			signal.throwIfAborted();
 
 			collecting = false;
@@ -334,6 +361,7 @@ export default function reviewExtension(pi: ExtensionAPI) {
 							...(args.focus ? { focus: args.focus } : {}),
 							...(args.model ? { model: args.model } : {}),
 							...(args.design ? { design: true } : {}),
+							...(args.revisions ? { revisions: args.revisions } : {}),
 						},
 						ctx,
 						controller.signal,
@@ -386,7 +414,7 @@ export default function reviewExtension(pi: ExtensionAPI) {
 		name: "review",
 		label: "Review",
 		description:
-			"Run independent simplification and correctness reviews, plus an API, data, and boundary design review when relevant, of local changes in a git working tree with the configured reviewer model, and return their findings. Read-only: never edits files or posts anywhere. Does not review merge requests.",
+			"Run independent simplification and correctness reviews, plus an API, data, and boundary design review when relevant, of local changes in a git working tree or jj workspace with the configured reviewer model, and return their findings. Read-only: never edits files or posts anywhere. Does not review merge requests.",
 		promptSnippet: "Run independent reviews of your local changes after finishing a non-trivial code change",
 		promptGuidelines: REVIEW_TOOL_GUIDELINES,
 		parameters: ReviewToolParams,
@@ -405,6 +433,7 @@ export default function reviewExtension(pi: ExtensionAPI) {
 						...(params.focus ? { focus: params.focus } : {}),
 						...(params.context ? { context: params.context } : {}),
 						...(params.design ? { design: true } : {}),
+						...(params.revisions ? { revisions: params.revisions } : {}),
 					},
 					ctx,
 					cancelled,
