@@ -54,7 +54,8 @@
           jj = pkgs.jujutsu;
           gh = pkgs.gh;
           glab = pkgs.glab;
-          aws = pkgs.awscli2;
+          # The Session Manager plugin lets `aws ssm start-session` (and SSH over SSM) work.
+          aws = bundle "dotfiles-aws" (with pkgs; [ awscli2 ssm-session-manager-plugin ]);
           # Trino stopped publishing the CLI to Maven Central after 476, which
           # strands nixpkgs' trino-cli there. trino/install downloads the latest
           # GitHub release jar instead; this wrapper runs it on a Nix JRE so
