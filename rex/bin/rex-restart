@@ -15,6 +15,10 @@
 #
 # With --wait, rex-restart only saves the panes and leaves their pending files for two hours, for
 # a restart it doesn't trigger: the app's Update Server button, a reboot, or a macOS update.
+#
+# After a restart nothing saved, such as a crash, `rex-restart reopen` reopens the pis from their
+# records alone. Quitting pi deletes its record, so a record whose pane came back as a plain shell
+# belongs to a pi that something else ended.
 set -euo pipefail
 umask 077 # screens and command lines can hold secrets
 
@@ -38,11 +42,14 @@ Usage:
   rex-restart --wait             save every pane to reopen after a restart you do yourself
                                  (Update Server in the app, a reboot, a macOS update)
   rex-restart cancel             forget the saved panes, so a later restart reopens nothing
+  rex-restart reopen [SESSION...]
+                                 reopen the pi sessions a restart ended without saving them
+                                 first (a crash, say), in every session or the ones named
   rex-restart plan               show what each pane would reopen as, change nothing
   rex-restart log                show the latest restart's log
 
 Options:
-  --yes    don't ask before restarting
+  --yes    don't ask before restarting or reopening
   --wait   don't restart; panes saved this way reopen after a restart within two hours
   --force  restart even when a pi is busy or a pane is unreadable
 
@@ -404,12 +411,101 @@ cmd_claim() { # BLOCK_ID
                 >>"$dir/run.log"
             return 0
         fi
-        line="clear; pi --session $(printf '%q' "$session_file")"
+        line=$(pi_line "$session_file")
     else
         line="clear; cat $(printf '%q' "$(jq -r '.replay' <<<"$pending")")"
     fi
     log "reopened $(jq -r '.session_label' <<<"$pending") ($bid) as $kind" >>"$dir/run.log"
     printf '%s\n' "$line"
+}
+
+# The line a pane runs to reopen pi on a session file.
+pi_line() { printf 'clear; pi --session %q' "$1"; }
+
+# Whether a pane sits at the prompt of the login shell Rex started in it. The pane running this
+# script counts when this script runs straight from that shell: it's back at the prompt once we exit.
+at_prompt() { # SESSION_ID BLOCK_ID
+    if [[ $2 == "${REX_BLOCK:-}" ]]; then
+        [[ "$(ps -o comm= -p "$PPID" 2>/dev/null)" == -* ]]
+    else
+        [[ "$(call "$1" "$2" process | jq -r '.foreground.argv0 // empty')" == -* ]]
+    fi
+}
+
+cmd_reopen() { # YES [SESSION...]
+    local yes=$1 sessions missing panes origin="" targets pane sid bid record file cwd answer n=0
+    shift
+    if runner_alive; then
+        die "a restart is running (pid $(cat "$RUNNER_PID")); its panes reopen on their own"
+    fi
+    if [[ $# -gt 0 ]]; then
+        sessions=$(rexq ls --json) || die "couldn't list the Rex sessions"
+        missing=$(jq -r '[.sessions[] | .label, .session_id] as $have
+            | $ARGS.positional - $have | join(", ")' --args "$@" <<<"$sessions")
+        [[ -z $missing ]] || die "no session named $missing"
+    fi
+    # Every pane, even when sessions are named: a pi in any of them may have a session file open.
+    panes=$(collect) || die "couldn't read the panes from the Rex server"
+    if at_prompt "" "${REX_BLOCK:-}"; then origin=${REX_BLOCK:-}; fi
+    # Two pis on one session file would both write to it, so skip a file a running pi has open, and
+    # of two panes with the same file take the later record: that pi had the file last.
+    targets=$(jq -c --arg origin "$origin" '. as $p
+            | select(.kind == "shell" or .block_id == $origin)
+            | select($ARGS.positional == [] or any($ARGS.positional[]; . == $p.session_label or . == $p.session_id))' \
+            --args "$@" <<<"$panes" |
+        while read -r pane; do
+            bid=$(jq -r '.block_id' <<<"$pane")
+            record=$(cat "$PI_RECORDS/$bid.json" 2>/dev/null) || continue
+            file=$(jq -r '.session_file // empty' <<<"$record" 2>/dev/null) || continue
+            # pi writes its session file at the first message; a pi ended before that left nothing.
+            [[ -f $file ]] || continue
+            cwd=$(head -n 1 "$file" | jq -r '.cwd // empty' 2>/dev/null) || cwd=
+            [[ -n $cwd ]] || continue # no session header: not a session pi can open
+            jq -c --argjson record "$record" --arg cwd "$cwd" --arg last "$(date -r "$file" '+%b %d %H:%M')" \
+                '. + {$record, session_cwd: $cwd, last_active: $last}' <<<"$pane"
+        done | jq -sc --argjson open "$(jq -s 'map(select(.kind == "pi").pi.session_file)' <<<"$panes")" '
+            to_entries | map(.value + {order: .key})
+            | group_by(.record.session_file) | map(max_by(.record.updated_at))
+            | map(select(.record.session_file | IN($open[]) | not))
+            | sort_by(.order)[]')
+    if [[ -z $targets ]]; then
+        echo "Nothing to reopen."
+        return 0
+    fi
+
+    # Empty fields last: column merges adjacent separators. pi reopens a session in its own directory.
+    jq -r --arg home "$HOME" --arg origin "${REX_BLOCK:-}" '[
+        .session_label,
+        "last active " + .last_active,
+        (.session_cwd | if startswith($home) then "~" + ltrimstr($home) else . end),
+        ([.record.session_name // empty, (if .block_id == $origin then "(this pane)" else empty end)] | join(" "))
+    ] | @tsv' <<<"$targets" | column -t -s $'\t'
+    echo
+    if [[ $yes != 1 ]]; then
+        [[ -t 0 ]] || die "not a terminal; pass --yes to reopen without asking"
+        read -r -p "Reopen these pi sessions? [y/N] " answer || answer=
+        if [[ $answer != [yY]* ]]; then
+            echo "Nothing reopened."
+            return 0
+        fi
+    fi
+    while read -r pane; do
+        sid=$(jq -r '.session_id' <<<"$pane")
+        bid=$(jq -r '.block_id' <<<"$pane")
+        file=$(jq -r '.record.session_file' <<<"$pane")
+        # The pane may have moved on while the question waited.
+        if ! at_prompt "$sid" "$bid"; then
+            printf 'skipped %s (%s): no longer at its prompt\n' "$(jq -r '.session_label' <<<"$pane")" "$bid"
+            continue
+        fi
+        # Ctrl+U clears anything typed at the prompt; the leading space keeps the line out of history.
+        if rexq send -s "$sid" -b "$bid" $'\025'" $(pi_line "$file")"$'\r' </dev/null; then
+            n=$((n + 1))
+        else
+            printf 'skipped %s (%s): could not type into it\n' "$(jq -r '.session_label' <<<"$pane")" "$bid"
+        fi
+    done <<<"$targets"
+    echo "Reopened $n pi sessions."
 }
 
 cmd_cancel() {
@@ -444,6 +540,7 @@ main() {
     "") cmd_restart "$yes" "$force" "$wait" ;;
     plan) cmd_plan ;;
     cancel) cmd_cancel ;;
+    reopen) cmd_reopen "$yes" ${args[@]+"${args[@]}"} ;;
     log)
         if [[ -f $STATE_DIR/latest/run.log ]]; then
             cat "$STATE_DIR/latest/run.log"
