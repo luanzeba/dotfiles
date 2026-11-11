@@ -278,7 +278,7 @@ export default function (pi: ExtensionAPI) {
 						systemPrompt: "You are having an aside conversation with the user, separate from their main working session. The main session messages are provided for context only — that work is being handled by another agent. Focus on answering the user's side questions, helping them think through ideas, or planning next steps. Do not act as if you need to complete or continue the main session's work.",
 						messages: allMessages,
 					},
-					{ apiKey: auth.apiKey, headers: auth.headers, reasoning: thinkingLevel }
+					{ apiKey: auth.apiKey, headers: auth.headers, reasoning: thinkingLevel === "off" ? undefined : thinkingLevel }
 				);
 
 				for await (const event of eventStream) {
@@ -289,7 +289,7 @@ export default function (pi: ExtensionAPI) {
 						slot.answer += event.delta;
 						renderWidget(ctx);
 					} else if (event.type === "error") {
-						slot.answer += `\n❌ ${event.error.message}`;
+						slot.answer += `\n❌ ${event.error.errorMessage}`;
 						slot.done = true;
 						renderWidget(ctx);
 						return;
