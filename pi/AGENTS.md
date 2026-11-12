@@ -4,7 +4,7 @@
 
 When browsing GitHub content (issues, PRs, repos, files, comments):
 
-- **Always use `gh`** — never use the web-browser skill or any browser automation to access github.com
+- **Always use `gh`** — never use browser automation to access github.com
 - Use `gh issue view`, `gh pr view`, `gh api`, etc.
 - For file contents: `gh api repos/{owner}/{repo}/contents/{path}` or `gh browse` for reference
 - For issue/PR comments and details: `gh issue view <number> -R <repo> --comments`
@@ -34,18 +34,9 @@ When starting servers, watchers, or any long-running process:
   ```
 - macOS does not have the GNU `timeout` command. Use the bash tool's `timeout` parameter instead.
 
-## Browser Automation: Protect Primary Chrome Session
+## Browser Automation: work-browser (`wb`)
 
-When using browser automation / CDP tools:
-
-- **Never run Chrome in headless mode** unless the user explicitly asks for headless.
-- **Never kill or quit Chrome processes** (`pkill`, `killall`, `kill -9`, AppleScript quit) to free a debugging port.
-- **Always run** `~/dotfiles/skills/web-browser/scripts/start.js` **before other web-browser scripts**.
-- On local macOS, prefer the launcher `~/dotfiles/bin/chrome-pi-debug.sh` (Raycast hotkey friendly).
-- `start.js` may fall back to the isolated Pi profile when Chrome blocks CDP on the primary profile.
-- **Open a new automation window/tab** instead of navigating existing user tabs.
-- **Close only automation tabs/windows** (never bulk-close all browser tabs).
-- If Chrome is running without `:9222`, ask the user to relaunch Chrome with remote debugging manually rather than forcing shutdown.
+For work tasks that need a browser, use the `work-browser` skill: `wb` drives a headless Google Chrome with its own signed-in profile, gives each agent its own tabs, and never takes focus. Don't use the user's own Chrome (port 9222) for work tasks, and never kill or quit Chrome processes.
 
 ### Persistent servers (across multiple tool calls)
 

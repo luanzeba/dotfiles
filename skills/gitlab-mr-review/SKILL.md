@@ -66,7 +66,7 @@ The helper intentionally has no publish command.
 
 ### Capture the rendered diff anchor
 
-GitLab's REST change payload does not always use the same line alignment as the rendered Changes view. Before creating an inline draft, use the GitLab UI to inspect the exact target line and copy its DOM `id`, which is a value such as `<file-hash>_108_115`. The target line's draft composer exposes the same value as `form[data-line-code]`; cancel the empty composer after reading it. Load the `web-browser` skill first when browser automation is needed.
+GitLab's REST change payload does not always use the same line alignment as the rendered Changes view. Before creating an inline draft, use the GitLab UI to inspect the exact target line and copy its DOM `id`, which is a value such as `<file-hash>_108_115`. The target line's draft composer exposes the same value as `form[data-line-code]`; cancel the empty composer after reading it. Load the `work-browser` skill first when browser automation is needed.
 
 Pass that value as `--line-code`. The helper sends it in `position.line_range` and rejects a response that drops or changes that range. If a browser is unavailable, stop before creating the inline draft rather than guessing an anchor.
 

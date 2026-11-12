@@ -319,7 +319,9 @@ async function connectCdp() {
 async function linearPage(cdp, { create = true, forceNew = false, newWindow = false, url = LINEAR_URL } = {}) {
   let target = forceNew ? undefined : (await cdp.targets()).filter((page) => {
     try {
-      return new URL(page.url).hostname === "linear.app";
+      // Not wb sync's brief robots.txt tab, which it closes again.
+      const { hostname, pathname } = new URL(page.url);
+      return hostname === "linear.app" && pathname !== "/robots.txt";
     } catch {
       return false;
     }
