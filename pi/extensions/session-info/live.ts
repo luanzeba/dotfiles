@@ -8,7 +8,7 @@
  *
  *   { v: 1, type: "status" }  ->  { ok: true, status: { sessionId, file, cwd, idle, pid, about } }
  *   { v: 1, type: "send", message, mode?: "steer" | "followUp", from?: Sender }
- *                             ->  { ok: true, delivery: "started" | "steered" | "followUp" }
+ *                             ->  { ok: true, delivery: "started" | "steered" | "followUp" | "noted" }
  *   failures                  ->  { ok: false, error }
  *
  * Only the user who owns the directory can connect: it's 0700 and each socket is 0600. Node has no
@@ -35,7 +35,8 @@ const SOCKET_SUFFIX = ".sock";
 const SESSION_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
 
 export type SendMode = "steer" | "followUp";
-export type Delivery = "started" | "steered" | "followUp";
+/** `noted`: the session takes messages as notes for its next prompt and started nothing (see links.ts). */
+export type Delivery = "started" | "steered" | "followUp" | "noted";
 
 /** Who sent a message, as the sender describes itself. Same-user peers are trusted to be honest. */
 export interface Sender {

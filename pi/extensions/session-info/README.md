@@ -198,8 +198,14 @@ so.
   ```
   {"v":1,"type":"status"}  ->  {"ok":true,"status":{"sessionId","file","cwd","idle","pid","about"}}
   {"v":1,"type":"send","message":"…","mode":"steer","from":{"sessionId","token","cwd","about","listening"}}
-                          ->  {"ok":true,"delivery":"started" | "steered" | "followUp"}
+                          ->  {"ok":true,"delivery":"started" | "steered" | "followUp" | "noted"}
   ```
+
+- **Taken over by another extension:** before delivering, session-info emits `session-info:incoming`
+  on `pi.events` with `{ from, message, taken: false }`. A listener that sets `taken` takes the message
+  over: nothing is started or steered here, and the sender is told `noted`. The main agent
+  (`../agent-state`) takes every message and keeps it as a note for your next message, so children and
+  other sessions never interrupt you talking to it.
 
 - **Busy without a run:** during `/compact` or a `/tree` summary pi isn't idle but has no run to
   steer into, so a message waits there until pi is idle or a run starts, and the sender is told

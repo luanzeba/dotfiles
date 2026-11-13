@@ -39,7 +39,20 @@ import { readTranscript, renderPage } from "./transcript.ts";
 const MENTION_TYPE = "session-mention";
 /** Custom message a session_send delivers. */
 const MESSAGE_TYPE = "session-message";
-const SOCKET_DIR = path.join(getAgentDir(), "session-sockets");
+/**
+ * Asked synchronously before each incoming message is delivered, with `{ from, message, taken: false }`.
+ * A listener that sets `taken` takes the message over: this session starts no turn and steers nothing,
+ * and the sender is told `noted`. The main agent (../agent-state) takes every message and keeps it as a
+ * note for the user's next prompt, so other sessions never interrupt the user talking to it.
+ */
+export const INCOMING_EVENT = "session-info:incoming";
+export interface IncomingRequest {
+	from?: Sender;
+	message: string;
+	taken: boolean;
+}
+/** Where every interactive pi listens, as `<session id>.sock` (live.ts). */
+export const SOCKET_DIR = path.join(getAgentDir(), "session-sockets");
 /** Reuse an index refresh this recent instead of statting every session file again. */
 const INDEX_MAX_AGE_MS = 3_000;
 /** The dropdown shows what's indexed so far rather than wait longer than this for a refresh. */
@@ -59,7 +72,8 @@ interface MentionEntry {
 
 interface MessageDetails {
 	from?: Sender;
-	delivery: Delivery;
+	/** A taken message ("noted") is never recorded here. */
+	delivery: Exclude<Delivery, "noted">;
 	message: string;
 }
 
@@ -72,6 +86,7 @@ const DELIVERY_TEXT: Record<Delivery, string> = {
 	started: "it was idle and started a turn on it",
 	steered: "it was busy and gets it after its current tool calls",
 	followUp: "it was busy and gets it when it finishes its current work",
+	noted: "it's the user's main agent, which keeps messages as notes for its user's next prompt; nothing started",
 };
 
 const delay = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms).unref());
@@ -157,7 +172,10 @@ export default function sessionLinks(pi: ExtensionAPI, indexFor: (ctx: Extension
 	 */
 	function deliver(message: string, mode: SendMode, from: Sender | undefined): Delivery | undefined {
 		const ctx = context();
-		const delivery: Delivery | undefined = ctx.isIdle() ? "started" : ctx.signal ? (mode === "followUp" ? "followUp" : "steered") : undefined;
+		const request: IncomingRequest = { from, message, taken: false };
+		pi.events.emit(INCOMING_EVENT, request);
+		if (request.taken) return "noted";
+		const delivery: Exclude<Delivery, "noted"> | undefined = ctx.isIdle() ? "started" : ctx.signal ? (mode === "followUp" ? "followUp" : "steered") : undefined;
 		if (!delivery) return undefined;
 		const details: MessageDetails = { from, delivery, message };
 		// pi only looks at deliverAs while a run is going; an idle session starts a turn.
@@ -421,7 +439,7 @@ export default function sessionLinks(pi: ExtensionAPI, indexFor: (ctx: Extension
 		name: "session_send",
 		label: "Session send",
 		description:
-			"Send a message to another live pi session (one open in a running pi; session_list with live: true lists them). It arrives as a message from this session: an idle session starts working on it, a busy one gets it after its current tool calls (steer) or when it finishes (followUp). Both transcripts record it.",
+			"Send a message to another live pi session (one open in a running pi; session_list with live: true lists them). It arrives as a message from this session: an idle session starts working on it, a busy one gets it after its current tool calls (steer) or when it finishes (followUp). A session that takes messages as notes, such as the user's main agent, gets it with its user's next prompt instead. Both transcripts record it.",
 		promptSnippet: "Send a message to another live pi session",
 		promptGuidelines: [
 			"Use session_send only when the user asks you to tell or ask another session something, or when a session message asks you for an answer.",
