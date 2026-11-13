@@ -1,4 +1,5 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { isMainSession, stateDir } from "./agent-state/state.ts";
 
 /**
  * Pi counterpart of the SessionStart hook that `rex skill setup` installs for Claude Code.
@@ -20,9 +21,12 @@ export default function (pi: ExtensionAPI) {
 		// interactive agent should rename the user's Rex session, and a subagent in a tab of that
 		// session (PI_SUBAGENT_DIR, see subagent/) isn't it.
 		if (ctx.mode !== "tui" || process.env.PI_SUBAGENT_DIR) return;
+		// The main agent's Rex session holds it and its subagent tabs, so it keeps its name rather than
+		// taking the name of whatever task comes up first (../agent-state).
+		const naming = isMainSession(ctx.cwd, stateDir()) ? ["--feature-session-naming=false"] : [];
 		// exec resolves rather than rejects when rex is missing (code 1). A timeout kill can
 		// resolve with code 0, so check `killed` too.
-		const result = await pi.exec("rex", ["__internal", "session-start", "--agent", "pi"], {
+		const result = await pi.exec("rex", ["__internal", "session-start", "--agent", "pi", ...naming], {
 			timeout: TIMEOUT_MS,
 		});
 		if (result.code === 0 && !result.killed) context = result.stdout.trim();

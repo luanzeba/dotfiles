@@ -1,22 +1,20 @@
 # Subagents
 
-Child pi processes with their own context, for three jobs:
+Child pi processes, each with its own context, in two kinds:
 
-1. **Fan-out with a fixed return shape**, such as one read-only reader per feature file
-   (`skills/maintain-verification-skill` step 2).
-2. **Swarms**: the same task N times in parallel, for sample size or fuzzing.
-3. **A longer delegated task you watch and steer**, such as "implement X, then verify it with
-   /skill:verify-app". It's our local stand-in for cloud agents.
+- **`subagent`**: headless children. One call runs several in parallel (`count` repeats a task) and
+  waits for every one.
+- **`subagent_tab`**: a child in a background Rex tab. The call returns at once, the child keeps
+  working while the parent does other things, and you can watch it or type into it.
 
-The first two use the `subagent` tool: headless children, and the call waits for all of them. The
-third uses `subagent_tab`: a child in a background Rex tab that keeps running while the parent does
-other things.
+The tool descriptions say what each one does and what it costs, not when to use it: that's the
+agent's call.
 
 ## `subagent`: headless, waits for every child
 
 ```
 subagent { agent: "scout", brief: "…Return exactly: 1) … 2) …", tasks: ["Feature doc: features/a.md", "Feature doc: features/b.md"] }
-subagent { agent: "worker", tasks: ["Run /skill:verify-app on the checkout flow and report PASS or ISSUES with evidence"], count: 5 }
+subagent { agent: "worker", tasks: ["Run the integration tests once and report pass or fail with the failing test names"], count: 5 }
 ```
 
 | Parameter | Effect |
@@ -43,7 +41,7 @@ the worker agent writes only in its cwd and its scratch directory unless the tas
 
 | Action | Effect |
 |---|---|
-| `spawn {name, task, agent?, cwd?, isolate?, model?, thinking?}` | Open a background tab `sub:<name>` in this Rex session running an interactive pi, and return its id at once |
+| `spawn {name, task, agent?, cwd?, isolate?, report?, model?, thinking?}` | Open a background tab `sub:<name>` in this Rex session running an interactive pi, and return its id at once |
 | `send {id, message, followUp?}` | An idle child starts a new turn; a busy one is steered, or with `followUp` gets the message when it finishes. Skill commands and prompt templates expand as if typed; an extension command such as `/review` reaches the child's model as text, and it has the same tools |
 | `wait {id?, timeout?}` | Block until the child, or every running child of this session, is idle with nothing queued, then return its last answer. A tab that hasn't started its task 90 seconds after its tab opened counts as done, with a pointer to its tab, where it may be waiting at a prompt or show why its pi failed. Default timeout 30 minutes; Escape stops waiting, not the child |
 | `stop {id}` | Close the tab, which ends its pi |
@@ -55,7 +53,7 @@ You can type into the tab yourself; it's an ordinary pi session (named `subagent
 
 Tabs keep running through `/reload`, `/new`, and quitting the parent. Resume the parent's session and
 the widget, `list`, and `wait` find them again: `spawn` returns the tab's id in its tool result's
-details, and the session rebuilds its list from those. At most 4 run per parent session. Outside Rex,
+details, and the session rebuilds its list from those. At most 12 run per parent session. Outside Rex,
 `subagent_tab` refuses.
 
 The tab starts through `$SHELL`'s login environment with its interactive startup files, like a tab you
@@ -63,6 +61,19 @@ open, which is where the proxy key comes from (`~/.zshrc` sources `~/.config/bet
 `PI_PROFILE` carries the parent's profile over. The parent loads `child.ts` into the tab's pi with
 `-e`: it records busy, idle, and the latest answer for `wait`, and turns messages the parent leaves in
 the inbox into prompts.
+
+**`report: true`** has the tab send its parent each new answer when it finishes a turn, so the parent
+doesn't need to `wait`. The report carries the first 4,000 characters of the answer; `wait` returns all
+of it.
+
+- **Spawned by the main agent** (`../agent-state`): the report is a note in the main agent's state repo
+  (`reportTo` in `meta.json`), read with your next message. These tabs belong to the main agent rather
+  than to one session: every main-agent session lists the live ones and gets their reports, so `/new`
+  and restarts lose nothing.
+- **Spawned by any other session:** it goes over the parent's session socket (`../session-info`, "Live
+  sessions"). An idle parent starts a turn on it, a busy one gets it as a follow-up. A parent that
+  isn't listening (between sessions, restarting) gets it on a retry every 10 seconds while the tab is
+  idle; a parent that never comes back still has `wait`.
 
 ### Isolation
 
@@ -120,7 +131,7 @@ Every child gets `~/.pi/agent/subagents/<id>/`. A headless child has only `sessi
 |---|---|---|
 | `session.jsonl` | the child's pi | the full transcript, and the answer if the parent is gone |
 | `scratch/` | child | its own files, and its `PI_TODO_PATH` |
-| `meta.json` | parent, tabs only | name, agent, model, cwd, parent session, Rex tab, checkout, stop time |
+| `meta.json` | parent, tabs only | name, agent, model, cwd, parent session, whether it reports, Rex tab, checkout, stop time |
 | `state.json` | the tab's pi | busy, idle, or exited; pid; whether it started; its latest answer |
 | `inbox/` | parent, tabs only | messages waiting for the tab |
 | `checkout/` | parent | the isolated workspace or worktree |

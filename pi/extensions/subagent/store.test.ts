@@ -3,7 +3,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { test } from "node:test";
-import { enqueue, type Meta, newRunDir, pendingMessages, readMeta, runDir, runFiles, type State, tabStatus, updateMeta, writeMeta } from "./store.ts";
+import { enqueue, type Meta, newRunDir, pendingMessages, readMeta, REPORT_HEADER, reportText, runDir, runFiles, type State, tabStatus, updateMeta, writeMeta } from "./store.ts";
 
 process.env.PI_CODING_AGENT_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "subagent-store-"));
 
@@ -41,4 +41,21 @@ test("inbox messages come out in the order they went in, also within one millise
 	for (const message of messages) enqueue(dir, { message, delivery: "steer" });
 	fs.writeFileSync(path.join(runFiles(dir).inbox, "junk.json.tmp"), "{");
 	assert.deepEqual(pendingMessages(dir).map((pending) => pending.message.message), messages);
+});
+
+test("a report names the tab, says how to answer it, and trims long answers", () => {
+	const short = reportText("fix login", "abc123", { text: "Done: fixed the redirect." });
+	assert.match(short, /^Subagent tab "fix login" \(subagent_tab id abc123\) finished a turn\./);
+	assert.ok(short.endsWith("Done: fixed the redirect."));
+	const failed = reportText("x", "id1", { text: "", error: "429 rate limited" });
+	assert.match(failed, /finished a turn with an error: 429 rate limited\./);
+	const long = reportText("x", "id2", { text: "a".repeat(5000) });
+	assert.ok(long.length < 4300);
+	assert.match(long, /subagent_tab wait \{id: "id2"\} returns all of it/);
+});
+
+test("the report header pattern matches what reportText writes", () => {
+	assert.match(reportText("a b", "abc123", { text: "x" }).split("\n")[0], REPORT_HEADER);
+	assert.match(reportText("a", "abc123", { text: "", error: "429" }).split("\n")[0], REPORT_HEADER);
+	assert.doesNotMatch("Done: fixed it.", REPORT_HEADER);
 });

@@ -6,8 +6,8 @@ import * as path from "node:path";
 import { test } from "node:test";
 import { loadAgents, parseAgent } from "./agents.ts";
 import { systemPrompt, taskPrompt } from "./prompt.ts";
-import { enqueue, type Meta, newRunDir, runFiles, START_TIMEOUT_MS, updateMeta, writeMeta, writeState } from "./store.ts";
-import { checkoutHelp, createCheckout, type Exec, slug, tabReport, waitForTabs } from "./tabs.ts";
+import { enqueue, type Meta, newRunDir, runFiles, START_TIMEOUT_MS, type State, updateMeta, writeMeta, writeState } from "./store.ts";
+import { checkoutHelp, createCheckout, type Exec, slug, tabReport, tabsReportingTo, waitForTabs } from "./tabs.ts";
 
 process.env.PI_CODING_AGENT_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "subagent-tabs-"));
 const tmp = (prefix: string) => fs.mkdtempSync(path.join(os.tmpdir(), prefix));
@@ -119,4 +119,24 @@ test("an isolated checkout is a git worktree on its own branch, or a jj workspac
 	assert.equal(workspace.checkout.vcs, "jj");
 	assert.equal(fs.readFileSync(path.join(jjDest, "a"), "utf8"), "a\n", "the child sees the parent's working-copy change");
 	assert.match(sh(jj, "jj workspace list"), /subagent-impl-def456/);
+});
+
+test("the main agent takes on its live reporting tabs from any session, not stopped, ended, or stuck ones", () => {
+	const now = Date.parse("2026-11-13T12:00:00Z");
+	const tab = (extra: Partial<Meta>, state?: Partial<State>) => {
+		const { id, dir } = newRunDir();
+		writeMeta(dir, { id, name: id, agent: "worker", cwd: "/w", model: "p/m", thinking: "high", parent: "s1", createdAt: "2026-11-13T11:59:30Z", report: true, reportTo: "/state", ...extra });
+		if (state) writeState(dir, { state: "idle", pid: process.pid, started: true, ...state });
+		return dir;
+	};
+	const idle = tab({}, {});
+	const busy = tab({}, { state: "busy" });
+	const starting = tab({});
+	tab({ createdAt: "2026-11-13T11:00:00Z" }); // never checked in
+	tab({ stoppedAt: "2026-11-13T11:30:00Z" }, {});
+	tab({}, { state: "exited" });
+	tab({}, { pid: 99_999_999 }); // its pi is gone
+	tab({ reportTo: undefined }, {});
+	assert.deepEqual(tabsReportingTo("/state", now).sort(), [idle, busy, starting].sort());
+	assert.deepEqual(tabsReportingTo("/elsewhere", now), []);
 });

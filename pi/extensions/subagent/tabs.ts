@@ -6,7 +6,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
-import { type Checkout, type Meta, pendingMessages, readMeta, readState, START_TIMEOUT_MS, type State, type TabStatus, tabStatus } from "./store.ts";
+import { type Checkout, isRunId, type Meta, pendingMessages, readMeta, readState, runDir, START_TIMEOUT_MS, type State, subagentsRoot, type TabStatus, tabStatus } from "./store.ts";
 
 export type Exec = (
 	command: string,
@@ -113,6 +113,25 @@ export function tabReport(dir: string, now = Date.now()): TabReport | undefined 
 	const finished =
 		status === "exited" || status === "stopped" || failedToStart || (status === "idle" && !!state?.started && pending === 0);
 	return { dir, meta, state, status, finished, failedToStart };
+}
+
+/**
+ * The main agent's live tabs, whichever of its sessions spawned them: those reporting to `stateDir`
+ * that are busy, idle, or still starting. Tabs that ended without a stop (closed by hand, a crash, a
+ * reboot) are left out.
+ */
+export function tabsReportingTo(stateDir: string, now = Date.now()): string[] {
+	let names: string[];
+	try {
+		names = fs.readdirSync(subagentsRoot());
+	} catch {
+		return [];
+	}
+	return names.filter(isRunId).flatMap((id) => {
+		const tab = tabReport(runDir(id), now);
+		const live = tab?.status === "busy" || tab?.status === "idle" || (tab?.status === "starting" && !tab.failedToStart);
+		return tab && live && tab.meta.reportTo === stateDir ? [tab.dir] : [];
+	});
 }
 
 /** Poll until every tab has finished, the time is up, or the wait is aborted. */

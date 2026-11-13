@@ -25,6 +25,8 @@ import {
 	pidAlive,
 	readMeta,
 	readState,
+	REPORT_SINK_EVENT,
+	type ReportSinkRequest,
 	runDir,
 	runFiles,
 	shortPath,
@@ -33,7 +35,7 @@ import {
 	updateMeta,
 	writeMeta,
 } from "./store.ts";
-import { checkoutHelp, createCheckout, rexWindowArgs, slug, type TabReport, tabReport, waitForTabs } from "./tabs.ts";
+import { checkoutHelp, createCheckout, rexWindowArgs, slug, type TabReport, tabReport, tabsReportingTo, waitForTabs } from "./tabs.ts";
 
 const AGENTS_DIR = fileURLToPath(new URL("./agents", import.meta.url));
 const CHILD_EXTENSION = fileURLToPath(new URL("./child.ts", import.meta.url));
@@ -43,7 +45,8 @@ const MAX_RUNS = 32;
 /** Headless children running at once, across every call in this pi. */
 const MAX_PARALLEL = 8;
 /** Tabs running at once per parent session. */
-const MAX_TABS = 4;
+const MAX_TABS = 12;
+
 /** Characters of child answers per tool result, shared among its children, with a floor per child. */
 const OUTPUT_BUDGET = 50_000;
 const MIN_OUTPUT = 2_000;
@@ -184,6 +187,7 @@ export default function subagents(pi: ExtensionAPI) {
 	}
 
 	function sessionTabs(): TabReport[] {
+		adoptMainAgentTabs();
 		return [...tabDirs].flatMap((dir) => tabReport(dir) ?? []);
 	}
 
@@ -296,8 +300,29 @@ export default function subagents(pi: ExtensionAPI) {
 		].join(" ");
 	}
 
+	function reportSink(): string | undefined {
+		const sink: ReportSinkRequest = {};
+		pi.events.emit(REPORT_SINK_EVENT, sink);
+		return sink.dir;
+	}
+
+	/**
+	 * The main agent's tabs outlive its sessions (/new, restarts); its current session manages them.
+	 * Asked when the tabs are first needed rather than in session_start, where agent-state may not have
+	 * decided yet whether this is the main agent.
+	 */
+	let adopted = false;
+	function adoptMainAgentTabs(): void {
+		if (adopted) return;
+		const sink = reportSink();
+		if (!sink) return;
+		adopted = true;
+		for (const dir of tabsReportingTo(sink)) tabDirs.add(dir);
+	}
+
 	pi.on("session_start", (_event, ctx) => {
 		tabDirs = spawnedTabs(ctx);
+		adopted = false;
 		if (ctx.mode !== "tui") return;
 		widgetCtx = ctx;
 		refreshWidget();
@@ -323,10 +348,10 @@ export default function subagents(pi: ExtensionAPI) {
 			"Blocks until every child is done. Children run on your model and thinking level unless the call or settings choose another.",
 			`Agents: ${agentList}`,
 		].join(" "),
-		promptSnippet: "Run headless subagents in parallel and collect their answers (fan-out, swarms)",
+		promptSnippet: "Run headless subagents in parallel and wait for their answers",
 		promptGuidelines: [
-			"Use subagent to fan out independent work, such as one read-only reader per file, or to run one task several times with `count`. Each child sees only its task: put instructions shared by every task, including the exact return shape, in `brief`, and give each task the paths it needs.",
-			"subagent children share your checkout, so never give several of them writing tasks on the same files. For a child that should change code next to you, use subagent_tab with isolate.",
+			"subagent children can't see your conversation: each task must stand on its own, with the paths it needs; instructions every task shares, such as the shape to return, go in `brief`.",
+			"subagent children share your checkout and you wait for all of them; subagent_tab children run in Rex tabs while you carry on.",
 			"You own what subagent and subagent_tab children report: check claims that matter before relying on them.",
 		],
 		parameters: Type.Object({
@@ -464,15 +489,15 @@ export default function subagents(pi: ExtensionAPI) {
 		label: "Subagent tab",
 		description: [
 			"Run a subagent in a background Rex tab of this session that the user can watch and type into. It keeps running after the call, after /reload, and after this pi quits.",
-			"Actions: spawn {name, task, agent?, cwd?, isolate?} returns an id at once; send {id, message, followUp?} prompts an idle child or steers a busy one (followUp waits until it finishes);",
+			"Actions: spawn {name, task, agent?, cwd?, isolate?, report?} returns an id at once; send {id, message, followUp?} prompts an idle child or steers a busy one (followUp waits until it finishes);",
 			`wait {id?, timeout?} blocks until the child (default: every running one) finishes and returns its last answer; stop {id} closes the tab; list shows this session's tabs. At most ${MAX_TABS} run at once.`,
 			"isolate gives the child its own jj workspace or git worktree, kept after stop.",
 			`Agents: ${agentList}`,
 		].join(" "),
-		promptSnippet: "Run a long subagent in a Rex tab the user can watch; steer, wait for, and stop it",
+		promptSnippet: "Run a subagent in a Rex tab that keeps going while you work; steer, wait for, and stop it",
 		promptGuidelines: [
-			"Use subagent_tab for a longer delegated task the user may want to watch or steer, such as implementing and verifying a change: spawn it, then wait for its result, send to steer it, and stop it when you're done with it unless the user wants to keep it.",
-			"Pass isolate: true to subagent_tab spawn when the child will edit files in a checkout that you or another child are also working in.",
+			"A subagent_tab child edits the checkout it runs in, so two working in one checkout clobber each other.",
+			`A subagent_tab child keeps running, and counts toward the ${MAX_TABS}, until it's stopped.`,
 		],
 		parameters: Type.Object({
 			action: StringEnum(["spawn", "send", "wait", "stop", "list"] as const),
@@ -484,6 +509,7 @@ export default function subagents(pi: ExtensionAPI) {
 			agent: Type.Optional(StringEnum(agentNames as [string, ...string[]], { description: `spawn: the agent. Default: ${DEFAULT_AGENT}.` })),
 			cwd: Type.Optional(Type.String({ description: "spawn: working directory. Default: yours." })),
 			isolate: Type.Optional(Type.Boolean({ description: "spawn: work in a new jj workspace or git worktree of cwd's repository." })),
+			report: Type.Optional(Type.Boolean({ description: "spawn: message you the child's answer each time it finishes a turn, instead of you calling wait." })),
 			model: Type.Optional(Type.String({ description: "spawn: provider/id instead of the default. Only when asked for." })),
 			thinking: Type.Optional(StringEnum(THINKING_LEVELS, { description: "spawn: thinking level instead of the default." })),
 			timeout: Type.Optional(Type.Integer({ minimum: 1, maximum: WAIT_MAX_S, description: `wait: seconds before returning anyway. Default: ${WAIT_DEFAULT_S}.` })),
@@ -513,7 +539,10 @@ export default function subagents(pi: ExtensionAPI) {
 					thinking: model.thinking,
 					parent: ctx.sessionManager.getSessionId(),
 					createdAt: new Date().toISOString(),
+					...(params.report ? { report: true } : {}),
 				};
+				const sink = params.report ? reportSink() : undefined;
+				if (sink) meta.reportTo = sink;
 				writeMeta(dir, meta);
 				tabDirs.add(dir);
 				try {

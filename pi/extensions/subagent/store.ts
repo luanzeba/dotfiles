@@ -32,8 +32,16 @@ export interface Meta {
 	/** provider/id */
 	model: string;
 	thinking: string;
-	/** Session id of the pi that spawned it: provenance for people reading the file. */
+	/** Session id of the pi that spawned it. */
 	parent: string;
+	/** The tab reports its answer after every turn (child.ts): to `reportTo`, or else to `parent`. */
+	report?: boolean;
+	/**
+	 * The main agent's state repo (../agent-state), when the parent was the main agent. Reports go into
+	 * its notes as files, so they reach whichever main-agent session runs next, and that session takes
+	 * the tab on as its own.
+	 */
+	reportTo?: string;
 	createdAt: string;
 	rex?: { session: string; window: string; openedAt: string };
 	checkout?: Checkout;
@@ -197,4 +205,29 @@ export function textOf(content: unknown): string {
 export function shortPath(file: string): string {
 	const home = os.homedir();
 	return file === home || file.startsWith(`${home}/`) ? `~${file.slice(home.length)}` : file;
+}
+
+/**
+ * Asked synchronously with `{ dir: undefined }`. A listener that sets `dir` is the main agent
+ * (../agent-state), and `dir` its state repo: tabs spawned with `report: true` put their reports there
+ * as notes, and every session that answers with the same `dir` takes those tabs on.
+ */
+export const REPORT_SINK_EVENT = "subagent:report-sink";
+export interface ReportSinkRequest {
+	dir?: string;
+}
+
+/** The first line of every report; the answer follows. */
+export const REPORT_HEADER = /^Subagent tab ".*" \(subagent_tab id \S+\) finished a turn( with an error: .*)?\.$/;
+
+/** A report carries this much of the answer; the parent's wait returns the rest. */
+const REPORT_MAX_CHARS = 4_000;
+
+/** The message a reporting tab sends its parent after a turn. */
+export function reportText(name: string, id: string, reply: { text: string; error?: string }): string {
+	const body = reply.text.length > REPORT_MAX_CHARS ? `${reply.text.slice(0, REPORT_MAX_CHARS)}\n[…trimmed; subagent_tab wait {id: "${id}"} returns all of it]` : reply.text;
+	return [
+		`Subagent tab "${name}" (subagent_tab id ${id}) finished a turn${reply.error ? ` with an error: ${reply.error}` : ""}.`,
+		...(body ? ["", body] : []),
+	].join("\n");
 }

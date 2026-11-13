@@ -1,0 +1,14 @@
+#!/bin/sh
+# agent: open the main agent, which is pi started in the state repo (~/luan-agent-state, or
+# $PI_AGENT_STATE_DIR; see pi/extensions/agent-state). It resumes the latest main-agent session;
+# `agent --new` starts a fresh one. Other arguments go to pi.
+dir="${PI_AGENT_STATE_DIR:-$HOME/luan-agent-state}"
+# The work models' key, for an agent started outside an interactive shell (`rex new … -- agent`).
+# shellcheck disable=SC1091
+[ -r "$HOME/.config/beta/proxy.env" ] && . "$HOME/.config/beta/proxy.env"
+cd "$dir" 2>/dev/null || { echo "agent: no state repo at $dir (clone luan-agent-state there)" >&2; exit 1; }
+if [ "${1:-}" = "--new" ]; then
+	shift
+	exec pi "$@"
+fi
+exec pi --continue "$@"
