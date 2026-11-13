@@ -51,6 +51,10 @@ echo ""
 # For each conflicting file, find the remote commits that touch it
 MERGE_BASE=$(git merge-base HEAD "$REMOTE_BRANCH" 2>/dev/null || echo "")
 
+# PR numbers already shown, across all files, so each PR body is fetched once.
+# A space-separated list, since macOS's bash 3.2 has no associative arrays.
+SEEN_PRS=" "
+
 while IFS= read -r file; do
   echo "--- FILE: $file ---"
 
@@ -62,9 +66,6 @@ while IFS= read -r file; do
       echo "Remote commits modifying this file:"
       echo "$COMMITS"
       echo ""
-
-      # Collect unique PR numbers to avoid fetching the same PR body multiple times
-      declare -A SEEN_PRS
 
       # Look up PRs for each commit SHA
       while IFS= read -r commit_line; do
@@ -92,8 +93,8 @@ while IFS= read -r file; do
           echo "  Commit $SHA -> PR #$PR_NUMBER: $PR_TITLE ($PR_URL)"
 
           # Fetch and display the PR body once per unique PR
-          if [[ -z "${SEEN_PRS[$PR_NUMBER]:-}" ]]; then
-            SEEN_PRS[$PR_NUMBER]=1
+          if [[ "$SEEN_PRS" != *" $PR_NUMBER "* ]]; then
+            SEEN_PRS+="$PR_NUMBER "
             echo ""
             echo "  === PR #$PR_NUMBER DETAILS ==="
             echo "  Title: $PR_TITLE"

@@ -80,14 +80,15 @@ nix_sync() {
     fi
     if nix_installed "$entry"; then
         log_info "Upgrading nix profile entry '$entry'..."
-        _nix profile upgrade "${options[@]}" "$entry"
+        # ${a[@]+"${a[@]}"}: macOS's bash 3.2 calls an empty array unbound under set -u.
+        _nix profile upgrade ${options[@]+"${options[@]}"} "$entry"
     else
         # A legacy catch-all profile entry may already provide these binaries.
         if [[ "$entry" == nodeRuntime ]] || nix_installed nix; then
             priority=(--priority 6)
         fi
         log_info "Installing nix profile entry '$entry' from $NIX_FLAKE#$entry..."
-        _nix profile add "${priority[@]}" "${options[@]}" "$NIX_FLAKE#$entry"
+        _nix profile add ${priority[@]+"${priority[@]}"} ${options[@]+"${options[@]}"} "$NIX_FLAKE#$entry"
     fi
 }
 

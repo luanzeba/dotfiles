@@ -104,7 +104,7 @@ cmd_status() {
     echo ""
 
     local tools=() tool width=4
-    mapfile -t tools < <(get_available_tools)
+    while IFS= read -r tool; do tools+=("$tool"); done < <(get_available_tools)
     for tool in "${tools[@]}"; do
         (( ${#tool} > width )) && width=${#tool}
     done
@@ -318,7 +318,7 @@ cmd_update() {
 
     if [[ ${#tools[@]} -eq 0 ]]; then
         update_all=true
-        mapfile -t tools < <(get_available_tools)
+        while IFS= read -r tool; do tools+=("$tool"); done < <(get_available_tools)
     else
         local unknown=()
         for tool in "${tools[@]}"; do
