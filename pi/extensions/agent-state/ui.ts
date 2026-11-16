@@ -1,6 +1,6 @@
 /**
  * /status in the TUI: the state repo's work on the whole screen, a list to move through, and each work
- * file read in place. state.ts builds what's shown; this draws it and takes the keys.
+ * file or note read in place. state.ts builds what's shown; this draws it and takes the keys.
  */
 
 import { getMarkdownTheme, type KeybindingsManager, type Theme } from "@earendil-works/pi-coding-agent";
@@ -28,7 +28,7 @@ interface Opened {
 export const FULL_SCREEN = { anchor: "top-left", width: "100%", maxHeight: "100%" } as const;
 
 export class StatusScreen implements Component {
-	private list: StatusList = { sections: [], notes: [] };
+	private list: StatusList = { sections: [] };
 	private entries: StatusEntry[] = [];
 	private selected = 0;
 	/** The first list line shown. */
@@ -164,10 +164,6 @@ export class StatusScreen implements Component {
 				if (entry.needs) for (const [at, part] of wrapTextWithAnsi(entry.needs, Math.max(10, width - 6)).entries()) lines.push(th.fg("warning", `${at === 0 ? "    → " : "      "}${part}`));
 				if (selected) selectedTo = lines.length - 1;
 			}
-		}
-		if (this.list.notes.length > 0) {
-			section(`Notes for your next message (${this.list.notes.length})`);
-			for (const note of this.list.notes) lines.push(truncateToWidth(`  • ${note}`, width, "…"));
 		}
 		if (this.list.more) lines.push("", th.fg("dim", truncateToWidth(this.list.more, width, "…")));
 		if (lines.length === 0) lines.push("Nothing tracked yet.");

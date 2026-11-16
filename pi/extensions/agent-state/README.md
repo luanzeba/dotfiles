@@ -44,8 +44,10 @@ agent's session) unread notes.
 
 - ↑/↓ or j/k move, Enter opens the work file: its front matter as a header (`needs` in full, links,
   sessions, artifacts), then its markdown. ↑/↓, j/k, PgUp/PgDn or Space/b, and g/G scroll it.
+- Enter on a note shows all of it, a subagent's whole report say. That doesn't use it up: the main
+  agent still reads it.
 - Esc goes back to the list, on the same item; Esc or q there closes `/status`, and q closes it from a
-  work file too.
+  work file or note too.
 - The list reads the work files again every 3 seconds and when you come back to it, so in the main
   agent's clone it shows what the main agent writes while it's open. Elsewhere it shows what the pull
   brought; open `/status` again to pull again.

@@ -8,6 +8,7 @@ import {
 	age,
 	claimMain,
 	commitMessage,
+	entryDetail,
 	frontMatter,
 	group,
 	isMainSession,
@@ -16,6 +17,7 @@ import {
 	loadItems,
 	mainHolder,
 	memoryIndex,
+	noteDetail,
 	noteGist,
 	notesText,
 	parseWorkFile,
@@ -117,29 +119,31 @@ test("status view: sections, the needs line, notes, recently done, and an empty 
 		{ slug: "o", title: "Cleaned 8 days ago", status: "cleaned", updated: "2026-11-05" },
 		{ slug: "c", title: "Old", status: "cleaned" },
 	];
-	const notes = [{ at: now.toISOString(), from: 'subagent tab "fix login"', message: 'Subagent tab "fix login" (subagent_tab id x) finished a turn.\n\nDone: fixed it.' }];
+	const note = { at: now.toISOString(), from: 'subagent tab "fix login"', message: 'Subagent tab "fix login" (subagent_tab id x) finished a turn.\n\nDone: fixed it.' };
+	const notes = [{ file: "/state/.pending/notes/1.json", note }];
 	assert.deepEqual(statusView(items, { now, notes }), [
 		"Needs you (1)",
 		"  • Ground caps  (updated today)",
 		"      → Review the MR",
 		"In progress (1)",
 		"  • Trino access  (updated 2d ago · waiting)",
+		"Notes for your next message (1)",
+		'  • subagent tab "fix login": Done: fixed it.',
 		"Recently done (2)",
 		"  • Read-only check  (updated yesterday · cleaned)",
 		"  • Dropped a week ago  (updated 7d ago · dropped)",
-		"Notes for your next message (1)",
-		'  • subagent tab "fix login": Done: fixed it.',
 		"2 more done earlier, not shown",
 	]);
 	assert.deepEqual(statusView([{ slug: "c", title: "Old", status: "cleaned" }]), ["1 done (cleaned or dropped) not shown"]);
 	assert.deepEqual(statusView([]), ["Nothing tracked yet."]);
-	const list = statusList(items, { now });
+	const list = statusList(items, { now, notes });
 	assert.deepEqual(
 		list.sections.flatMap((section) => section.entries.map((entry) => entry.key)),
-		["n", "w", "r", "d"],
-		"entries open by slug, in the order shown",
+		["n", "w", "/state/.pending/notes/1.json", "r", "d"],
+		"work opens by slug and a note by its file, in the order shown",
 	);
 	assert.deepEqual(list.sections[0].entries[0], { key: "n", text: "Ground caps  (updated today)", needs: "Review the MR" });
+	assert.equal(list.sections[2].entries[0].note, note);
 });
 
 test("the selection stays on its key across refreshes, else on the row that took its place", () => {
@@ -169,6 +173,22 @@ test("a work file opens with its front matter as a header and its body", () => {
 	});
 	assert.deepEqual(workDetail(dir, "bare", now), { title: "bare", header: [{ label: "status", values: ["active"] }, { label: "file", values: ["work/bare.md"] }], body: "Just notes." });
 	assert.match(workDetail(dir, "gone", now).body, /^Can't read it: /);
+	assert.equal(entryDetail(dir, { key: "x", text: "" }, now).title, "X: the thing");
+});
+
+test("a note opens in full from memory, so it reads the same after the main agent removed its file", () => {
+	const dir = repo({});
+	addNote(dir, { at: "2026-11-13T10:05:00.000Z", from: "@@01a1 (fix login)", message: "Line one.\n\n## Details\n\nAll of it.\n", replyTo: "s1" });
+	const [{ file, note }] = readNotes(dir);
+	const detail = noteDetail(note);
+	assert.equal(detail.title, "Note from @@01a1 (fix login)");
+	assert.deepEqual(detail.header.map(({ label }) => label), ["from", "sent", "reply to"]);
+	assert.match(detail.header[1].values[0], /^2026-11-1[23] \d\d:\d5$/, "local time, to the minute");
+	assert.equal(detail.header[2].values[0], "session s1");
+	assert.equal(detail.body, "Line one.\n\n## Details\n\nAll of it.");
+	removeNotes([file]);
+	assert.deepEqual(entryDetail(dir, { key: file, text: "", note }), detail);
+	assert.equal(noteDetail({ at: "soon", from: "x", message: "m" }).header[1].values[0], "soon");
 });
 
 test("note gists skip a subagent report's header", () => {

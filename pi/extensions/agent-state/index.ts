@@ -25,6 +25,7 @@ import {
 	addNote,
 	claimMain,
 	commitMessage,
+	entryDetail,
 	isMainSession,
 	LOCK_FILE,
 	loadItems,
@@ -37,7 +38,6 @@ import {
 	stateDir,
 	statusList,
 	statusView,
-	workDetail,
 } from "./state.ts";
 import { FULL_SCREEN, StatusScreen, type StatusSource } from "./ui.ts";
 
@@ -181,7 +181,7 @@ export default function agentState(pi: ExtensionAPI) {
 				const last = await git(["log", "-1", "--format=%cr"], 3_000);
 				if (last.ok && last.out.trim()) freshness += `, last change ${last.out.trim()}`;
 			}
-			const notes = () => (main ? readNotes(dir).map(({ note }) => note) : []);
+			const notes = () => (main ? readNotes(dir) : []);
 			const title = `Work · ${shortPath(dir)} · ${freshness}`;
 			if (context.mode !== "tui") {
 				// RPC has no overlays and its stdout is the protocol; print mode has neither problem.
@@ -190,7 +190,7 @@ export default function agentState(pi: ExtensionAPI) {
 				else console.log(lines.join("\n"));
 				return;
 			}
-			const source: StatusSource = { title, load: () => statusList(loadItems(dir), { notes: notes() }), open: (entry) => workDetail(dir, entry.key) };
+			const source: StatusSource = { title, load: () => statusList(loadItems(dir), { notes: notes() }), open: (entry) => entryDetail(dir, entry) };
 			await context.ui.custom<void>((tui, theme, keys, done) => new StatusScreen(tui, theme, keys, source, done), { overlay: true, overlayOptions: FULL_SCREEN });
 		},
 	});

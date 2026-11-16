@@ -280,21 +280,21 @@ export function releaseMain(dir: string, pid = process.pid): void {
 	}
 }
 
-/** A row of /status that opens: a work item. */
+/** A row of /status that opens: a work item or a note. */
 export interface StatusEntry {
-	/** The work item's slug: Enter opens it, and the selection follows it across refreshes. */
+	/** The work item's slug or the note's file: the selection follows it across refreshes. */
 	key: string;
-	/** One line: the title, when it was updated, and the status unless it's active or landed. */
+	/** One line: the title, when it was updated, and the status unless it's active or landed; or a note's gist. */
 	text: string;
 	/** What Luan has to do, shown in full under the text. */
 	needs?: string;
+	/** Opened from here rather than its file, which the main agent removes when it reads the note. */
+	note?: Note;
 }
 
 export interface StatusList {
 	/** Headings with their count, each with at least one entry. */
 	sections: { title: string; entries: StatusEntry[] }[];
-	/** Unread notes, one line each. `notes` only for the main agent's session. */
-	notes: string[];
 	/** What isn't listed: older done items. */
 	more?: string;
 }
@@ -302,8 +302,8 @@ export interface StatusList {
 /** /status lists what was cleaned or dropped this many days ago or less: work often goes straight to cleaned. */
 export const RECENT_DAYS = 7;
 
-/** What /status lists, newest first in each section. */
-export function statusList(items: Item[], options: { notes?: Note[]; now?: Date } = {}): StatusList {
+/** What /status lists, newest first in each section. `notes` only for the main agent's session. */
+export function statusList(items: Item[], options: { notes?: { file: string; note: Note }[]; now?: Date } = {}): StatusList {
 	const now = options.now ?? new Date();
 	const groups = group(items);
 	const done = groups.closed.filter((item) => (daysAgo(item.updated, now) ?? Infinity) <= RECENT_DAYS);
@@ -313,27 +313,27 @@ export function statusList(items: Item[], options: { notes?: Note[]; now?: Date 
 		const tail = [when ? `updated ${when}` : undefined, item.status !== "active" && item.status !== "landed" ? item.status : undefined].filter(Boolean).join(" · ");
 		return { key: item.slug, text: `${item.title}${tail ? `  (${tail})` : ""}`, ...(item.needs ? { needs: item.needs } : {}) };
 	};
+	const notes = (options.notes ?? []).map(({ file, note }) => ({ key: file, text: `${note.from}: ${noteGist(note)}`, note }));
 	const sections = [
-		{ title: "Needs you", items: groups.needs },
-		{ title: "In progress", items: groups.open },
-		{ title: "Landed, awaiting cleanup", items: groups.landed },
-		{ title: "Recently done", items: done },
+		{ title: "Needs you", entries: groups.needs.map(entry) },
+		{ title: "In progress", entries: groups.open.map(entry) },
+		{ title: "Landed, awaiting cleanup", entries: groups.landed.map(entry) },
+		{ title: "Notes for your next message", entries: notes },
+		{ title: "Recently done", entries: done.map(entry) },
 	]
-		.filter((section) => section.items.length > 0)
-		.map((section) => ({ title: `${section.title} (${section.items.length})`, entries: section.items.map(entry) }));
-	const notes = (options.notes ?? []).map((note) => `${note.from}: ${noteGist(note)}`);
+		.filter((section) => section.entries.length > 0)
+		.map((section) => ({ title: `${section.title} (${section.entries.length})`, entries: section.entries }));
 	const more = older > 0 ? (done.length > 0 ? `${older} more done earlier, not shown` : `${older} done (cleaned or dropped) not shown`) : undefined;
-	return { sections, notes, ...(more ? { more } : {}) };
+	return { sections, ...(more ? { more } : {}) };
 }
 
 /** /status as text, for RPC and print mode: one heading (no leading space) or row per line. */
-export function statusView(items: Item[], options: { notes?: Note[]; now?: Date } = {}): string[] {
+export function statusView(items: Item[], options: { notes?: { file: string; note: Note }[]; now?: Date } = {}): string[] {
 	const list = statusList(items, options);
 	const lines = list.sections.flatMap((section) => [
 		section.title,
 		...section.entries.flatMap((entry) => [`  • ${entry.text}`, ...(entry.needs ? [`      → ${entry.needs}`] : [])]),
 	]);
-	if (list.notes.length > 0) lines.push(`Notes for your next message (${list.notes.length})`, ...list.notes.map((note) => `  • ${note}`));
 	if (list.more) lines.push(list.more);
 	return lines.length > 0 ? lines : ["Nothing tracked yet."];
 }
@@ -353,6 +353,24 @@ export interface Detail {
 	/** A label with its values, one per line. */
 	header: { label: string; values: string[] }[];
 	body: string;
+}
+
+/** What Enter on an entry shows. */
+export function entryDetail(dir: string, entry: StatusEntry, now = new Date()): Detail {
+	return entry.note ? noteDetail(entry.note) : workDetail(dir, entry.key, now);
+}
+
+/** A note in full, a subagent's whole report say. Showing it leaves it for the main agent to read. */
+export function noteDetail(note: Note): Detail {
+	const at = new Date(note.at);
+	const pad = (value: number) => String(value).padStart(2, "0");
+	const sent = Number.isNaN(at.getTime()) ? note.at : `${at.getFullYear()}-${pad(at.getMonth() + 1)}-${pad(at.getDate())} ${pad(at.getHours())}:${pad(at.getMinutes())}`;
+	const header = [
+		{ label: "from", values: [note.from] },
+		{ label: "sent", values: [sent] },
+		...(note.replyTo ? [{ label: "reply to", values: [`session ${note.replyTo}`] }] : []),
+	];
+	return { title: `Note from ${note.from}`, header, body: note.message.trim() };
 }
 
 /** A work file opened in /status: its front matter as a header (needs in full), then its body. */
