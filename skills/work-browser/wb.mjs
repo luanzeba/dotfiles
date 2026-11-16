@@ -862,7 +862,11 @@ commands.signin = async (urls) => {
   fs.mkdirSync(STATE, { recursive: true });
   fs.writeFileSync(SIGNIN, JSON.stringify({ wb: process.pid }));
   const stopped = await stopHost();
-  const start = urls.length ? urls : ["https://ground.beta.team/"];
+  // GitLab's usual sign-in goes straight to Microsoft and only sets a session
+  // cookie, which Chrome drops when this window quits, so there's nothing to
+  // keep or sync. With auto_sign_in=false it offers "Remember me", for a
+  // two-week cookie. Already signed in, it just redirects to GitLab.
+  const start = urls.length ? urls : ["https://ground.beta.team/", "https://gitlab.beta.team/users/sign_in?auto_sign_in=false"];
   const has1Password = fs.existsSync(path.join(PROFILE, "Default/Extensions", ONEPASSWORD));
   if (!has1Password) start.push(`https://chromewebstore.google.com/detail/${ONEPASSWORD}`);
   // A normal window on the same profile, with extensions on and no debugging
@@ -870,7 +874,8 @@ commands.signin = async (urls) => {
   const chrome = spawn(CHROME, [`--user-data-dir=${PROFILE}`, ...COMMON_FLAGS, ...start], { stdio: "ignore" });
   fs.writeFileSync(SIGNIN, JSON.stringify({ wb: process.pid, chrome: chrome.pid }));
   console.log(`A Chrome window opened on the agents' profile${stopped ? " (agents' tabs were closed)" : ""}.
-${has1Password ? "" : "First add 1Password from the Chrome Web Store tab and sign in to it.\n"}Sign in to what agents need (Ground, GitLab, Linear, AMPECO, …), then quit this Chrome (⌘Q).`);
+${has1Password ? "" : "First add 1Password from the Chrome Web Store tab and sign in to it.\n"}Sign in to what agents need (Ground, GitLab, Linear, AMPECO, …), then quit this Chrome (⌘Q).
+On GitLab, tick "Remember me" before clicking Azure, or its session ends when this Chrome quits.`);
   await new Promise((r) => chrome.on("exit", r));
   fs.rmSync(SIGNIN, { force: true });
   await ensureHost();
