@@ -35,7 +35,7 @@ const SOCKET_SUFFIX = ".sock";
 const SESSION_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
 
 export type SendMode = "steer" | "followUp";
-/** `noted`: the session takes messages as notes for its next prompt and started nothing (see links.ts). */
+/** `noted`: the session took it as a note, read once it's idle or with its next prompt (see links.ts). */
 export type Delivery = "started" | "steered" | "followUp" | "noted";
 
 /** Who sent a message, as the sender describes itself. Same-user peers are trusted to be honest. */

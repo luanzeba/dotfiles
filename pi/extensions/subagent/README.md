@@ -67,9 +67,9 @@ doesn't need to `wait`. The report carries the first 4,000 characters of the ans
 of it.
 
 - **Spawned by the main agent** (`../agent-state`): the report is a note in the main agent's state repo
-  (`reportTo` in `meta.json`), read with your next message. These tabs belong to the main agent rather
-  than to one session: every main-agent session lists the live ones and gets their reports, so `/new`
-  and restarts lose nothing.
+  (`reportTo` in `meta.json`), read once the main agent is idle or with your next message. These tabs
+  belong to the main agent rather than to one session: every main-agent session lists the live ones and
+  gets their reports, so `/new` and restarts lose nothing.
 - **Spawned by any other session:** it goes over the parent's session socket (`../session-info`, "Live
   sessions"). An idle parent starts a turn on it, a busy one gets it as a follow-up. A parent that
   isn't listening (between sessions, restarting) gets it on a retry every 10 seconds while the tab is

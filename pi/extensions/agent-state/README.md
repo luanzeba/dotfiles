@@ -19,8 +19,8 @@ On the devbox, run it in a Rex session so it outlives your connection:
   (`../rex-session.ts`).
 - **Instructions:** [`main.md`](main.md) goes into the system prompt: delegate the work, keep the work
   files, decide or ask, clean up after landing, keep memory, stay lean.
-- **Notes, not interruptions:** a message for the main agent becomes a note, read with your next
-  message. Nothing starts or steers a turn. Notes are files, one per note, in `.pending/notes/`:
+- **Notes, not interruptions:** a message for the main agent becomes a note. Notes are files, one per
+  note, in `.pending/notes/`:
   - `session_send` to the main agent: session-info hands the message over (`../session-info`, "Taken
     over by another extension").
   - A subagent tab it spawned with `report: true` drops its answer there after each turn
@@ -29,8 +29,22 @@ On the devbox, run it in a Rex session so it outlives your connection:
   - Anything else can drop one with `addNote(stateRepo, { at, from, message, replyTo? })` from
     `state.ts`; each note is one JSON file.
 
-  The footer counts them, `/status` lists them, and the prompt that starts the next turn reads and
-  removes them. They survive restarts and new sessions until then.
+  Nothing steers a turn. While the main agent is idle and the editor is empty, notes start a turn of
+  their own, so the work files keep up without you asking. The turn waits until no note has come in for
+  10 seconds, so reports that land together make one. It's told you aren't waiting: the agent updates
+  the work files, puts what you have to act on in `needs`, and answers in a line or two. Notes that
+  come in during a turn, or while there's text in the editor, wait for the next idle moment or your
+  next message, whichever comes first; your message takes whatever is left. pi can't tell when you're
+  writing in an external editor (Ctrl+G) or a dialog, so a notes turn can start then; what you send
+  joins it, and the agent answers you as usual.
+
+  A notes turn that fails, or that you stop with Esc, holds the rest for your next message so it can't
+  repeat on its own; the footer says so, and the hold (`.pending/hold`) outlasts restarts. If the
+  session ends before that message (`/new`, a restart), or `/tree` moves away from it, what that turn
+  read goes back to `.pending/notes/`.
+
+  Whichever turn reads notes removes them; until then they survive restarts and new sessions. The
+  footer counts them, and `/status` shows each in full without using it up.
 - **Its state, loaded:** the first prompt of each session gets the work overview and
   `memory/MEMORY.md` (first 200 lines or 25,000 characters).
 - **Pushed:** after every turn, anything changed in the repo is committed and pushed. The footer says so
@@ -63,7 +77,7 @@ AGENTS.md          this agent's specifics (work or personal), loaded by pi from 
 work/<slug>.md     one file per piece of work: front matter + why, decisions, log
 memory/MEMORY.md   short index of memory notes, one line each
 memory/<topic>.md  the notes
-.pending/          unread notes (gitignored)
+.pending/          unread notes and the hold on them (gitignored)
 ```
 
 A work file's front matter, as `main.md` asks for it and `/status` reads it:

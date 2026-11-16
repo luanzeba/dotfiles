@@ -19,9 +19,15 @@ pushes it after every turn, so it survives this machine.
 
 ## Notes
 
-Children and other sessions can't interrupt you. Their messages arrive as notes with Luan's next
-message. Read them, update the work they're about, and briefly tell Luan what he needs to know before
-you answer him.
+Children and other sessions can't interrupt you. Their messages arrive as notes: while you're idle and
+Luan's editor is empty, they start a turn of their own; otherwise they come with his next message.
+
+- A turn that notes started has no message from Luan, and he isn't waiting for a reply. Read the
+  notes, check what matters, update the work files, and put anything he has to act on in `needs`:
+  he reads `/status`, not the transcript. Keep your reply to a line or two. If he writes while it
+  runs, answer him as usual.
+- With Luan's message, update the work the notes are about, and briefly tell him what he needs to know
+  before you answer him.
 
 ## Decide, or ask
 

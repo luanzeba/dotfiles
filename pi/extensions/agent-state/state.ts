@@ -168,8 +168,9 @@ export function age(updated: string | undefined, now = new Date()): string | und
 }
 
 /**
- * A note for the main agent: one JSON file in `.pending/notes/`, read and removed with the next prompt.
- * Anything can drop one (subagent reports, scripts, jobs) with addNote.
+ * A note for the main agent: one JSON file in `.pending/notes/`, read and removed with the next prompt,
+ * or by a turn of its own while the main agent is idle (index.ts). Anything can drop one (subagent
+ * reports, scripts, jobs) with addNote.
  */
 export interface Note {
 	at: string;
@@ -230,10 +231,39 @@ export function noteGist(note: Note, max = 100): string {
 	return body.length > max ? `${body.slice(0, max - 1)}…` : body;
 }
 
-/** The notes as the main agent reads them with the prompt that starts its next turn. */
+/** Notes start a turn of their own once the newest is this old, so reports that come in together make one turn. */
+export const NOTE_BATCH_MS = 10_000;
+
+/** Whether waiting notes should start a turn: there are some, and none came in for NOTE_BATCH_MS. */
+export function noteTurnDue(notes: Note[], now = Date.now()): boolean {
+	// A note whose time doesn't parse counts as old rather than holding the rest back.
+	return notes.length > 0 && notes.every((note) => !(now - Date.parse(note.at) < NOTE_BATCH_MS));
+}
+
+const holdFile = (dir: string) => path.join(dir, ".pending", "hold");
+
+/**
+ * Whether notes wait for Luan's next prompt rather than start a turn: one they started failed or he
+ * stopped it, and another would do the same without him. A file, so restarts and new sessions keep it.
+ */
+export function notesHeld(dir: string): boolean {
+	return fs.existsSync(holdFile(dir));
+}
+
+export function holdNotes(dir: string, hold: boolean): void {
+	if (!hold) return fs.rmSync(holdFile(dir), { force: true });
+	ensurePending(dir);
+	fs.writeFileSync(holdFile(dir), "");
+}
+
+/** The message of a turn that notes start; the notes follow it, as they follow a prompt. */
+export const NOTE_TURN_TEXT =
+	"The notes below came in while you were idle and started this turn. Luan isn't waiting for a reply: read them, check what matters, update the work files, and put anything he has to act on in `needs`. Keep your reply to a line or two. If he writes during this turn, answer him as usual.";
+
+/** The notes as the main agent reads them, with the prompt or the notes' own message that starts its next turn. */
 export function notesText(notes: Note[]): string {
 	return [
-		`${notes.length === 1 ? "A note" : `${notes.length} notes`} from other sessions, which wait for Luan's next message instead of interrupting:`,
+		`${notes.length === 1 ? "A note" : `${notes.length} notes`} from other sessions, which waited for this turn so they wouldn't interrupt:`,
 		...notes.map((note) =>
 			[
 				"",
@@ -318,7 +348,7 @@ export function statusList(items: Item[], options: { notes?: { file: string; not
 		{ title: "Needs you", entries: groups.needs.map(entry) },
 		{ title: "In progress", entries: groups.open.map(entry) },
 		{ title: "Landed, awaiting cleanup", entries: groups.landed.map(entry) },
-		{ title: "Notes for your next message", entries: notes },
+		{ title: "Notes the main agent hasn't read", entries: notes },
 		{ title: "Recently done", entries: done.map(entry) },
 	]
 		.filter((section) => section.entries.length > 0)

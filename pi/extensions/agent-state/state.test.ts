@@ -11,6 +11,7 @@ import {
 	entryDetail,
 	frontMatter,
 	group,
+	holdNotes,
 	isMainSession,
 	keepSelection,
 	LOCK_FILE,
@@ -19,7 +20,9 @@ import {
 	memoryIndex,
 	noteDetail,
 	noteGist,
+	notesHeld,
 	notesText,
+	noteTurnDue,
 	parseWorkFile,
 	readNotes,
 	releaseMain,
@@ -127,7 +130,7 @@ test("status view: sections, the needs line, notes, recently done, and an empty 
 		"      → Review the MR",
 		"In progress (1)",
 		"  • Trino access  (updated 2d ago · waiting)",
-		"Notes for your next message (1)",
+		"Notes the main agent hasn't read (1)",
 		'  • subagent tab "fix login": Done: fixed it.',
 		"Recently done (2)",
 		"  • Read-only check  (updated yesterday · cleaned)",
@@ -212,8 +215,28 @@ test("notes are one file each in a self-ignoring folder, read oldest first and r
 	removeNotes([notes[0].file]);
 	assert.deepEqual(readNotes(dir).map(({ note }) => note.message), ["one"]);
 	const text = notesText(notes.map(({ note }) => note));
-	assert.match(text, /^2 notes from other sessions/);
+	assert.match(text, /^2 notes from other sessions, which waited for this turn/);
 	assert.match(text, /### From b \(2026-11-13 09:00 UTC\)\nAnswer with session_send to session "s1"\.\n\ntwo/);
+});
+
+test("notes start a turn once none came in for a while", () => {
+	const now = Date.parse("2026-11-13T10:00:30.000Z");
+	const note = (at: string) => ({ at, from: "a", message: "m" });
+	assert.equal(noteTurnDue([], now), false);
+	assert.equal(noteTurnDue([note("2026-11-13T10:00:00.000Z"), note("2026-11-13T10:00:15.000Z")], now), true);
+	assert.equal(noteTurnDue([note("2026-11-13T10:00:00.000Z"), note("2026-11-13T10:00:25.000Z")], now), false, "the newest is 5s old: wait for more");
+	assert.equal(noteTurnDue([note("not a time")], now), true);
+});
+
+test("a hold on notes is a file in .pending, so a restart keeps it", () => {
+	const dir = repo({});
+	assert.equal(notesHeld(dir), false);
+	holdNotes(dir, true);
+	assert.equal(notesHeld(dir), true);
+	assert.equal(fs.readFileSync(path.join(dir, ".pending", ".gitignore"), "utf8"), "*\n");
+	holdNotes(dir, false);
+	holdNotes(dir, false);
+	assert.equal(notesHeld(dir), false);
 });
 
 test("one main agent per clone: a running holder keeps the role, a gone one gives it up", () => {
