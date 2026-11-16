@@ -38,10 +38,21 @@ On the devbox, run it in a Rex session so it outlives your connection:
 
 ## `/status`
 
-In any pi: what needs you, what's in progress, what's landed and awaiting cleanup, and (in the main
-agent's session) unread notes. It reads the work files' front matter directly, so it costs no model
-call. In a clone the main agent doesn't run in, it pulls first, so the Mac shows what the devbox's main
-agent wrote a minute ago. Esc, Enter, or q closes it.
+In any pi, on the whole screen: what needs you, what's in progress, what's landed and awaiting cleanup,
+what was cleaned or dropped in the last 7 days (work often goes straight to cleaned), and (in the main
+agent's session) unread notes.
+
+- ↑/↓ or j/k move, Enter opens the work file: its front matter as a header (`needs` in full, links,
+  sessions, artifacts), then its markdown. ↑/↓, j/k, PgUp/PgDn or Space/b, and g/G scroll it.
+- Esc goes back to the list, on the same item; Esc or q there closes `/status`, and q closes it from a
+  work file too.
+- The list reads the work files again every 3 seconds and when you come back to it, so in the main
+  agent's clone it shows what the main agent writes while it's open. Elsewhere it shows what the pull
+  brought; open `/status` again to pull again.
+
+It reads the files directly, so it costs no model call. In a clone the main agent doesn't run in, it
+pulls first, so the Mac shows what the devbox's main agent wrote a minute ago. In RPC and print mode it
+prints the list instead.
 
 ## The state repo
 
@@ -65,8 +76,8 @@ sessions: […]         # pi sessions, children's too
 artifacts: […]        # worktrees, workspaces, prototypes, demos, tmp folders
 ```
 
-Only `title`, `status`, `updated`, and `needs` matter to `/status`; the lists are for the agent and for
-cleanup.
+`/status` lists items by `title`, `status`, `updated`, and `needs`, and shows the lists in a work file's
+header; they're for the agent and for cleanup.
 
 `.pending/` ignores itself, so it stays out of git in any state repo. It also holds `main.json`, the pid
 of the pi that has the main agent's role in this clone: another pi started there (a new Rex tab in the

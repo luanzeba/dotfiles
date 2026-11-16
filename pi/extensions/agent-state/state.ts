@@ -38,19 +38,45 @@ export interface Item {
 	needs?: string;
 }
 
-/** Top-level `key: value` pairs of a leading `---` block. List items and nested lines are skipped. */
-export function frontMatter(text: string): Record<string, string> {
+export interface WorkFile {
+	/** Top-level `key: value` pairs of the front matter. */
+	fields: Record<string, string>;
+	/** Top-level keys holding a list: `- item` lines under an empty value, or `[a, b]`. */
+	lists: Record<string, string[]>;
+	/** The markdown after the front matter, or the whole text when there's none. */
+	body: string;
+}
+
+/** A work file: a leading `---` block of top-level fields and lists, then markdown. Nested lines are skipped. */
+export function parseWorkFile(text: string): WorkFile {
 	const lines = text.replace(/^\uFEFF/, "").split(/\r?\n/);
-	if (lines[0]?.trim() !== "---") return {};
+	const none = { fields: {}, lists: {}, body: text };
+	if (lines[0]?.trim() !== "---") return none;
 	const fields: Record<string, string> = {};
-	for (const line of lines.slice(1)) {
-		if (line.trim() === "---") return fields;
-		const match = /^([A-Za-z][\w-]*):\s*(.*)$/.exec(line);
-		if (!match) continue;
-		fields[match[1].toLowerCase()] = scalar(match[2]);
+	const lists: Record<string, string[]> = {};
+	let list: string[] | undefined;
+	for (const [index, line] of lines.entries()) {
+		if (index === 0) continue;
+		if (line.trim() === "---") return { fields, lists, body: lines.slice(index + 1).join("\n").replace(/^\s*\n/, "") };
+		const field = /^([A-Za-z][\w-]*):\s*(.*)$/.exec(line);
+		if (field) {
+			const key = field[1].toLowerCase();
+			fields[key] = scalar(field[2]);
+			const flow = /^\[(.*)\]$/.exec(fields[key]);
+			list = fields[key] === "" || flow ? (lists[key] = []) : undefined;
+			if (flow) list?.push(...flow[1].split(",").map((part) => scalar(part.trim())).filter(Boolean));
+			continue;
+		}
+		const entry = /^\s*-\s+(.*)$/.exec(line);
+		if (entry && list) list.push(scalar(entry[1]));
 	}
 	// No closing ---: not front matter.
-	return {};
+	return none;
+}
+
+/** Top-level `key: value` pairs of a leading `---` block. List items and nested lines are skipped. */
+export function frontMatter(text: string): Record<string, string> {
+	return parseWorkFile(text).fields;
 }
 
 /**
@@ -81,14 +107,19 @@ export function loadItems(dir: string): Item[] {
 		} catch {
 			// Unreadable: still listed, so it gets noticed.
 		}
-		return {
-			slug,
-			title: fields.title || slug,
-			status: (fields.status || "active").toLowerCase(),
-			...(fields.updated ? { updated: fields.updated } : {}),
-			...(fields.needs ? { needs: fields.needs } : {}),
-		};
+		return toItem(slug, fields);
 	});
+}
+
+/** The title defaults to the slug, and the status to active. */
+function toItem(slug: string, fields: Record<string, string>): Item {
+	return {
+		slug,
+		title: fields.title || slug,
+		status: (fields.status || "active").toLowerCase(),
+		...(fields.updated ? { updated: fields.updated } : {}),
+		...(fields.needs ? { needs: fields.needs } : {}),
+	};
 }
 
 export interface Groups {
@@ -97,8 +128,8 @@ export interface Groups {
 	/** Open items without `needs`, active first. */
 	open: Item[];
 	landed: Item[];
-	/** Cleaned or dropped. */
-	closed: number;
+	/** Cleaned or dropped, newest first. */
+	closed: Item[];
 }
 
 /** Newest first; an item without a date sorts last. */
@@ -112,17 +143,24 @@ export function group(items: Item[]): Groups {
 		needs: [...rest.filter((item) => item.needs), ...landed.filter((item) => item.needs)].sort(byUpdated),
 		open: rest.filter((item) => !item.needs).sort((a, b) => Number(a.status !== "active") - Number(b.status !== "active") || byUpdated(a, b)),
 		landed: landed.filter((item) => !item.needs).sort(byUpdated),
-		closed: closed.length,
+		closed: closed.sort(byUpdated),
 	};
+}
+
+/** Local days since `updated`, or undefined when it isn't a date. */
+function daysAgo(updated: string | undefined, now: Date): number | undefined {
+	if (!updated) return undefined;
+	const date = new Date(/^\d{4}-\d{2}-\d{2}$/.test(updated) ? `${updated}T12:00:00` : updated);
+	if (Number.isNaN(date.getTime())) return undefined;
+	const day = (value: Date) => Math.floor(new Date(value.getFullYear(), value.getMonth(), value.getDate()).getTime() / 86_400_000);
+	return day(now) - day(date);
 }
 
 /** "today", "yesterday", "3d ago", or the date itself for anything older than a few weeks. */
 export function age(updated: string | undefined, now = new Date()): string | undefined {
 	if (!updated) return undefined;
-	const date = new Date(/^\d{4}-\d{2}-\d{2}$/.test(updated) ? `${updated}T12:00:00` : updated);
-	if (Number.isNaN(date.getTime())) return updated;
-	const day = (value: Date) => Math.floor(new Date(value.getFullYear(), value.getMonth(), value.getDate()).getTime() / 86_400_000);
-	const days = day(now) - day(date);
+	const days = daysAgo(updated, now);
+	if (days === undefined) return updated;
 	if (days <= 0) return "today";
 	if (days === 1) return "yesterday";
 	if (days < 21) return `${days}d ago`;
@@ -242,35 +280,100 @@ export function releaseMain(dir: string, pid = process.pid): void {
 	}
 }
 
-/** What /status shows, one heading (no leading space) or row per line. `notes` only for the main agent's session. */
-export function statusView(items: Item[], options: { notes?: Note[]; now?: Date } = {}): string[] {
+/** A row of /status that opens: a work item. */
+export interface StatusEntry {
+	/** The work item's slug: Enter opens it, and the selection follows it across refreshes. */
+	key: string;
+	/** One line: the title, when it was updated, and the status unless it's active or landed. */
+	text: string;
+	/** What Luan has to do, shown in full under the text. */
+	needs?: string;
+}
+
+export interface StatusList {
+	/** Headings with their count, each with at least one entry. */
+	sections: { title: string; entries: StatusEntry[] }[];
+	/** Unread notes, one line each. `notes` only for the main agent's session. */
+	notes: string[];
+	/** What isn't listed: older done items. */
+	more?: string;
+}
+
+/** /status lists what was cleaned or dropped this many days ago or less: work often goes straight to cleaned. */
+export const RECENT_DAYS = 7;
+
+/** What /status lists, newest first in each section. */
+export function statusList(items: Item[], options: { notes?: Note[]; now?: Date } = {}): StatusList {
 	const now = options.now ?? new Date();
 	const groups = group(items);
-	const lines: string[] = [];
-	const row = (item: Item, extra?: string) => {
+	const done = groups.closed.filter((item) => (daysAgo(item.updated, now) ?? Infinity) <= RECENT_DAYS);
+	const older = groups.closed.length - done.length;
+	const entry = (item: Item): StatusEntry => {
 		const when = age(item.updated, now);
-		const tail = [extra, when ? `updated ${when}` : undefined, item.status !== "active" && item.status !== "landed" ? item.status : undefined].filter(Boolean).join(" · ");
-		return `  • ${item.title}${tail ? `  (${tail})` : ""}`;
+		const tail = [when ? `updated ${when}` : undefined, item.status !== "active" && item.status !== "landed" ? item.status : undefined].filter(Boolean).join(" · ");
+		return { key: item.slug, text: `${item.title}${tail ? `  (${tail})` : ""}`, ...(item.needs ? { needs: item.needs } : {}) };
 	};
-	if (groups.needs.length > 0) {
-		lines.push(`Needs you (${groups.needs.length})`);
-		for (const item of groups.needs) lines.push(`${row(item)}`, `      → ${item.needs}`);
-	}
-	if (groups.open.length > 0) {
-		lines.push(`In progress (${groups.open.length})`);
-		for (const item of groups.open) lines.push(row(item));
-	}
-	if (groups.landed.length > 0) {
-		lines.push(`Landed, awaiting cleanup (${groups.landed.length})`);
-		for (const item of groups.landed) lines.push(row(item));
-	}
-	const notes = options.notes ?? [];
-	if (notes.length > 0) {
-		lines.push(`Notes for your next message (${notes.length})`);
-		for (const note of notes) lines.push(`  • ${note.from}: ${noteGist(note)}`);
-	}
-	if (groups.closed > 0) lines.push(`${groups.closed} done (cleaned or dropped) not shown`);
+	const sections = [
+		{ title: "Needs you", items: groups.needs },
+		{ title: "In progress", items: groups.open },
+		{ title: "Landed, awaiting cleanup", items: groups.landed },
+		{ title: "Recently done", items: done },
+	]
+		.filter((section) => section.items.length > 0)
+		.map((section) => ({ title: `${section.title} (${section.items.length})`, entries: section.items.map(entry) }));
+	const notes = (options.notes ?? []).map((note) => `${note.from}: ${noteGist(note)}`);
+	const more = older > 0 ? (done.length > 0 ? `${older} more done earlier, not shown` : `${older} done (cleaned or dropped) not shown`) : undefined;
+	return { sections, notes, ...(more ? { more } : {}) };
+}
+
+/** /status as text, for RPC and print mode: one heading (no leading space) or row per line. */
+export function statusView(items: Item[], options: { notes?: Note[]; now?: Date } = {}): string[] {
+	const list = statusList(items, options);
+	const lines = list.sections.flatMap((section) => [
+		section.title,
+		...section.entries.flatMap((entry) => [`  • ${entry.text}`, ...(entry.needs ? [`      → ${entry.needs}`] : [])]),
+	]);
+	if (list.notes.length > 0) lines.push(`Notes for your next message (${list.notes.length})`, ...list.notes.map((note) => `  • ${note}`));
+	if (list.more) lines.push(list.more);
 	return lines.length > 0 ? lines : ["Nothing tracked yet."];
+}
+
+/**
+ * Where the selection goes after the list changed: the same key if it's still there, else the row that
+ * took its place.
+ */
+export function keepSelection(keys: string[], key: string | undefined, index: number): number {
+	const found = key === undefined ? -1 : keys.indexOf(key);
+	return found >= 0 ? found : Math.max(0, Math.min(index, keys.length - 1));
+}
+
+/** What /status shows for one entry: a title, a compact header, and markdown. */
+export interface Detail {
+	title: string;
+	/** A label with its values, one per line. */
+	header: { label: string; values: string[] }[];
+	body: string;
+}
+
+/** A work file opened in /status: its front matter as a header (needs in full), then its body. */
+export function workDetail(dir: string, slug: string, now = new Date()): Detail {
+	const file = path.join("work", `${slug}.md`);
+	let text: string;
+	try {
+		text = fs.readFileSync(path.join(dir, file), "utf8");
+	} catch (error) {
+		return { title: slug, header: [{ label: "file", values: [file] }], body: `Can't read it: ${error instanceof Error ? error.message : String(error)}` };
+	}
+	const { fields, lists, body } = parseWorkFile(text);
+	const item = toItem(slug, fields);
+	const when = age(item.updated, now);
+	const header = [
+		{ label: "status", values: [item.status] },
+		{ label: "updated", values: item.updated ? [when !== item.updated ? `${item.updated} (${when})` : item.updated] : [] },
+		...["needs", "links", "sessions", "artifacts"].map((label) => ({ label, values: lists[label] ?? (fields[label] ? [fields[label]] : []) })),
+		{ label: "file", values: [file] },
+	].filter((row) => row.values.length > 0);
+	return { title: item.title, header, body: body.trim() || "(no notes in this file)" };
 }
 
 const MEMORY_MAX_LINES = 200;
@@ -306,7 +409,7 @@ export function snapshot(dir: string, now = new Date()): string {
 		...list("Needs Luan:", groups.needs, (item) => `${what(item)}: ${item.needs}`),
 		...list("In progress:", groups.open, what),
 		...list("Landed, awaiting cleanup:", groups.landed, what),
-		...(groups.closed > 0 ? [`${groups.closed} more are cleaned or dropped.`, ""] : []),
+		...(groups.closed.length > 0 ? [`${groups.closed.length} more are cleaned or dropped.`, ""] : []),
 		"## Memory index (memory/MEMORY.md)",
 		memory ?? "Empty.",
 	].join("\n");

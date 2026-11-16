@@ -3,7 +3,31 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { test } from "node:test";
-import { addNote, age, claimMain, commitMessage, frontMatter, group, isMainSession, LOCK_FILE, loadItems, mainHolder, memoryIndex, noteGist, notesText, readNotes, releaseMain, removeNotes, snapshot, stateDir, statusView } from "./state.ts";
+import {
+	addNote,
+	age,
+	claimMain,
+	commitMessage,
+	frontMatter,
+	group,
+	isMainSession,
+	keepSelection,
+	LOCK_FILE,
+	loadItems,
+	mainHolder,
+	memoryIndex,
+	noteGist,
+	notesText,
+	parseWorkFile,
+	readNotes,
+	releaseMain,
+	removeNotes,
+	snapshot,
+	stateDir,
+	statusList,
+	statusView,
+	workDetail,
+} from "./state.ts";
 
 function repo(files: Record<string, string>): string {
 	const dir = fs.mkdtempSync(path.join(os.tmpdir(), "agent-state-"));
@@ -36,6 +60,14 @@ test("front matter: top-level fields only, comments and quotes stripped, no clos
 	assert.deepEqual(frontMatter("title: x\n"), {});
 });
 
+test("work files: lists under a key or in brackets, and the body after the front matter", () => {
+	const file = parseWorkFile('---\ntitle: X\nlinks:\n  - https://example.com/mr/1   # the MR\n  - "https://example.com/#a"\nsessions: [01a1 (fix), 02b2]\nartifacts: []\nnotes:\n  nested: skipped\n---\n\n\nWhy.\n\n## Log\n');
+	assert.deepEqual(file.lists, { links: ["https://example.com/mr/1", "https://example.com/#a"], sessions: ["01a1 (fix)", "02b2"], artifacts: [], notes: [] });
+	assert.equal(file.body, "Why.\n\n## Log\n");
+	assert.deepEqual(parseWorkFile("No front matter.\n"), { fields: {}, lists: {}, body: "No front matter.\n" });
+	assert.equal(parseWorkFile("---\ntitle: x\n").body, "---\ntitle: x\n");
+});
+
 test("items load from work/*.md, defaulting the title to the slug and the status to active", () => {
 	const dir = repo({
 		"work/b-feature.md": item({ title: "B feature", status: "landed", updated: "2026-11-10" }),
@@ -49,7 +81,7 @@ test("items load from work/*.md, defaulting the title to the slug and the status
 	assert.deepEqual(loadItems(path.join(dir, "missing")), []);
 });
 
-test("groups: needs first (landed ones too), open with active before waiting, landed, and a count of closed", () => {
+test("groups: needs first (landed ones too), open with active before waiting, landed, and closed newest first", () => {
 	const groups = group([
 		{ slug: "w", title: "Waiting", status: "waiting", updated: "2026-11-12" },
 		{ slug: "a", title: "Active", status: "active", updated: "2026-11-01" },
@@ -57,12 +89,12 @@ test("groups: needs first (landed ones too), open with active before waiting, la
 		{ slug: "l", title: "Landed review", status: "landed", needs: "Look at the demo" },
 		{ slug: "l2", title: "Landed", status: "landed" },
 		{ slug: "c", title: "Cleaned", status: "cleaned" },
-		{ slug: "d", title: "Dropped", status: "dropped" },
+		{ slug: "d", title: "Dropped", status: "dropped", updated: "2026-11-13" },
 	]);
 	assert.deepEqual(groups.needs.map((i) => i.slug).sort(), ["l", "n"]);
 	assert.deepEqual(groups.open.map((i) => i.slug), ["a", "w"]);
 	assert.deepEqual(groups.landed.map((i) => i.slug), ["l2"]);
-	assert.equal(groups.closed, 2);
+	assert.deepEqual(groups.closed.map((i) => i.slug), ["d", "c"]);
 });
 
 test("age reads dates as local days", () => {
@@ -75,27 +107,68 @@ test("age reads dates as local days", () => {
 	assert.equal(age(undefined, now), undefined);
 });
 
-test("status view: sections, the needs line, notes, and an empty state", () => {
+test("status view: sections, the needs line, notes, recently done, and an empty state", () => {
 	const now = new Date("2026-11-13T15:00:00");
-	const view = statusView(
-		[
-			{ slug: "n", title: "Ground caps", status: "active", updated: "2026-11-13", needs: "Review the MR" },
-			{ slug: "w", title: "Trino access", status: "waiting", updated: "2026-11-11" },
-			{ slug: "c", title: "Old", status: "cleaned" },
-		],
-		{ now, notes: [{ at: now.toISOString(), from: 'subagent tab "fix login"', message: 'Subagent tab "fix login" (subagent_tab id x) finished a turn.\n\nDone: fixed it.' }] },
-	);
-	assert.deepEqual(view, [
+	const items = [
+		{ slug: "n", title: "Ground caps", status: "active", updated: "2026-11-13", needs: "Review the MR" },
+		{ slug: "w", title: "Trino access", status: "waiting", updated: "2026-11-11" },
+		{ slug: "r", title: "Read-only check", status: "cleaned", updated: "2026-11-12" },
+		{ slug: "d", title: "Dropped a week ago", status: "dropped", updated: "2026-11-06" },
+		{ slug: "o", title: "Cleaned 8 days ago", status: "cleaned", updated: "2026-11-05" },
+		{ slug: "c", title: "Old", status: "cleaned" },
+	];
+	const notes = [{ at: now.toISOString(), from: 'subagent tab "fix login"', message: 'Subagent tab "fix login" (subagent_tab id x) finished a turn.\n\nDone: fixed it.' }];
+	assert.deepEqual(statusView(items, { now, notes }), [
 		"Needs you (1)",
 		"  • Ground caps  (updated today)",
 		"      → Review the MR",
 		"In progress (1)",
 		"  • Trino access  (updated 2d ago · waiting)",
+		"Recently done (2)",
+		"  • Read-only check  (updated yesterday · cleaned)",
+		"  • Dropped a week ago  (updated 7d ago · dropped)",
 		"Notes for your next message (1)",
 		'  • subagent tab "fix login": Done: fixed it.',
-		"1 done (cleaned or dropped) not shown",
+		"2 more done earlier, not shown",
 	]);
+	assert.deepEqual(statusView([{ slug: "c", title: "Old", status: "cleaned" }]), ["1 done (cleaned or dropped) not shown"]);
 	assert.deepEqual(statusView([]), ["Nothing tracked yet."]);
+	const list = statusList(items, { now });
+	assert.deepEqual(
+		list.sections.flatMap((section) => section.entries.map((entry) => entry.key)),
+		["n", "w", "r", "d"],
+		"entries open by slug, in the order shown",
+	);
+	assert.deepEqual(list.sections[0].entries[0], { key: "n", text: "Ground caps  (updated today)", needs: "Review the MR" });
+});
+
+test("the selection stays on its key across refreshes, else on the row that took its place", () => {
+	assert.equal(keepSelection(["a", "b", "c"], "c", 0), 2);
+	assert.equal(keepSelection(["a", "c"], "b", 1), 1, "b went away: c took its place");
+	assert.equal(keepSelection(["a"], "b", 3), 0);
+	assert.equal(keepSelection(["a", "b"], undefined, 0), 0);
+	assert.equal(keepSelection([], "a", 0), 0);
+});
+
+test("a work file opens with its front matter as a header and its body", () => {
+	const dir = repo({
+		"work/x.md": '---\ntitle: "X: the thing"\nstatus: Waiting\nupdated: 2026-11-12\nneeds: Review it\nlinks:\n  - https://example.com/mr/1\nsessions: []\n---\n\nWhy.\n',
+		"work/bare.md": "Just notes.\n",
+	});
+	const now = new Date("2026-11-13T15:00:00");
+	assert.deepEqual(workDetail(dir, "x", now), {
+		title: "X: the thing",
+		header: [
+			{ label: "status", values: ["waiting"] },
+			{ label: "updated", values: ["2026-11-12 (yesterday)"] },
+			{ label: "needs", values: ["Review it"] },
+			{ label: "links", values: ["https://example.com/mr/1"] },
+			{ label: "file", values: ["work/x.md"] },
+		],
+		body: "Why.",
+	});
+	assert.deepEqual(workDetail(dir, "bare", now), { title: "bare", header: [{ label: "status", values: ["active"] }, { label: "file", values: ["work/bare.md"] }], body: "Just notes." });
+	assert.match(workDetail(dir, "gone", now).body, /^Can't read it: /);
 });
 
 test("note gists skip a subagent report's header", () => {
@@ -145,13 +218,14 @@ test("the memory index loads capped, and the snapshot lists work by section", ()
 		"memory/MEMORY.md": `${Array.from({ length: 250 }, (_, i) => `- note ${i}`).join("\n")}\n`,
 		"work/x.md": item({ title: "X", status: "active", updated: "2026-11-13", needs: "Decide" }),
 		"work/y.md": item({ title: "Y", status: "cleaned" }),
+		"work/z.md": item({ title: "Z", status: "dropped", updated: "2026-11-13" }),
 	});
 	const memory = memoryIndex(dir) ?? "";
 	assert.equal(memory.split("\n").length, 201);
 	assert.match(memory, /isn't loaded; keep the index short/);
 	const text = snapshot(dir, new Date("2026-11-13T15:00:00Z"));
 	assert.match(text, /Needs Luan:\n- work\/x\.md: X \(active, updated 2026-11-13\): Decide/);
-	assert.match(text, /1 more are cleaned or dropped\./);
+	assert.match(text, /2 more are cleaned or dropped\./);
 	assert.match(text, /## Memory index \(memory\/MEMORY\.md\)\n- note 0/);
 	assert.match(snapshot(repo({})), /No work files yet\.[\s\S]*## Memory index \(memory\/MEMORY\.md\)\nEmpty\./);
 });

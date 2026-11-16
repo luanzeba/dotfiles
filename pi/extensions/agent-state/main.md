@@ -32,7 +32,8 @@ review it and put it in `needs`.
 ## Work files
 
 Each piece of work has a file, `work/<slug>.md`. You're its only writer: children report to you, and
-you write. Luan's `/status` reads the front matter, so keep it current:
+you write. Luan's `/status` lists the files by their front matter and opens the whole file when he
+picks one, so keep both current:
 
 ```markdown
 ---

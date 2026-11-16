@@ -10,15 +10,15 @@
  * - gives the first prompt of every session the work overview and the memory index,
  * - commits and pushes the repo after every turn.
  *
- * `/status` works in every session: it shows the state repo's work, pulling it first unless the main
- * agent runs in this very clone, so another machine sees what the main agent wrote.
+ * `/status` works in every session: it shows the state repo's work full screen, to move through and open,
+ * pulling it first unless the main agent runs in this very clone, so another machine sees what the main
+ * agent wrote.
  */
 
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
-import type { ExtensionAPI, ExtensionContext, Theme } from "@earendil-works/pi-coding-agent";
-import { matchesKey, truncateToWidth, visibleWidth, wrapTextWithAnsi } from "@earendil-works/pi-tui";
+import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { INCOMING_EVENT, type IncomingRequest } from "../session-info/links.ts";
 import { REPORT_SINK_EVENT, type ReportSinkRequest, shortPath } from "../subagent/store.ts";
 import {
@@ -35,8 +35,11 @@ import {
 	removeNotes,
 	snapshot,
 	stateDir,
+	statusList,
 	statusView,
+	workDetail,
 } from "./state.ts";
+import { FULL_SCREEN, StatusScreen, type StatusSource } from "./ui.ts";
 
 const MAIN_PROMPT = fs.readFileSync(fileURLToPath(new URL("./main.md", import.meta.url)), "utf8");
 const SECTION = "agent-state";
@@ -162,7 +165,7 @@ export default function agentState(pi: ExtensionAPI) {
 	});
 
 	pi.registerCommand("status", {
-		description: "Show the work the main agent is tracking: what needs you, what's in progress, and what's awaiting cleanup",
+		description: "Show the work the main agent is tracking (what needs you, what's in progress, what's landed or done) and read each work file",
 		handler: async (_args, context) => {
 			if (!fs.existsSync(path.join(dir, "work")) && !fs.existsSync(path.join(dir, ".git"))) {
 				context.ui.notify(`No agent state at ${dir}. Clone luan-agent-state there, or set PI_AGENT_STATE_DIR.`, "warning");
@@ -173,54 +176,22 @@ export default function agentState(pi: ExtensionAPI) {
 			else if (mainHolder(dir) !== undefined) freshness = "the main agent runs in this clone";
 			else {
 				const pulled = await git(["pull", "--ff-only", "-q"], PULL_TIMEOUT_MS);
-				freshness = pulled.ok ? "pulled just now" : `couldn't pull (${pulled.error}); showing the local copy`;
+				// A time rather than "just now": the list stays open, and only the main agent's clone changes under it.
+				freshness = pulled.ok ? `pulled at ${new Date().toTimeString().slice(0, 5)}` : `couldn't pull (${pulled.error}); showing the local copy`;
 				const last = await git(["log", "-1", "--format=%cr"], 3_000);
 				if (last.ok && last.out.trim()) freshness += `, last change ${last.out.trim()}`;
 			}
-			const lines = statusView(loadItems(dir), { notes: main ? readNotes(dir).map(({ note }) => note) : [] });
+			const notes = () => (main ? readNotes(dir).map(({ note }) => note) : []);
+			const title = `Work · ${shortPath(dir)} · ${freshness}`;
 			if (context.mode !== "tui") {
 				// RPC has no overlays and its stdout is the protocol; print mode has neither problem.
-				if (context.hasUI) context.ui.notify([`Work · ${shortPath(dir)} · ${freshness}`, ...lines].join("\n"), "info");
+				const lines = statusView(loadItems(dir), { notes: notes() });
+				if (context.hasUI) context.ui.notify([title, ...lines].join("\n"), "info");
 				else console.log(lines.join("\n"));
 				return;
 			}
-			await context.ui.custom<void>((_tui, theme, _keys, done) => new StatusOverlay(theme, `Work · ${shortPath(dir)} · ${freshness}`, lines, done), { overlay: true });
+			const source: StatusSource = { title, load: () => statusList(loadItems(dir), { notes: notes() }), open: (entry) => workDetail(dir, entry.key) };
+			await context.ui.custom<void>((tui, theme, keys, done) => new StatusScreen(tui, theme, keys, source, done), { overlay: true, overlayOptions: FULL_SCREEN });
 		},
 	});
-}
-
-class StatusOverlay {
-	constructor(
-		private readonly theme: Theme,
-		private readonly title: string,
-		private readonly lines: string[],
-		private readonly done: () => void,
-	) {}
-
-	handleInput(data: string): void {
-		if (matchesKey(data, "escape") || matchesKey(data, "return") || data === "q") this.done();
-	}
-
-	invalidate(): void {}
-
-	render(width: number): string[] {
-		const th = this.theme;
-		const inner = Math.max(20, Math.min(width - 4, 100));
-		const pad = (text: string) => {
-			const cut = truncateToWidth(text, inner);
-			return cut + " ".repeat(Math.max(0, inner - visibleWidth(cut)));
-		};
-		const row = (text: string) => `${th.fg("border", "│")} ${pad(text)} ${th.fg("border", "│")}`;
-		const out = [th.fg("border", `╭${"─".repeat(inner + 2)}╮`), row(th.fg("accent", this.title)), row("")];
-		for (const line of this.lines) {
-			// Wrap rather than cut: the `needs` line is the one thing to read in full. Continuation lines
-			// line up under the text after the bullet or arrow.
-			const prefix = /^\s*(?:[•→]\s+)?/.exec(line)?.[0] ?? "";
-			const style = (text: string) => (!line.startsWith(" ") ? th.bold(text) : line.trimStart().startsWith("→") ? th.fg("warning", text) : text);
-			const wrapped = wrapTextWithAnsi(line.slice(prefix.length), Math.max(10, inner - prefix.length));
-			wrapped.forEach((part, index) => out.push(row(style(`${index === 0 ? prefix : " ".repeat(prefix.length)}${part}`))));
-		}
-		out.push(row(""), row(th.fg("dim", "Esc, Enter, or q to close · ask the main agent for details")), th.fg("border", `╰${"─".repeat(inner + 2)}╯`));
-		return out;
-	}
 }
