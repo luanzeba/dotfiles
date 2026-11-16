@@ -173,7 +173,7 @@ test("state dir comes from PI_AGENT_STATE_DIR", () => {
 		process.env.PI_AGENT_STATE_DIR = "/srv/state/";
 		assert.equal(stateDir(), "/srv/state");
 		delete process.env.PI_AGENT_STATE_DIR;
-		assert.equal(stateDir(), path.join(os.homedir(), "luan-agent-state"));
+		assert.equal(stateDir(), path.join(os.homedir(), "beta", "luan-agent-state"));
 	} finally {
 		if (saved === undefined) delete process.env.PI_AGENT_STATE_DIR;
 		else process.env.PI_AGENT_STATE_DIR = saved;

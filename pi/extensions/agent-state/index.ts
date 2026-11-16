@@ -1,5 +1,5 @@
 /**
- * The main agent: a pi started in the state repo (default ~/luan-agent-state, or PI_AGENT_STATE_DIR)
+ * The main agent: a pi started in the state repo (default ~/beta/luan-agent-state, or PI_AGENT_STATE_DIR)
  * coordinates Luan's work through subagents and keeps it in that repo. README.md has the details.
  *
  * In that session this extension

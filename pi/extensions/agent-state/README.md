@@ -2,7 +2,7 @@
 
 One pi you talk to, the **main agent**, keeps your work moving through subagents, keeps track of it,
 and stays free to chat. It's an ordinary pi started in the **state repo**, a private git repo of
-markdown files: `~/luan-agent-state`, or wherever `PI_AGENT_STATE_DIR` points. Every other pi session is
+markdown files: `~/beta/luan-agent-state`, or wherever `PI_AGENT_STATE_DIR` points. Every other pi session is
 unaffected.
 
 ```sh
@@ -11,7 +11,7 @@ agent --new    # a fresh session; the state is in the files, so this costs littl
 ```
 
 On the devbox, run it in a Rex session so it outlives your connection:
-`rex -S devbox new main-agent -c ~/luan-agent-state -- agent`.
+`rex -S devbox new main-agent -c ~/beta/luan-agent-state -- agent`.
 
 ## In the main agent's session
 

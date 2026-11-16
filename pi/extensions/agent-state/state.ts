@@ -10,10 +10,10 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { REPORT_HEADER } from "../subagent/store.ts";
 
-/** Where this machine's state repo lives: PI_AGENT_STATE_DIR, or ~/luan-agent-state. */
+/** Where this machine's state repo lives: PI_AGENT_STATE_DIR, or ~/beta/luan-agent-state. */
 export function stateDir(): string {
 	const configured = process.env.PI_AGENT_STATE_DIR;
-	return configured ? path.resolve(configured) : path.join(os.homedir(), "luan-agent-state");
+	return configured ? path.resolve(configured) : path.join(os.homedir(), "beta", "luan-agent-state");
 }
 
 /** A pi running in the state repo itself, not as a subagent, can be the main agent (see claimMain). */
