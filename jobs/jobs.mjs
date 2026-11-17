@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 // dot jobs: scheduled jobs declared in jobs.json, run by launchd (macOS) or systemd user timers (Linux).
-// See README.md. Run through the `jobs` shim, which sets PATH and loads ~/.config/jobs/env.
+// See README.md. Run through the `jobs` shim, which sets PATH.
 import { spawn, spawnSync } from 'node:child_process';
 import {
   closeSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeSync,
   writeFileSync,
 } from 'node:fs';
-import { homedir, hostname, uptime } from 'node:os';
+import { homedir, uptime } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { next, parseCron } from './cron.mjs';
@@ -125,8 +125,8 @@ function commandLine(job) {
 }
 
 function jobEnv(job, dir) {
-  // Nothing from a parent pi session or the jobs config leaks in; scheduled and manual runs match.
-  const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !/^(PI|JOBS)_/.test(key)));
+  // Nothing from a parent pi session leaks in; scheduled and manual runs match.
+  const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !/^PI_/.test(key)));
   Object.assign(env, { DOTFILES_DIR: DOTFILES, JOB_NAME: job.name }, job.env);
   if (job.pi) {
     Object.assign(env, {
@@ -277,7 +277,7 @@ const unitFor = job => ({ name: job.name, program: SHIM, runnerLog: join(STATE_R
 // undefined when the job isn't enabled here; `current` is whether it matches jobs.json.
 export function health(job, { installed, loaded, current = true, state, running, now = Date.now(), booted = bootedAt(now) }) {
   if (!installed) {
-    return job.name === CHECK ? { problem: 'off', text: 'off: nothing will alert' } : { text: 'off' };
+    return job.name === CHECK ? { problem: 'off', text: 'off: nothing will notify you' } : { text: 'off' };
   }
   if (!loaded) return { problem: 'not loaded', text: 'not loaded: run dot jobs sync' };
   if (!current) return { problem: 'out of date', text: 'out of date with jobs.json: run dot jobs sync' };
@@ -328,19 +328,20 @@ const orphan = name => ({
 const allStatuses = jobs => [...Object.values(jobs).map(job => jobStatus(job)),
   ...installedJobs().filter(name => !jobs[name]).map(orphan)];
 
-// --- Alerts -----------------------------------------------------------------------------------
+// --- Notifications ----------------------------------------------------------------------------
 
-async function ntfy(url, title, message, problem) {
-  const response = await fetch(url, {
-    method: 'POST', body: message, signal: AbortSignal.timeout(15_000),
-    headers: { Title: title, Tags: problem ? 'warning' : 'white_check_mark', Priority: problem ? 'high' : 'default' },
-  });
-  if (!response.ok) throw new Error(`ntfy answered ${response.status}`);
+// A notification in macOS's Notification Center, which keeps it until it's seen. The text goes in as
+// arguments, so it needs no quoting. Elsewhere there's nothing to notify; `dot jobs` shows problems.
+function notifyDesktop(title, message) {
+  if (process.platform !== 'darwin') return;
+  const script = ['-e', 'on run argv', '-e', 'display notification (item 2 of argv) with title (item 1 of argv)', '-e', 'end run'];
+  const result = spawnSync('osascript', [...script, title, message], { stdio: 'ignore', timeout: 15_000 });
+  if (result.status !== 0) throw new Error(`notification failed: ${result.error?.message ?? `osascript exited ${result.status}`}`);
 }
 
-// Compares the problems with those already reported and sends one message when they change. Messages
-// carry job names and problem kinds only, never output. Returns the current problems.
-export async function check(statuses, { stateDir = STATE_ROOT, notify, log = console.log } = {}) {
+// Compares the problems with those already reported and notifies once when they change, including
+// when they clear. Returns the current problems.
+export function check(statuses, { stateDir = STATE_ROOT, notify = notifyDesktop, log = console.log } = {}) {
   const problems = statuses.filter(s => s.health.problem).map(s => `${s.name}: ${s.health.text}`);
   const key = statuses.filter(s => s.health.problem).map(s => `${s.name}:${s.health.problem}`).sort().join(' ');
   const file = join(stateDir, 'check.json');
@@ -348,23 +349,13 @@ export async function check(statuses, { stateDir = STATE_ROOT, notify, log = con
   try { previous = JSON.parse(readFileSync(file, 'utf8')).key; } catch { /* first check */ }
   for (const problem of problems) log(problem);
   if (key !== previous) {
-    const host = hostname().replace(/\.local$/, '');
-    if (!notify) {
-      log('alerts are off: set JOBS_NTFY_URL in ~/.config/jobs/env');
-      return problems; // not delivered, so not recorded: they're sent once alerts are set up
-    }
-    await notify(problems.length ? `jobs on ${host} need attention` : `jobs on ${host} are healthy again`,
-      problems.length ? problems.join('\n') : 'Every job is healthy again.', problems.length > 0);
+    // Recorded only once delivered, so a failed notification is tried again next check.
+    notify(problems.length ? 'jobs need attention' : 'jobs are healthy again',
+      problems.length ? problems.join('\n') : 'Every job is healthy again.');
     mkdirSync(stateDir, { recursive: true });
     writeFileSync(file, `${JSON.stringify({ key, problems, at: new Date().toISOString() }, null, 2)}\n`);
   }
   return problems;
-}
-
-async function ping(url, failed) {
-  if (!url) return;
-  await fetch(failed ? `${url.replace(/\/$/, '')}/fail` : url, { method: 'POST', signal: AbortSignal.timeout(15_000) })
-    .catch(error => console.error(`heartbeat ping failed: ${error.message}`));
 }
 
 // --- CLI --------------------------------------------------------------------------------------
@@ -378,10 +369,9 @@ const USAGE = `dot jobs - scheduled jobs from jobs/jobs.json
   dot jobs enable <job>...   schedule it on this machine (also enables jobs-check)
   dot jobs disable <job>...  unschedule it here
   dot jobs sync              rewrite enabled jobs' launchd/systemd units after editing jobs.json
-  dot jobs check             alert about unhealthy jobs (what jobs-check runs)
+  dot jobs check             notify about unhealthy jobs (what jobs-check runs)
 
-\`dot jobs\` (the table) exits 1 when a job needs attention; --json exits 0 unless it errors.
-Alerts: JOBS_NTFY_URL and JOBS_HEARTBEAT_URL in ~/.config/jobs/env.`;
+\`dot jobs\` (the table) exits 1 when a job needs attention; --json exits 0 unless it errors.`;
 
 const tty = process.stdout.isTTY;
 const red = text => (tty ? `\x1b[31m${text}\x1b[0m` : text);
@@ -421,8 +411,7 @@ function table(statuses) {
   const header = ['JOB', 'SCHEDULE', 'LAST RUN', 'RESULT', 'TOOK', 'LAST OK', 'NEXT', 'HEALTH'];
   const widths = header.map((h, i) => Math.max(h.length, ...rows.map(r => r[i].replace(/\x1b\[\d+m/g, '').length)));
   for (const row of [header, ...rows]) console.log(row.map((cell, i) => pad(cell, widths[i])).join('  ').trimEnd());
-  const alerts = [process.env.JOBS_NTFY_URL && 'ntfy', process.env.JOBS_HEARTBEAT_URL && 'heartbeat'].filter(Boolean);
-  console.log(dim(`\nalerts: ${alerts.length ? alerts.join(' + ') : 'off (set JOBS_NTFY_URL in ~/.config/jobs/env)'} · state: ${tilde(STATE_ROOT)}`));
+  console.log(dim(`\nstate: ${tilde(STATE_ROOT)}`));
 }
 
 function details(job, status) {
@@ -539,14 +528,7 @@ async function main(argv) {
       return 0;
     }
     case 'check': {
-      const { JOBS_NTFY_URL: url, JOBS_HEARTBEAT_URL: heartbeat } = process.env;
-      try {
-        await check(allStatuses(jobs), { notify: url && ((title, message, problem) => ntfy(url, title, message, problem)) });
-      } catch (error) {
-        await ping(heartbeat, true);
-        throw error;
-      }
-      await ping(heartbeat, false);
+      check(allStatuses(jobs));
       return 0;
     }
     default:

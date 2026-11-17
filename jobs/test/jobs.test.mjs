@@ -93,22 +93,20 @@ test('whatever ignores SIGTERM gets SIGKILL, after a timeout and after a normal 
   assert.equal(alive(Number(readFileSync(leftOver, 'utf8'))), false);
 });
 
-test('jobs get env files and their env, but not the parent pi session or jobs settings', async () => {
+test('jobs get env files and their env, but not the parent pi session', async () => {
   const stateDir = scratch();
   const secrets = join(stateDir, 'secrets.env');
   writeFileSync(secrets, 'export SECRET=abc123\n');
-  process.env.JOBS_NTFY_URL = 'https://ntfy.example/topic';
   process.env.PI_SESSION_FILE = '/parent/session.jsonl';
   try {
     const run = await runJob(job({
-      command: 'test "$SECRET" = "abc$((100 + 23))" && test "$GREETING" = hi && test -z "$JOBS_NTFY_URL" && test -z "$PI_SESSION_FILE" && test "$JOB_NAME" = test && test -n "$DOTFILES_DIR"',
+      command: 'test "$SECRET" = "abc$((100 + 23))" && test "$GREETING" = hi && test -z "$PI_SESSION_FILE" && test "$JOB_NAME" = test && test -n "$DOTFILES_DIR"',
       env: { GREETING: 'hi' },
       env_files: [secrets, join(stateDir, 'missing.env')],
     }), { stateDir });
     assert.equal(run.result, 'ok', readFileSync(run.log, 'utf8'));
     assert.doesNotMatch(readFileSync(run.log, 'utf8'), /abc123/);
   } finally {
-    delete process.env.JOBS_NTFY_URL;
     delete process.env.PI_SESSION_FILE;
   }
 });
@@ -195,7 +193,7 @@ test('health: off, not loaded, out of date, stuck, failing, late', () => {
   assert.equal(health(hourly, { ...base, running: { started_at: hoursAgo(0.1).toISOString() } }).text, 'ok'); // catching up
 });
 
-test('health: a weekday job is not late over the weekend, and one failed catch-up is not an alert', () => {
+test('health: a weekday job is not late over the weekend, and one failed catch-up is not a problem', () => {
   const weekdays = job({ command: 'true', schedule: '30 9 * * 1-5' });
   const friday = { started_at: new Date('2026-11-06T09:30').toISOString() };
   const base = { installed: new Date('2026-10-01T00:00'), loaded: true, state: { last: friday }, booted: 0 };
@@ -216,48 +214,36 @@ test('health: a weekday job is not late over the weekend, and one failed catch-u
   assert.equal(health(hourly, { ...off, now: afterBoot }).problem, 'late'); // up since before Friday: it is late
 });
 
-test('check notifies when the set of problems changes, and when it clears', async () => {
+test('check notifies when the set of problems changes, and when it clears', () => {
   const stateDir = scratch();
   const sent = [];
-  const notify = async (title, message, problem) => sent.push({ title, message, problem });
+  const notify = (title, message) => sent.push({ title, message });
   const quiet = () => {};
   const status = (name, problem, text = problem) => ({ name, health: problem ? { problem, text } : { text: 'ok' } });
 
-  await check([status('a'), status('b', 'failing', 'failing: last 2 runs failed')], { stateDir, notify, log: quiet });
+  check([status('a'), status('b', 'failing', 'failing: last 2 runs failed')], { stateDir, notify, log: quiet });
   assert.equal(sent.length, 1);
-  assert.equal(sent[0].problem, true);
+  assert.match(sent[0].title, /need attention/);
   assert.match(sent[0].message, /^b: failing: last 2 runs failed$/);
-  await check([status('a'), status('b', 'failing', 'failing: last 3 runs failed')], { stateDir, notify, log: quiet });
+  check([status('a'), status('b', 'failing', 'failing: last 3 runs failed')], { stateDir, notify, log: quiet });
   assert.equal(sent.length, 1, 'a longer failure streak is the same problem');
-  await check([status('a', 'late'), status('b', 'failing')], { stateDir, notify, log: quiet });
+  check([status('a', 'late'), status('b', 'failing')], { stateDir, notify, log: quiet });
   assert.equal(sent.length, 2);
-  await check([status('a'), status('b')], { stateDir, notify, log: quiet });
+  check([status('a'), status('b')], { stateDir, notify, log: quiet });
   assert.equal(sent.length, 3);
-  assert.equal(sent[2].problem, false);
   assert.match(sent[2].title, /healthy again/);
-  await check([status('a'), status('b')], { stateDir, notify, log: quiet });
+  check([status('a'), status('b')], { stateDir, notify, log: quiet });
   assert.equal(sent.length, 3);
 
 });
 
-test('problems found while alerts are off are sent once alerts are set up', async () => {
+test('check fails loudly when the notification cannot be posted', () => {
   const stateDir = scratch();
-  const logged = [];
+  const notify = () => { throw new Error('notification failed: osascript exited 1'); };
   const late = [{ name: 'a', health: { problem: 'late', text: 'late' } }];
-  await check(late, { stateDir, log: line => logged.push(line) });
-  assert.match(logged.join('\n'), /alerts are off/);
-  const sent = [];
-  await check(late, { stateDir, notify: async (...args) => sent.push(args), log: () => {} });
-  assert.equal(sent.length, 1);
-});
-
-test('check fails loudly when the alert cannot be delivered', async () => {
-  const stateDir = scratch();
-  const notify = async () => { throw new Error('ntfy answered 500'); };
-  const late = [{ name: 'a', health: { problem: 'late', text: 'late' } }];
-  await assert.rejects(check(late, { stateDir, notify, log: () => {} }), /ntfy answered 500/);
+  assert.throws(() => check(late, { stateDir, notify, log: () => {} }), /notification failed/);
   // Not marked as delivered, so the next check tries again.
   const sent = [];
-  await check(late, { stateDir, notify: async (...args) => sent.push(args), log: () => {} });
+  check(late, { stateDir, notify: (...args) => sent.push(args), log: () => {} });
   assert.equal(sent.length, 1);
 });

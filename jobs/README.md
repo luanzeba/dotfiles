@@ -81,12 +81,12 @@ This runs `pi -p --name "job verify-skill" --model … -e jobs/pi-job.ts -- <pro
 | Slot missed while powered off | Skipped. | One missed run is caught up at boot (`Persistent=true`). |
 | Start time | Within seconds of the slot. | Within a minute of the slot. |
 
-A skipped run shows as an older LAST RUN in `dot jobs`. The job turns `late`, and alerts, only when no run starts for a day after one was due, counting from boot at the earliest. See [Health and alerts](#health-and-alerts).
+A skipped run shows as an older LAST RUN in `dot jobs`. The job turns `late`, and you get a notification, only when no run starts for a day after one was due, counting from boot at the earliest. See [Health and notifications](#health-and-notifications).
 
 - **Never twice at once:** launchd and systemd don't start a job that's still running. When the job is enabled, `dot jobs run` also goes through them, so they act as the lock.
 - **Timeout:** this is wall-clock time. At the deadline, the whole process group gets SIGTERM, then SIGKILL 10s later. A run that sleeps past its deadline is stopped on wake. Anything the command leaves running in the background is stopped the same way when the command exits.
 
-## Health and alerts
+## Health and notifications
 
 | Health | Meaning |
 |---|---|
@@ -97,22 +97,11 @@ A skipped run shows as an older LAST RUN in `dot jobs`. The job turns `late`, an
 | `not in jobs.json` | A unit for a job that was removed from `jobs.json`. `dot jobs sync` removes it. |
 | `stuck` | Still running 5 minutes past its timeout (plus the `requires` wait). |
 | `failing` | The last 2 or more runs failed. Runs interrupted by a shutdown or logout don't count. |
-| `late` | A run that was due more than a day ago hasn't started: the scheduler isn't running the job. This counts from the last run, from when the job was enabled, or from the last boot, whichever is latest. So a shutdown doesn't raise alerts, but a job whose slots always fall while the machine is off never turns late. A weekday job isn't late over the weekend. Runs that start and fail are `failing`'s business. |
+| `late` | A run that was due more than a day ago hasn't started: the scheduler isn't running the job. This counts from the last run, from when the job was enabled, or from the last boot, whichever is latest. So a shutdown doesn't trigger notifications, but a job whose slots always fall while the machine is off never turns late. A weekday job isn't late over the weekend. Runs that start and fail are `failing`'s business. |
 
 `dot jobs` exits 1 when any job has a problem, so `dot status` shows `jobs` as not configured.
 
-`jobs-check` runs `dot jobs check` at :15 and :45, two minutes after it starts so that runs catching up after a wake get going first. Each time the set of problems changes, it sends one [ntfy](https://ntfy.sh) message. That includes a message when everything is healthy again. Messages contain only job names and problem kinds, never output, because anyone who knows an ntfy.sh topic can read it. If a message can't be sent, the check fails and tries again next time.
-
-Something also has to watch `jobs-check`. After every check, it pings a dead man's switch. If the pings stop, that service alerts you. This covers cases like Node breaking, the units being unloaded, or the check repeatedly crashing.
-
-Set both URLs in the machine-local `~/.config/jobs/env`:
-
-```bash
-JOBS_NTFY_URL=https://ntfy.sh/<long random topic>
-JOBS_HEARTBEAT_URL=https://hc-ping.com/<uuid>   # Healthchecks.io
-```
-
-On Healthchecks.io, use one check (one URL) per machine; the ntfy topic can be shared. Give the check a cron schedule that matches when the laptop is open, such as `0 12 * * 1-5` with a few hours' grace, and send its alerts to the same ntfy topic. That way, nights and weekends with the lid shut don't page you.
+`jobs-check` runs `dot jobs check` at :15 and :45, two minutes after it starts so that runs catching up after a wake get going first. A check missed while the Mac sleeps runs once on wake, so sleep alone doesn't make a job late, and problems are reported within minutes of waking. Each time the set of problems changes, it posts one macOS notification, including one when everything is healthy again. Notification Center keeps it until you've seen it. If the notification can't be posted, the check fails and tries again next time. Notifications come from Script Editor; if none show up, check its entry in System Settings → Notifications. On Linux nothing is posted: `dot jobs` and `dot status` show the problems.
 
 ## Files
 
@@ -126,6 +115,6 @@ These are internal; scripts should read `dot jobs --json`, which adds health and
 ## Tests
 
 ```bash
-node --test jobs/test/          # offline: schedules, runner, health, alerts (fake clock, fake pi)
+node --test jobs/test/          # offline: schedules, runner, health, notifications (fake clock, fake pi)
 jobs/test/systemd-docker.sh     # real systemd user timers in a throwaway Fedora container
 ```
