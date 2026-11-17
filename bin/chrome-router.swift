@@ -148,7 +148,10 @@ private final class Router {
             guard let commands = String(data: data, encoding: .utf8) else { return false }
             return commands.split(separator: "\n").contains { rawCommand in
                 let command = rawCommand.trimmingCharacters(in: .whitespaces)
-                return command.hasPrefix(chromePath) && !command.contains("--remote-debugging-port=\(debugPort)")
+                // Headless instances (work-browser's agent Chrome) have no windows and don't conflict.
+                return command.hasPrefix(chromePath)
+                    && !command.contains("--remote-debugging-port=\(debugPort)")
+                    && !command.contains("--headless")
             }
         } catch {
             return false
