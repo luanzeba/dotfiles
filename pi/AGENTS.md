@@ -36,7 +36,7 @@ When starting servers, watchers, or any long-running process:
 
 ## Browser Automation: work-browser (`wb`)
 
-For work tasks that need a browser, use the `work-browser` skill: `wb` drives a headless Google Chrome with its own signed-in profile, gives each agent its own tabs, and never takes focus. Don't use the user's own Chrome (port 9222) for work tasks, and never kill or quit Chrome processes.
+For any task that needs a browser, use the `work-browser` skill: `wb` drives a headless Google Chrome with its own signed-in profile, gives each agent its own tabs, and never takes focus. Use the user's own Chrome (port 9222, `web-browser` skill) only when they ask you to troubleshoot something in it, and never kill or quit Chrome processes.
 
 ### Persistent servers (across multiple tool calls)
 

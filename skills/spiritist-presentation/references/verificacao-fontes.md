@@ -29,7 +29,7 @@ Caminhos dos PDFs:
 
 ### Passagens Bíblicas
 
-1. Usar web-browser skill para acessar https://www.bibliaonline.com.br/acf/
+1. Usar o work-browser (`wb`) para acessar https://www.bibliaonline.com.br/acf/
 2. Verificar o versículo citado E ler o capítulo inteiro para contexto
 3. O contexto da passagem frequentemente revela conexões valiosas
 

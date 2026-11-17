@@ -67,7 +67,7 @@ Extrair texto com `pdftotext` e buscar com `grep`:
 **Processo de verificação — ver `references/verificacao-fontes.md`.**
 
 #### Epígrafe Bíblica
-Verificar o contexto original da passagem bíblica (capítulo completo), não apenas o versículo isolado. Usar web-browser skill para consultar o texto em https://www.bibliaonline.com.br/acf/. Contexto frequentemente revela conexões que enriquecem a análise.
+Verificar o contexto original da passagem bíblica (capítulo completo), não apenas o versículo isolado. Usar o work-browser (`wb`) para consultar o texto em https://www.bibliaonline.com.br/acf/. Contexto frequentemente revela conexões que enriquecem a análise.
 
 #### Obras Complementares
 Para livros de Emmanuel, André Luiz e outros: verificar se o PDF está disponível localmente (~/Downloads ou ~/Obsidian/Personal/Attachments). Se não estiver, tratar citações como contextuais — nunca inventar texto.

@@ -1,6 +1,6 @@
 ---
 name: work-browser
-description: Browse, test, screenshot and record web apps in a headless Google Chrome that's signed in to work apps (Ground, Operate, GitLab, AMPECO, Linear). Use for any work task that needs a browser - checking UI changes on local dev servers, testing like a user, screenshots, demo videos, console errors, WebMCP tools. It never takes focus, and each agent gets its own tabs.
+description: The agent's browser. Browse, research, test, screenshot and record web pages in a headless Google Chrome that's signed in to work apps (Ground, Operate, GitLab, AMPECO, Linear). Use for any task that needs a browser - reading web pages, checking UI changes on local dev servers, testing like a user, screenshots, demo videos, console errors, WebMCP tools. It never takes focus, and each agent gets its own tabs.
 ---
 
 # work-browser
@@ -40,6 +40,6 @@ If a page lands on `login.microsoftonline.com`, a BETA/Kinde sign-in page, or an
 
 ## Rules
 
-- Use `wb` for work browsing. Never drive the user's own Chrome (port 9222) or open URLs with `open`.
+- Use `wb` for all browsing. Don't open URLs with `open`, and don't drive the user's own Chrome (port 9222) unless they ask you to troubleshoot it (web-browser skill).
 - Don't run `wb stop` or `wb signin`: other agents share this browser.
 - Run `wb close --all` when your task is done. Links that open a new tab switch you to it; `wb tabs` and `wb tab <n>` move between your tabs.

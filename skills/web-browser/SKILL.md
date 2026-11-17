@@ -1,12 +1,12 @@
 ---
 name: web-browser
-description: "Allows to interact with web pages by performing actions such as clicking buttons, filling out forms, and navigating links. It works by remote controlling Google Chrome or Chromium browsers using the Chrome DevTools Protocol (CDP). When Claude needs to browse the web, it can use this skill."
+description: "Inspect and troubleshoot the user's own visible Chrome (the debug-enabled Chrome on port 9222) over CDP: console errors, network logs, screenshots, page state. Use only when the user asks for help with something in their own browser. For any other browsing, use the work-browser skill (wb)."
 license: Stolen from Armin (mitsuhiko)
 ---
 
 # Web Browser Skill
 
-Minimal CDP tools for collaborative site exploration.
+Minimal CDP tools for the user's own Chrome, for troubleshooting what they see while browsing. Agents browse with `wb` (work-browser skill), not this.
 
 ## Safety Rules (must follow)
 
