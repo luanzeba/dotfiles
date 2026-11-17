@@ -21,7 +21,6 @@ const LINEAR_URL_PATTERN =
 	/https?:\/\/linear\.app\/[^/\s]+\/issue\/([A-Za-z][A-Za-z0-9]{0,9}-\d+)/gi;
 const BRANCH_ISSUE_PATTERN =
 	/(?:^|\/)([A-Za-z][A-Za-z0-9]{0,9}-\d+)(?=$|[-_/])/;
-const LINEAR_ENV = "LINEAR_EXISTING_BROWSER_ONLY=1";
 const MAX_ISSUES = 3;
 let cachedTeamKeys: Set<string> | undefined;
 
@@ -39,7 +38,7 @@ export function branchIssueIdentifier(branch: string): string | undefined {
 
 async function teamKeys(exec: ExecFn): Promise<Set<string> | undefined> {
 	if (cachedTeamKeys) return cachedTeamKeys;
-	const result = await exec("env", [LINEAR_ENV, "linear", "teams"], { timeout: 30_000 });
+	const result = await exec("linear", ["teams"], { timeout: 30_000 });
 	if (result.code !== 0) return undefined;
 	try {
 		const teams = JSON.parse(result.stdout) as LinearTeam[];
@@ -70,8 +69,8 @@ export async function linearIssueContext(
 
 	for (const identifier of credible) {
 		const result = await exec(
-			"env",
-			[LINEAR_ENV, "linear", "issue", "get", identifier],
+			"linear",
+			["issue", "get", identifier],
 			{ timeout: 30_000 },
 		);
 		if (result.code !== 0) continue;

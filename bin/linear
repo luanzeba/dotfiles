@@ -4,7 +4,7 @@
  * Minimal Linear CLI using the authenticated Linear browser session.
  *
  * It intentionally stores no token or cookie. GraphQL requests run inside the
- * canonical Pi Chrome session, so Chrome remains the source of authentication.
+ * agents' headless Chrome (work-browser, `wb`), which stays the source of authentication.
  */
 
 const { spawnSync } = require("node:child_process");
@@ -13,14 +13,12 @@ const os = require("node:os");
 const path = require("node:path");
 
 const VERSION = "0.5.0";
-const CDP_PORT = Number(process.env.LINEAR_CHROME_CDP_PORT || 9222);
+const CDP_PORT = Number(process.env.WB_PORT || 9333);
 const CDP_URL = `http://127.0.0.1:${CDP_PORT}`;
 const LINEAR_URL = "https://linear.app";
 const LOGIN_URL = `${LINEAR_URL}/login`;
 const GRAPHQL_URL = "https://client-api.linear.app/graphql";
-const START_SCRIPT = process.env.LINEAR_PI_START_SCRIPT || path.join(os.homedir(), "dotfiles/skills/web-browser/scripts/start.js");
-// Background readers can opt out of opening Chrome or a new Linear tab.
-const EXISTING_BROWSER_ONLY = process.env.LINEAR_EXISTING_BROWSER_ONLY === "1";
+const WB = path.join(os.homedir(), "dotfiles/skills/work-browser/wb.mjs");
 
 const ISSUE_FIELDS = `
   id
@@ -53,7 +51,7 @@ function usage() {
 Read and write Linear issues through your authenticated browser session.
 
 Commands:
-  login [--wait]                         Open Linear login in Chrome
+  login                                  Sign in to Linear in wb's Chrome (user only)
   auth                                   Check browser authentication
   issue get <issue-or-url>               Get an issue
   issue export <issue-or-url>            Export issue content and metadata
@@ -117,7 +115,7 @@ Comment options:
   --body-file <path|->                   Read body from a file or stdin
 
 Examples:
-  linear login --wait
+  linear login
   linear issue get CUS-543
   linear issue get https://linear.app/beta/issue/CUS-543/example
   linear issue update CUS-543 --priority 2
@@ -125,8 +123,8 @@ Examples:
   linear issue create --team CUS --state Todo --parent CUS-561 --title 'Add exports'
   linear issue relation add CUS-563 --blocked-by CUS-562
 
-Authentication is never copied out of Chrome. If Chrome is already open without
-remote debugging, relaunch it with: ~/dotfiles/bin/chrome-pi-debug.sh`);
+Authentication is never copied out of Chrome: requests run in the agents'
+headless Chrome (wb). Sign in there with \`linear login\` (\`wb signin\`).`);
 }
 
 function sleep(ms) {
@@ -216,12 +214,11 @@ async function endpointAvailable() {
 async function ensureBrowser() {
   if (await endpointAvailable()) return;
 
-  if (fs.existsSync(START_SCRIPT)) {
-    const result = spawnSync(process.execPath, [START_SCRIPT], { stdio: "inherit" });
-    if (result.status === 0 && await endpointAvailable()) return;
-  }
+  // stdout stays JSON-only for callers that parse it.
+  const result = spawnSync(process.execPath, [WB, "start"], { stdio: ["ignore", 2, 2] });
+  if (result.status === 0 && await endpointAvailable()) return;
 
-  fail(`Chrome's debugging endpoint is unavailable on port ${CDP_PORT}.\nRelaunch Chrome with: ~/dotfiles/bin/chrome-pi-debug.sh`);
+  fail(`wb's Chrome is unavailable on port ${CDP_PORT}. Check: wb status`);
 }
 
 class CdpClient {
@@ -255,13 +252,8 @@ class CdpClient {
     });
   }
 
-  async targets() {
-    const { targetInfos } = await this.send("Target.getTargets");
-    return targetInfos.filter((target) => target.type === "page");
-  }
-
-  async createTarget(url, newWindow = false) {
-    return this.send("Target.createTarget", { url, newWindow, background: false });
+  async createTarget(url) {
+    return this.send("Target.createTarget", { url, background: true });
   }
 
   async attach(targetId) {
@@ -287,14 +279,12 @@ class CdpClient {
 }
 
 async function connectCdp() {
-  if (!EXISTING_BROWSER_ONLY) await ensureBrowser();
+  await ensureBrowser();
   let response;
   try {
     response = await fetch(`${CDP_URL}/json/version`, { signal: AbortSignal.timeout(2_000) });
   } catch {
-    fail(EXISTING_BROWSER_ONLY
-      ? "No existing Chrome debugging session is available."
-      : "Could not connect to Chrome.");
+    fail("Could not connect to Chrome.");
   }
   const info = await response.json();
   if (!info.webSocketDebuggerUrl) fail("Chrome did not return a debugging WebSocket URL.");
@@ -316,31 +306,15 @@ async function connectCdp() {
   });
 }
 
-async function linearPage(cdp, { create = true, forceNew = false, newWindow = false, url = LINEAR_URL } = {}) {
-  let target = forceNew ? undefined : (await cdp.targets()).filter((page) => {
-    try {
-      // Not wb sync's brief robots.txt tab, which it closes again.
-      const { hostname, pathname } = new URL(page.url);
-      return hostname === "linear.app" && pathname !== "/robots.txt";
-    } catch {
-      return false;
-    }
-  }).at(-1);
-  let owned = false;
-
-  if (!target && create) {
-    const created = await cdp.createTarget(url, newWindow);
-    target = { targetId: created.targetId, url };
-    owned = true;
-  }
-  if (!target) fail("No Linear page is open. Run `linear login` first.");
-
-  const sessionId = await cdp.attach(target.targetId);
+// Always a tab of its own: other agents' Linear tabs in the shared browser are theirs.
+async function linearPage(cdp) {
+  const { targetId } = await cdp.createTarget(LINEAR_URL);
+  const sessionId = await cdp.attach(targetId);
   const deadline = Date.now() + 20_000;
   while (Date.now() < deadline) {
     try {
       const ready = await cdp.evaluate(sessionId, `({ host: location.hostname, ready: document.readyState !== "loading" })`);
-      if (ready?.host?.endsWith("linear.app") && ready.ready) return { targetId: target.targetId, sessionId, owned };
+      if (ready?.host?.endsWith("linear.app") && ready.ready) return { targetId, sessionId };
     } catch {}
     await sleep(250);
   }
@@ -380,7 +354,7 @@ async function browserGraphql(cdp, sessionId, query, variables = {}) {
   if (!result.status || result.status >= 400 || payload.errors?.length) {
     const errors = payload.errors || [];
     const authError = result.status === 401 || errors.some((error) => error.extensions?.code === "AUTHENTICATION_ERROR");
-    if (authError) fail("Not authenticated to Linear. Run `linear login --wait`.");
+    if (authError) fail("Not authenticated to Linear. Ask the user to run `linear login`.");
     fail(errors.map((error) => error.message).join("; ") || `Linear API returned ${result.status}`);
   }
   return payload.data;
@@ -390,10 +364,10 @@ async function withLinear(callback) {
   const cdp = await connectCdp();
   let page;
   try {
-    page = await linearPage(cdp, { create: !EXISTING_BROWSER_ONLY });
+    page = await linearPage(cdp);
     return await callback(cdp, page.sessionId);
   } finally {
-    if (page?.owned) await cdp.send("Target.closeTarget", { targetId: page.targetId }).catch(() => {});
+    if (page) await cdp.send("Target.closeTarget", { targetId: page.targetId }).catch(() => {});
     cdp.close();
   }
 }
@@ -434,39 +408,12 @@ async function resolveWorkflowState(cdp, sessionId, teamId, reference) {
   return state;
 }
 
-async function loginCommand(args) {
-  const cdp = await connectCdp();
-  try {
-    const { targetId, sessionId } = await linearPage(cdp, { create: true, forceNew: true, newWindow: true, url: LOGIN_URL });
-    await cdp.send("Page.navigate", { url: LOGIN_URL }, sessionId);
-    console.log("Opened Linear in Chrome. Complete sign-in there.");
-    if (!args.includes("--wait")) {
-      console.log("Then run: linear auth");
-      return;
-    }
-
-    console.error("Waiting for Linear authentication...");
-    const deadline = Date.now() + 5 * 60_000;
-    while (Date.now() < deadline) {
-      try {
-        // SSO may navigate through another origin and replace the execution
-        // context, so attach to the current Linear page on each attempt.
-        const page = await linearPage(cdp, { create: false });
-        const data = await browserGraphql(cdp, page.sessionId, `query LinearCliViewer { viewer { id name email } }`);
-        if (data.viewer) {
-          console.log(JSON.stringify({ authenticated: true, viewer: data.viewer }, null, 2));
-          return;
-        }
-      } catch {
-        // The login page is either unauthenticated or navigating through SSO.
-      }
-      await sleep(2_000);
-    }
-    console.log(`Timed out waiting for sign-in. The Linear window remains open (target ${targetId}).`);
-    process.exitCode = 1;
-  } finally {
-    cdp.close();
-  }
+// wb's Chrome is headless, so signing in happens in wb's sign-in window instead.
+// That restarts the browser every agent shares, so only a person at a terminal may do it.
+function loginCommand() {
+  if (!process.stdin.isTTY) fail("Signing in restarts the agents' shared browser. Ask the user to run `linear login`.");
+  const result = spawnSync(process.execPath, [WB, "signin", LOGIN_URL], { stdio: "inherit" });
+  if (result.status !== 0) process.exitCode = result.status || 1;
 }
 
 async function authCommand() {
@@ -744,7 +691,7 @@ async function main() {
   const [command, ...args] = process.argv.slice(2);
   if (!command || ["help", "--help", "-h"].includes(command)) return usage();
   if (["version", "--version", "-v"].includes(command)) return console.log(`linear ${VERSION}`);
-  if (command === "login") return loginCommand(args);
+  if (command === "login") return loginCommand();
   if (command === "auth") return authCommand();
   if (command === "teams") return teamsCommand();
   if (command === "states") return statesCommand(args);
