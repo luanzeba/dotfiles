@@ -1,5 +1,4 @@
 cache:
-    path: /Users/luan/.local/state/gh-not/cache.json
     ttl_in_hours: 1
 endpoint:
     all: false
@@ -77,4 +76,3 @@ rules:
       action: done
 view:
     height: 40
-    log_path: /Users/luan/.local/state/gh-not/debug.log
