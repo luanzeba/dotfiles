@@ -35,5 +35,7 @@
   rebase = true
 [include]
   path = ~/.gitconfig-macos
+  # The devbox's additions; devbox/install links it there.
+  path = ~/.gitconfig-devbox
 [includeIf "gitdir:~/beta/"]
   path = ~/.gitconfig-work

@@ -15,13 +15,19 @@ check_installed() {
 }
 
 check_configured() {
-    # Check if dotfiles scripts are accessible in ~/.local/bin
-    [[ -x "$LOCAL_BIN/dotfiles" && -x "$LOCAL_BIN/jwt-decode" ]]
+    # Check if dotfiles scripts are accessible in ~/.local/bin (jwt-decode only with Rust)
+    [[ -x "$LOCAL_BIN/dotfiles" ]] || return 1
+    [[ -x "$LOCAL_BIN/jwt-decode" ]] || ! command -v cargo &>/dev/null
 }
 
 build_jwt_decode() {
     local target_dir="${XDG_CACHE_HOME:-$HOME/.cache}/dotfiles/jwt-decode"
     export PATH="$HOME/.nix-profile/bin:$PATH"
+    # The devbox has no Rust toolchain (dot install rust).
+    if ! command -v cargo &>/dev/null; then
+        echo "cargo not found; skipping jwt-decode"
+        return 0
+    fi
 
     CARGO_TARGET_DIR="$target_dir" cargo build --quiet --release --locked \
         --manifest-path "$SCRIPT_DIR/jwt-decode/Cargo.toml"

@@ -62,7 +62,7 @@ Most CLI tools and language toolchains come from one flake, `nix/flake.nix`. `ni
 | `zig` | zig `master` (zig-overlay) + `zls` |
 | `ruby`, `nvim`, `helix`, `jj`, `gh`, `git`, `bat`, `1password` | the single package |
 | `glab`, `aws` | opt-in Nix packages; not part of `./install` |
-| `trino` | opt-in, macOS only for now; a `trino` wrapper that runs the CLI jar on a Nix Temurin 25 JRE |
+| `trino` | opt-in; a `trino` wrapper that runs the CLI jar on a Nix Temurin 25 JRE |
 | `chrome` | x86_64 Linux only (macOS uses the Homebrew cask) |
 | `handy` | Linux only; wrapped with NixGL + `wtype` |
 
@@ -150,3 +150,4 @@ dot logs --clear      # Clear error log
 |----------|-----------|-------|
 | macOS | `uname == Darwin` | Primary dev machine |
 | Omarchy | `~/.local/share/omarchy` | Arch + Hyprland; preserves Omarchy defaults (`dot pull` skips apply unless `--apply`, `install` skips nvim unless `DOTFILES_INSTALL_NVIM_ON_OMARCHY=1`) |
+| Devbox | `apt-get` (Ubuntu) | The work box from `~/beta/devbox`; set up by `devbox/install` (not `./install`) |

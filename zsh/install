@@ -21,14 +21,19 @@ install() {
 }
 
 ensure_zsh_default() {
-    is_arch || return 0
+    # macOS already defaults to zsh.
+    is_macos && return 0
 
     local zsh_path
     zsh_path="$(command -v zsh)" || return 1
 
     local current_shell
     current_shell="$(getent passwd "$(id -un)" | cut -d: -f7)"
-    [[ "$current_shell" == "$zsh_path" ]] || sudo chsh -s "$zsh_path" "$(id -un)"
+    [[ "$current_shell" == "$zsh_path" ]] && return 0
+    sudo chsh -s "$zsh_path" "$(id -un)"
+    # A lingering systemd user manager keeps the SHELL it started with; services it starts
+    # later (such as a Rex server) would still get the old one.
+    systemctl --user set-environment SHELL="$zsh_path" 2>/dev/null || true
 }
 
 configure() {

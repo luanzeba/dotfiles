@@ -50,8 +50,9 @@ See [references/tool-template.md](references/tool-template.md) for the install s
 | Jobs | `jobs/` | launchd agents / systemd user timers generated from `jobs/jobs.json`; state in `~/.local/state/jobs` | Yes (`dot jobs`; see `jobs/README.md`) |
 | glab | `glab/` | N/A | Yes (Nix flake: glab, opt-in) |
 | AWS CLI | `aws/` | `~/.aws/config` | Yes (Nix flake: awscli2, opt-in) |
-| Trino CLI | `trino/` | N/A | Yes (Nix wrapper + JRE, latest GitHub release jar in `~/.local/trino/`; macOS, opt-in) |
+| Trino CLI | `trino/` | N/A | Yes (Nix wrapper + JRE, latest GitHub release jar in `~/.local/trino/`; opt-in) |
 | 1Password CLI | `1password/` | N/A | Yes (Nix flake: 1password-cli) |
+| Devbox | `devbox/` | `~/.devbox.sh` (sourced by every shell), `~/.gitconfig-devbox`, `~/.config/jj/conf.d/devbox.toml`, `~/.trino_config` | Yes (the Ubuntu work box only; run by `~/beta/devbox`'s `bootstrap/user.sh`). On the box, relink with `dot install devbox`: `dot install skills` links the personal skills too, and a bare `dot install` runs the laptop's full install |
 
 ## Platform Support
 
@@ -60,6 +61,7 @@ See [references/tool-template.md](references/tool-template.md) for the install s
 | macOS | `uname == Darwin` | `brew` | Personal machines |
 | Arch/Omarchy | `command -v pacman` | `pacman`/`yay` | Arch + Hyprland |
 | Omarchy | `~/.local/share/omarchy` exists | `pacman`/`yay` | Uses default configs, skip apply() |
+| Devbox (Ubuntu) | `command -v apt-get` | `apt` | Work box from `~/beta/devbox`, set up by `devbox/install` only |
 
 See [references/platform-detection.md](references/platform-detection.md) for detection code snippets.
 

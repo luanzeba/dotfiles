@@ -1,0 +1,8 @@
+# The Trino CLI's defaults on the devbox; devbox/install links this to ~/.trino_config.
+# Plain `trino` connects as you. The box has no browser, so signing in prints a link:
+# open it on the Mac (on the VPN), and that run of the CLI gets its token. Each run
+# signs in again, so put several queries in one run (`trino -f queries.sql`).
+server=https://trino.data.beta.team
+user=lvieira@beta.team
+external-authentication=true
+external-authentication-redirect-handler=PRINT

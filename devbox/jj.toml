@@ -1,0 +1,6 @@
+#:schema https://docs.jj-vcs.dev/latest/config-schema.json
+
+# The devbox's additions to jj/config.toml: devbox/install links this into
+# ~/.config/jj/conf.d, which jj reads after config.toml. The box only does BETA work.
+[user]
+email = "lvieira@beta.team"

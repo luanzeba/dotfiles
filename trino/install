@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-# Trino CLI (macOS only for now)
+# Trino CLI
 # https://trino.io/docs/current/client/cli.html
 #
 # The Nix profile entry provides the `trino` wrapper and its JRE. The CLI jar
@@ -80,11 +80,6 @@ sync_cli() {
 }
 
 install() {
-    if ! is_macos; then
-        log_error "trino/install supports macOS only for now"
-        return 1
-    fi
-
     # `dot update` runs this inside `if`, where set -e is off, so check each step.
     nix_sync trino || return 1
     sync_cli

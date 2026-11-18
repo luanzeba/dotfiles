@@ -1,0 +1,9 @@
+# The devbox's additions to git/.gitconfig, which includes this as ~/.gitconfig-devbox
+# (devbox/install links it).
+[user]
+  # The box only does BETA work.
+  email = lvieira@beta.team
+# Push to GitHub over HTTPS with the gh login ~/beta/devbox's push-config copies. Not
+# `gh auth setup-git`: it writes gh's /nix/store path, which an upgrade and GC remove.
+[credential "https://github.com"]
+  helper = !$HOME/.nix-profile/bin/gh auth git-credential

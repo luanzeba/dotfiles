@@ -1,0 +1,121 @@
+#!/bin/bash
+set -e
+
+# The devbox: the Ubuntu box ~/beta/devbox sets up, as a work machine that feels like the
+# laptop. Its bootstrap/user.sh runs this script after cloning the dotfiles; it's safe to
+# re-run. Not part of ./install: it's for that box only. (`dot install devbox` only
+# re-runs configure() once everything is installed; `dot install -f devbox` runs it all.)
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+DOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+# shellcheck disable=SC1091
+source "$DOT/lib/nix.sh"
+
+# CLI basics from apt, not the Nix base bundle (fd is fdfind there).
+# ffmpeg: wb records demo videos with it.
+APT_PACKAGES=(zsh ripgrep fd-find fzf jq ffmpeg)
+# Dotfiles tools, installed and configured as `dot install` does on the laptop.
+DOT_TOOLS=(node jj glab aws nvim bat trino hunk pi rex zsh bin)
+# Work skills only; personal ones (Obsidian, qmd, spiritist, ...) stay on the laptop.
+SKILLS=(dotfiles evidence-based-responses frontend-design github-prs gitlab-mr-review hunk-review
+    markdown-output merge-conflict-resolver mermaid simplest-solution skill-creator using-git-worktrees
+    voice-and-tone work-browser)
+
+supported_platform() {
+    command -v apt-get &>/dev/null
+}
+
+check_installed() {
+    supported_platform || return 0
+    local cmd
+    for cmd in zsh rg fd fzf jq ffmpeg gh node jj glab aws nvim bat trino hunk pi; do
+        command -v "$cmd" &>/dev/null || return 1
+    done
+}
+
+check_configured() {
+    supported_platform || return 0
+    [[ -L "$HOME/.devbox.sh" && -L "$HOME/.gitconfig-devbox" && -L "$HOME/.config/jj/conf.d/devbox.toml" ]] \
+        && [[ "$(getent passwd "$(id -un)" | cut -d: -f7)" == "$(command -v zsh)" ]]
+}
+
+install_apt_packages() {
+    local missing=() pkg
+    for pkg in "${APT_PACKAGES[@]}"; do
+        dpkg-query -W -f='${Status}' "$pkg" 2>/dev/null | grep -q 'ok installed' || missing+=("$pkg")
+    done
+    [[ ${#missing[@]} -gt 0 ]] || return 0
+    log_info "Installing from apt: ${missing[*]}"
+    sudo apt-get update -qq
+    # The Nix installer writes /etc/zsh/zshrc before zsh is installed, which makes dpkg ask
+    # about it; keep that one.
+    sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends \
+        -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold "${missing[@]}" >/dev/null
+}
+
+install() {
+    if ! supported_platform; then
+        log_error "devbox/install is for the Ubuntu devbox (~/beta/devbox)"
+        return 1
+    fi
+
+    install_apt_packages
+
+    # TODO: Remove after 2027-02-01, once the devbox has run this.
+    # Migration: ~/beta/devbox's user.sh installed these from nixpkgs before apt did.
+    local entry
+    for entry in ripgrep fd fzf ffmpeg-headless; do
+        if nix_installed "$entry"; then _nix profile remove "$entry"; fi
+    done
+
+    # gh without gh/install's extensions and notification job (they're for the laptop).
+    nix_installed gh || nix_sync gh
+
+    # zsh/install also makes zsh the login shell.
+    DOTFILES_DIR="$DOT" "$DOT/bin/dotfiles" install "${DOT_TOOLS[@]}"
+}
+
+configure() {
+    supported_platform || return 0
+
+    # One environment whatever the shell: zsh reads ~/.zshenv for every zsh, scripts
+    # included; bash reads ~/.bashrc (interactive) and ~/.profile (login).
+    ln -sf "$SCRIPT_DIR/env.sh" "$HOME/.devbox.sh"
+    local rc
+    for rc in .zshenv .bashrc .profile; do
+        # shellcheck disable=SC2016 # $HOME expands when the shell reads the line
+        grep -qsF '.devbox.sh' "$HOME/$rc" || echo '. "$HOME/.devbox.sh"' >> "$HOME/$rc"
+    done
+
+    # fd under the name the laptop (and nvim's fzf-lua) uses.
+    mkdir -p "$HOME/.local/bin"
+    ln -sf /usr/bin/fdfind "$HOME/.local/bin/fd"
+
+    # The laptop's git config (git itself comes from apt) and jj config, plus the box's own:
+    # the work email everywhere, and GitHub over HTTPS with the gh login.
+    # shellcheck disable=SC1091
+    (source "$DOT/git/install" && configure)
+    ln -sf "$SCRIPT_DIR/gitconfig" "$HOME/.gitconfig-devbox"
+    mkdir -p "$HOME/.config/jj/conf.d"
+    ln -sf "$SCRIPT_DIR/jj.toml" "$HOME/.config/jj/conf.d/devbox.toml"
+
+    # Plain `trino` connects as you, printing its sign-in link (no browser here).
+    ln -sf "$SCRIPT_DIR/trino_config" "$HOME/.trino_config"
+
+    # Pi: pi/install linked AGENTS.md and the extensions; settings.json comes from
+    # ~/beta/devbox's push-config.
+    mkdir -p "$HOME/.pi/agent/skills"
+    # shellcheck disable=SC1091
+    (source "$DOT/skills/install" && remove_stale_skill_links)
+    local skill
+    for skill in "${SKILLS[@]}"; do
+        ln -sfn "$DOT/skills/$skill" "$HOME/.pi/agent/skills/$skill"
+    done
+    [[ -f "$HOME/.pi/agent/trust.json" ]] || printf '{ "%s/beta": true }\n' "$HOME" > "$HOME/.pi/agent/trust.json"
+    rex skill setup >/dev/null
+}
+
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    install
+    configure
+fi

@@ -74,12 +74,14 @@ configure() {
     echo "Linked: $BIN -> $CLI"
 }
 
+# `dot pull` runs every tool's apply; only refresh machines that have it (the devbox doesn't).
 apply() {
-    check_installed || install
+    check_installed || return 0
     configure
 }
 
 update() {
+    check_installed || return 0
     install
     configure
 }
