@@ -6,7 +6,8 @@
 // sees the tabs it opened. Signing in happens in a normal Chrome window on the
 // same profile, with your extensions (1Password) on; agents can't reach that
 // window. `wb sync <host>` copies BETA app sessions to another machine's wb;
-// `wb signin` does it on its own for the hosts listed in SYNC_HOSTS.
+// `wb signin` does it on its own for the hosts listed in SYNC_HOSTS. `wb keepalive`
+// uses the apps whose sign-ins end after a day or less unused, so they stay signed in.
 import { execFileSync, spawn } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
@@ -199,7 +200,7 @@ async function restartIfUpdated() {
   const version = await hostVersion();
   if (!version || version.Browser.endsWith(`/${installedVersion()}`)) return;
   const inUse = readdirSafe(OWNERS).some((f) => ownerAge(f) < STALE_OWNER_MS);
-  if (inUse || readdirSafe(RECORDINGS).some((f) => activeRecording(path.join(RECORDINGS, f)))) return;
+  if (inUse || anyRecording()) return;
   await stopHost();
 }
 
@@ -279,11 +280,11 @@ function readOwner(owner = OWNER) {
 }
 
 // Written whole (temp file, then rename): the recorder reads it while agents write it.
-function writeOwner(data) {
+function writeOwner(data, owner = OWNER) {
   fs.mkdirSync(OWNERS, { recursive: true });
   const tmp = path.join(STATE, `.owner-${process.pid}.tmp`);
   fs.writeFileSync(tmp, JSON.stringify(data));
-  fs.renameSync(tmp, ownerFile());
+  fs.renameSync(tmp, ownerFile(owner));
 }
 
 // Where an agent goes when its current tab is gone: back to the tab that opened
@@ -375,6 +376,14 @@ async function evaluate(page, expression, { awaitPromise = true } = {}) {
 
 const describe = (page) => evaluate(page, "location.href + '\\n' + document.title");
 
+// Goes to url and waits for the page to load.
+async function navigate(cdp, page, sessionId, url) {
+  const loaded = cdp.waitFor((m) => m.sessionId === sessionId && m.method === "Page.loadEventFired", 30_000);
+  const nav = await page("Page.navigate", { url });
+  if (nav.errorText) fail(`${url}: ${nav.errorText}`);
+  if (nav.loaderId) await loaded;
+}
+
 // ── Commands ────────────────────────────────────────────────────────────────
 
 const commands = {};
@@ -387,10 +396,7 @@ commands.open = ([url], flags) =>
         ? url
         : `${/^(localhost|127\.0\.0\.1)(:|\/|$)/.test(url) ? "http" : "https"}://${url}`;
       await page("Page.enable");
-      const loaded = cdp.waitFor((m) => m.sessionId === sessionId && m.method === "Page.loadEventFired", 30_000);
-      const nav = await page("Page.navigate", { url: target });
-      if (nav.errorText) fail(`${target}: ${nav.errorText}`);
-      if (nav.loaderId) await loaded;
+      await navigate(cdp, page, sessionId, target);
       console.log(await describe(page));
     },
     { newTab: flags["new-tab"] },
@@ -536,6 +542,8 @@ function activeRecording(file = recordingFile()) {
     return null;
   }
 }
+
+const anyRecording = () => readdirSafe(RECORDINGS).some((f) => activeRecording(path.join(RECORDINGS, f)));
 
 // In recordings, show where each click lands.
 const CLICK_MARK = (x, y) => `(() => {
@@ -860,8 +868,7 @@ commands.signin = async (urls) => {
   if (process.platform !== "darwin" && !process.env.DISPLAY)
     fail("signing in needs a screen: run `wb signin` on your Mac, which copies the sessions to the hosts in its sync-hosts file (or `wb sync <this host>` there)");
   if (signingIn()) fail("already signing in: finish in the Chrome window and quit it (⌘Q)");
-  if (readdirSafe(RECORDINGS).some((f) => activeRecording(path.join(RECORDINGS, f))))
-    fail("an agent is recording; wait for it to finish");
+  if (anyRecording()) fail("an agent is recording; wait for it to finish");
   // Take the lock first, so no agent restarts the headless browser on this profile meanwhile.
   fs.mkdirSync(STATE, { recursive: true });
   fs.writeFileSync(SIGNIN, JSON.stringify({ wb: process.pid }));
@@ -906,6 +913,105 @@ function readdirSafe(dir) {
     return [];
   }
 }
+
+// ── Keeping sign-ins alive ──────────────────────────────────────────────────
+
+// Sign-ins that end after a short time unused. Using the app moves each one's
+// cookie expiry ahead, so `wb keepalive` uses them on a schedule (jobs/jobs.json).
+// GitLab's remember-me cookie lasts two weeks, and Linear's a year.
+const KEEPALIVE = [
+  // Ground's code refreshes its Kinde token as the page loads, which moves the
+  // refresh_token cookie a day ahead. The cookie keeps its value, so a copy on
+  // another machine keeps working.
+  { name: "Ground", url: "https://ground.beta.team/", domain: "auth.beta.team", cookie: "refresh_token", refresh: "https://auth.beta.team/oauth2/token" },
+  // AMPECO's admin (Laravel) moves its session cookie two hours ahead on every
+  // request, so the page alone, without its scripts, is enough.
+  { name: "AMPECO", url: "https://cp.watts.beta.team/admin", domain: "cp.watts.beta.team", cookie: "laravel_session", scripts: false },
+];
+// Where an app sends you once you're signed out of it.
+const SIGNED_OUT = /^https:\/\/(auth\.beta\.team|login\.microsoftonline\.com)\/|\/(login|sign[_-]?in)\b/i;
+const KEEPALIVE_STATUS = path.join(STATE, "keepalive.json");
+
+const sessionExpiry = async (cdp, app) =>
+  (await cdp.send("Storage.getCookies")).cookies.find((c) => c.domain === app.domain && c.name === app.cookie)?.expires ?? null;
+
+// Opens the app and waits for its session cookie to move ahead, or for a sign-in page.
+async function useApp(cdp, page, sessionId, targetId, app) {
+  const was = await sessionExpiry(cdp, app);
+  // Opening the app would only start a signed-out session, which `wb sync` could copy over a good one.
+  if (was === null) return { name: app.name, status: "signed out", detail: `no ${app.cookie} cookie` };
+  await page("Emulation.setScriptExecutionDisabled", { value: app.scripts === false });
+  await navigate(cdp, page, sessionId, app.url);
+  for (let i = 0; i < 40; i++) {
+    const { targetInfo } = await cdp.send("Target.getTargetInfo", { targetId });
+    if (SIGNED_OUT.test(targetInfo.url)) return { name: app.name, status: "signed out", detail: targetInfo.url.split("?")[0] };
+    const expires = await sessionExpiry(cdp, app);
+    if (expires > was) return { name: app.name, status: "ok", expires, was };
+    await sleep(500);
+  }
+  return { name: app.name, status: "error", detail: `its ${app.cookie} cookie didn't move ahead` };
+}
+
+// Uses each app in a tab of its own that sends nothing but GET requests and the
+// app's own token refresh. It never signs in: a signed-out app is only reported.
+async function keepAlive() {
+  if (signingIn()) return console.log("not now: signing in"), null;
+  // A recording gets the browser to itself, for up to an hour since the last run:
+  // AMPECO's sign-in can't wait much longer.
+  if (anyRecording() && Date.now() - (Date.parse(lastKeepAlive()?.at) || 0) < 60 * 60 * 1000)
+    return console.log("not now: an agent is recording"), null;
+  const owner = `keepalive-${process.pid}`;
+  const results = await withBrowser(async (cdp) => {
+    const { targetId } = await cdp.send("Target.createTarget", { url: "about:blank", newWindow: true, background: true });
+    writeOwner({ tabs: [targetId], current: targetId, openers: {} }, owner);
+    try {
+      const { sessionId } = await cdp.send("Target.attachToTarget", { targetId, flatten: true });
+      const page = (method, params) => cdp.send(method, params, sessionId);
+      cdp.on((m) => {
+        if (m.sessionId !== sessionId || m.method !== "Fetch.requestPaused") return;
+        const { requestId, request } = m.params;
+        const ok = request.method === "GET" || KEEPALIVE.some((app) => app.refresh === request.url.split("?")[0]);
+        page(ok ? "Fetch.continueRequest" : "Fetch.failRequest", ok ? { requestId } : { requestId, errorReason: "BlockedByClient" }).catch(() => {});
+      });
+      await page("Fetch.enable", { patterns: [{ urlPattern: "*" }] });
+      await page("Page.enable");
+      const results = [];
+      for (const app of KEEPALIVE)
+        results.push(await useApp(cdp, page, sessionId, targetId, app).catch((error) => ({ name: app.name, status: "error", detail: error.message })));
+      return results;
+    } finally {
+      await cdp.send("Target.closeTarget", { targetId }).catch(() => {});
+      fs.rmSync(ownerFile(owner), { force: true });
+    }
+  });
+  fs.writeFileSync(KEEPALIVE_STATUS, JSON.stringify({ at: new Date().toISOString(), results }));
+  for (const r of results) console.log(`${describeSession(r)}${r.was ? ` (was ${clock(r.was * 1000)})` : ""}`);
+  return results;
+}
+
+function lastKeepAlive() {
+  try {
+    return JSON.parse(fs.readFileSync(KEEPALIVE_STATUS, "utf8"));
+  } catch {
+    return null;
+  }
+}
+
+// "14:05" today, else "Fri 14:05".
+function clock(ms) {
+  const date = new Date(ms);
+  const time = date.toTimeString().slice(0, 5);
+  return date.toDateString() === new Date().toDateString() ? time : `${date.toDateString().slice(0, 3)} ${time}`;
+}
+
+const describeSession = ({ name, status, detail, expires }) =>
+  status === "ok" ? `${name} signed in until ${clock(expires * 1000)}` : status === "signed out" ? `${name} signed out (${detail})` : `${name}: ${detail}`;
+
+commands.keepalive = async () => {
+  const failed = (await keepAlive())?.filter((r) => r.status !== "ok") ?? [];
+  if (failed.length)
+    fail(`${failed.map((r) => r.name).join(" and ")} not kept alive${failed.some((r) => r.status === "signed out") ? "; sign in again with `wb signin` on the Mac" : ""}`);
+};
 
 // ── Moving sessions between machines ────────────────────────────────────────
 
@@ -1003,6 +1109,8 @@ commands.status = async () => {
   console.log(`agents    ${owners.length} with tabs${owners.includes(`${OWNER}.json`) ? ` (including you: ${readOwner().tabs.length} tabs)` : ""}`);
   const recordings = readdirSafe(RECORDINGS).filter((f) => activeRecording(path.join(RECORDINGS, f)));
   console.log(`recording ${recordings.length ? recordings.map((f) => f.replace(/\.json$/, "")).join(", ") : "none"}`);
+  const last = lastKeepAlive();
+  if (last) console.log(`sessions  ${last.results.map(describeSession).join(", ")} (wb keepalive at ${clock(Date.parse(last.at))})`);
 };
 
 commands.start = async () => {
@@ -1029,6 +1137,7 @@ const HELP = `wb: a headless Google Chrome for agents, signed in once. Each agen
   wb devtools                     how to watch or debug your tab from your Chrome
   wb tabs | wb tab <n> | wb close [--all]
   wb status | wb start | wb stop
+  wb keepalive                    use Ground and AMPECO's admin, read-only, so their sign-ins don't end
   wb signin [url…]                sign in, in a normal Chrome window on the agents' profile
   wb sync [ssh host…]             copy BETA app and Linear sessions to other machines' wb
                                   (by default, and after each wb signin: the hosts in ${SYNC_HOSTS})`;
