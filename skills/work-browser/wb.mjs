@@ -5,7 +5,8 @@
 // takes focus or touches your Chrome. Each agent (keyed by PI_SESSION_ID) only
 // sees the tabs it opened. Signing in happens in a normal Chrome window on the
 // same profile, with your extensions (1Password) on; agents can't reach that
-// window. `wb sync <host>` copies BETA app sessions to another machine's wb.
+// window. `wb sync <host>` copies BETA app sessions to another machine's wb;
+// `wb signin` does it on its own for the hosts listed in SYNC_HOSTS.
 import { execFileSync, spawn } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
@@ -45,6 +46,9 @@ const SYNC_DOMAINS = /(^|\.)(beta\.team|linear\.app)$/;
 // Linear's API also wants two localStorage entries (who you are, which client)
 // with its cookie. `robots.txt` is on Linear's site without starting the app.
 const SYNC_STORAGE = { url: "https://linear.app/robots.txt", keys: ["ApplicationStore", "clientId"] };
+// Where `wb signin` copies new sign-ins to, and `wb sync` with no host: one ssh host per line.
+// None by default, since the sessions shouldn't go anywhere you didn't name.
+const SYNC_HOSTS = path.join(process.env.XDG_CONFIG_HOME || path.join(HOME, ".config"), "work-browser/sync-hosts");
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -854,7 +858,7 @@ function jpegSize(jpeg) {
 
 commands.signin = async (urls) => {
   if (process.platform !== "darwin" && !process.env.DISPLAY)
-    fail("signing in needs a screen: run `wb signin` on your Mac, then `wb sync <this host>` there");
+    fail("signing in needs a screen: run `wb signin` on your Mac, which copies the sessions to the hosts in its sync-hosts file (or `wb sync <this host>` there)");
   if (signingIn()) fail("already signing in: finish in the Chrome window and quit it (⌘Q)");
   if (readdirSafe(RECORDINGS).some((f) => activeRecording(path.join(RECORDINGS, f))))
     fail("an agent is recording; wait for it to finish");
@@ -880,7 +884,20 @@ On GitLab, tick "Remember me" before clicking Azure, or its session ends when th
   fs.rmSync(SIGNIN, { force: true });
   await ensureHost();
   console.log("Signed in. Agents' browser is running headless again.");
+  await syncAfterSignin();
 };
+
+// Signing in has worked by now, so a host that can't be reached only gets a message.
+async function syncAfterSignin() {
+  const hosts = syncHosts();
+  if (!hosts.length) return console.log(`To copy sign-ins to other machines too, list their ssh hosts in ${SYNC_HOSTS}.`);
+  console.log(`Copying the sessions to ${hosts.join(", ")} (from ${SYNC_HOSTS})…`);
+  const failed = await syncTo(hosts).catch((error) => {
+    console.error(`wb: ${error.message}`);
+    return hosts;
+  });
+  if (failed.length) console.log(`Not copied to ${failed.join(", ")}. Retry with \`wb sync ${failed.join(" ")}\`.`);
+}
 
 function readdirSafe(dir) {
   try {
@@ -930,8 +947,23 @@ commands.__import = async () => {
   console.log(`imported ${params.length} cookies and ${items.length} Linear settings from ${from} (${exportedAt})`);
 };
 
-commands.sync = async ([host]) => {
-  if (!host) fail("usage: wb sync <ssh host>");
+function syncHosts() {
+  try {
+    return fs.readFileSync(SYNC_HOSTS, "utf8").split("\n").map((line) => line.replace(/#.*/, "").trim()).filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
+commands.sync = async (args) => {
+  const hosts = args.length ? args : syncHosts();
+  if (!hosts.length) fail(`usage: wb sync <ssh host>… (with none, the hosts in ${SYNC_HOSTS})`);
+  const failed = await syncTo(hosts);
+  if (failed.length) fail(`couldn't copy the sessions to ${failed.join(", ")}`);
+};
+
+// Sends the sessions to each host in turn, and returns the hosts that failed.
+async function syncTo(hosts) {
   await restartIfUpdated();
   const { cookies, storage } = await withBrowser(async (cdp) => ({
     cookies: (await cdp.send("Storage.getCookies")).cookies.filter((c) => SYNC_DOMAINS.test(c.domain)),
@@ -939,11 +971,26 @@ commands.sync = async ([host]) => {
       `Object.fromEntries(${JSON.stringify(SYNC_STORAGE.keys)}.map((k) => [k, localStorage.getItem(k)]).filter(([, v]) => v !== null))`),
   }));
   const data = JSON.stringify({ version: 1, from: os.hostname(), exportedAt: new Date().toISOString(), cookies, storage });
-  const ssh = spawn("ssh", [host, "bash -lc '~/dotfiles/bin/wb __import'"], { stdio: ["pipe", "inherit", "inherit"] });
-  ssh.stdin.end(data);
-  const code = await new Promise((r) => ssh.on("close", r));
-  if (code !== 0) fail(`ssh ${host} exited with ${code}`);
-};
+  const failed = [];
+  for (const host of hosts) {
+    console.log(`${host}:`);
+    const code = await new Promise((resolve) => {
+      // A host that's offline, or a connection that dies on the way, fails within a minute instead of hanging.
+      const options = ["-o", "ConnectTimeout=15", "-o", "ServerAliveInterval=15", "-o", "ServerAliveCountMax=3"];
+      const ssh = spawn("ssh", [...options, host, "bash -lc '~/dotfiles/bin/wb __import'"], { stdio: ["pipe", "inherit", "inherit"] });
+      // No ssh, or a host that hangs up before reading: the exit code says so.
+      ssh.on("error", () => {});
+      ssh.stdin.on("error", () => {});
+      ssh.on("close", resolve);
+      ssh.stdin.end(data);
+    });
+    if (code !== 0) {
+      console.error(`wb: ssh ${host} exited with ${code}`);
+      failed.push(host);
+    }
+  }
+  return failed;
+}
 
 // ── Housekeeping ────────────────────────────────────────────────────────────
 
@@ -983,7 +1030,8 @@ const HELP = `wb: a headless Google Chrome for agents, signed in once. Each agen
   wb tabs | wb tab <n> | wb close [--all]
   wb status | wb start | wb stop
   wb signin [url…]                sign in, in a normal Chrome window on the agents' profile
-  wb sync <ssh host>              copy BETA app and Linear sessions to another machine's wb`;
+  wb sync [ssh host…]             copy BETA app and Linear sessions to other machines' wb
+                                  (by default, and after each wb signin: the hosts in ${SYNC_HOSTS})`;
 
 // ── Main ────────────────────────────────────────────────────────────────────
 
