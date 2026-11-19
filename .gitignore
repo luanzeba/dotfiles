@@ -20,3 +20,6 @@ skills/external/private/
 
 # AWS account/profile metadata belongs in private-dotfiles.
 aws/config
+
+# Python bytecode from scripts run in place (e.g. skills/*/scripts)
+__pycache__/
