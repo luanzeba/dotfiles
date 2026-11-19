@@ -1051,6 +1051,9 @@ commands.__import = async () => {
       await onSite(cdp, SYNC_STORAGE.url, `for (const [k, v] of ${JSON.stringify(items)}) localStorage.setItem(k, v)`);
   });
   console.log(`imported ${params.length} cookies and ${items.length} Linear settings from ${from} (${exportedAt})`);
+  // A copy from a machine that hasn't used the apps lately has older expiries,
+  // which would end the sessions here sooner. Using the apps moves them ahead again.
+  await keepAlive().catch((error) => console.error(`wb: keepalive: ${error.message}`));
 };
 
 function syncHosts() {
