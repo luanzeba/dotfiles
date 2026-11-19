@@ -37,7 +37,7 @@ If a job isn't enabled on this machine, `dot jobs run` runs it directly in the t
 | `requires` | A command that must pass first, such as a check that the VPN is up. It's retried every 30s for up to 10 minutes. If it never passes, the run fails without starting. |
 | `description` | Free-text summary. |
 
-A job runs on a machine only after `dot jobs enable <job>` there. `qmd/install` and `gh/install` enable their own jobs.
+A job runs on a machine only after `dot jobs enable <job>` there. `qmd/install` and `gh/install` enable their own jobs. Enable `wb-keepalive` yourself, on the machine whose wb has to stay signed in without you (the devbox).
 
 ### Agent jobs
 

@@ -16,5 +16,11 @@
     "schedule": "0 * * * *",
     "command": "gh not sync --config=\"$HOME/.config/gh-not/config.yaml\" --verbosity=2",
     "timeout": "10m"
+  },
+  "wb-keepalive": {
+    "description": "Use Ground and AMPECO's admin in wb, read-only, before their sign-ins end (a day and two hours unused)",
+    "schedule": "*/30 * * * *",
+    "command": "\"$DOTFILES_DIR/bin/wb\" keepalive",
+    "timeout": "5m"
   }
 }

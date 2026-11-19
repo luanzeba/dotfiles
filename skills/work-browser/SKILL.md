@@ -38,7 +38,7 @@ Refs (`@N`) change with every `wb snapshot`; take a new one after the page chang
 
 If a page lands on `login.microsoftonline.com`, a BETA/Kinde sign-in page, or an app's login form, stop and tell the user. They sign in with `wb signin` on the Mac, which then copies the sessions to the ssh hosts listed in `~/.config/work-browser/sync-hosts` there (the devbox). The devbox also gets them from `wb sync devbox`, every 15 minutes while the Mac is connected. Never type credentials.
 
-Ground's sign-in ends after a day unused, and AMPECO admin's after two hours. `wb keepalive` uses both, read-only, to keep them going, and so does each `wb sync` to this machine. `wb status` shows what it found last.
+Ground's sign-in ends after a day unused, and AMPECO admin's after two hours. `wb keepalive` uses both, read-only, to keep them going: every 30 minutes where its job is on (`dot jobs enable wb-keepalive`, on the devbox), and after each `wb sync` to this machine. `wb status` shows what it found last.
 
 ## Rules
 
